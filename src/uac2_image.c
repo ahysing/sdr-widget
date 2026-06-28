@@ -52,7 +52,7 @@
 #include "taskPushButtonMenu.h"
 #include "wdt.h"
 
-#if LCD_DISPLAY				// Multi-line LCD display
+#if		LCD_DISPLAY				// Multi-line LCD display
 #include "taskLCD.h"
 #include "taskStartupLogDisplay.h"
 #endif

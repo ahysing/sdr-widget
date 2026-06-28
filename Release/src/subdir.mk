@@ -21,6 +21,7 @@ C_SRCS += \
 ../src/freq_and_filters.c \
 ../src/host_audio_task.c \
 ../src/image.c \
+../src/loudness.c \
 ../src/rotary_encoder.c \
 ../src/taskAK5394A.c \
 ../src/taskEXERCISE.c \
@@ -29,11 +30,6 @@ C_SRCS += \
 ../src/taskPowerDisplay.c \
 ../src/taskPushButtonMenu.c \
 ../src/taskStartupLogDisplay.c \
-../src/uac1_device_audio_task.c \
-../src/uac1_image.c \
-../src/uac1_taskAK5394A.c \
-../src/uac1_usb_descriptors.c \
-../src/uac1_usb_specific_request.c \
 ../src/uac2_device_audio_task.c \
 ../src/uac2_image.c \
 ../src/uac2_taskAK5394A.c \
@@ -41,9 +37,10 @@ C_SRCS += \
 ../src/uac2_usb_specific_request.c \
 ../src/usb_descriptors.c \
 ../src/usb_specific_request.c \
+../src/usb_statistics.c \
+../src/usb_statistics_descriptors.c \
 ../src/widget.c \
 ../src/wm8805.c 
-
 
 OBJS += \
 ./src/AD5301.o \
@@ -63,6 +60,7 @@ OBJS += \
 ./src/freq_and_filters.o \
 ./src/host_audio_task.o \
 ./src/image.o \
+./src/loudness.o \
 ./src/rotary_encoder.o \
 ./src/taskAK5394A.o \
 ./src/taskEXERCISE.o \
@@ -71,11 +69,6 @@ OBJS += \
 ./src/taskPowerDisplay.o \
 ./src/taskPushButtonMenu.o \
 ./src/taskStartupLogDisplay.o \
-./src/uac1_device_audio_task.o \
-./src/uac1_image.o \
-./src/uac1_taskAK5394A.o \
-./src/uac1_usb_descriptors.o \
-./src/uac1_usb_specific_request.o \
 ./src/uac2_device_audio_task.o \
 ./src/uac2_image.o \
 ./src/uac2_taskAK5394A.o \
@@ -83,9 +76,10 @@ OBJS += \
 ./src/uac2_usb_specific_request.o \
 ./src/usb_descriptors.o \
 ./src/usb_specific_request.o \
+./src/usb_statistics.o \
+./src/usb_statistics_descriptors.o \
 ./src/widget.o \
 ./src/wm8805.o 
-
 
 
 C_DEPS += \
@@ -106,6 +100,7 @@ C_DEPS += \
 ./src/freq_and_filters.d \
 ./src/host_audio_task.d \
 ./src/image.d \
+./src/loudness.d \
 ./src/rotary_encoder.d \
 ./src/taskAK5394A.d \
 ./src/taskEXERCISE.d \
@@ -114,11 +109,6 @@ C_DEPS += \
 ./src/taskPowerDisplay.d \
 ./src/taskPushButtonMenu.d \
 ./src/taskStartupLogDisplay.d \
-./src/uac1_device_audio_task.d \
-./src/uac1_image.d \
-./src/uac1_taskAK5394A.d \
-./src/uac1_usb_descriptors.d \
-./src/uac1_usb_specific_request.d \
 ./src/uac2_device_audio_task.d \
 ./src/uac2_image.d \
 ./src/uac2_taskAK5394A.d \
@@ -126,9 +116,10 @@ C_DEPS += \
 ./src/uac2_usb_specific_request.d \
 ./src/usb_descriptors.d \
 ./src/usb_specific_request.d \
+./src/usb_statistics.d \
+./src/usb_statistics_descriptors.d \
 ./src/widget.d \
 ./src/wm8805.d
-
 
 
 # Each subdirectory must supply rules for building sources it contributes

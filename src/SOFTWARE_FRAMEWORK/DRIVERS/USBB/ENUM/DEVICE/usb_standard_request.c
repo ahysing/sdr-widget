@@ -119,7 +119,7 @@ extern  volatile  Bool                                usb_connected;
 
 //extern  const     S_usb_device_descriptor             usb_user_device_descriptor;
 //extern  const     S_usb_user_configuration_descriptor usb_user_configuration_descriptor;
-#define NB_INTERFACE 8
+#define NB_INTERFACE 9
 static            U8                                  usb_interface_status[NB_INTERFACE];  // All interface with default setting
 
 //! This function reads the SETUP request sent to the default control endpoint

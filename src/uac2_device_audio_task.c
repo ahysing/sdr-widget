@@ -78,6 +78,7 @@
 #include "uac2_usb_specific_request.h"
 #include "device_audio_task.h"
 #include "uac2_device_audio_task.h"
+#include "loudness.h"
 
 #if LCD_DISPLAY				// Multi-line LCD display
 #include "taskLCD.h"
@@ -129,6 +130,8 @@ void uac2_device_audio_task_init(U8 ep_in, U8 ep_out, U8 ep_out_fb)
 	// Without working volume flash, spk_vol_usb_? = VOL_DEFAULT is set in device_audio_task.c
 	spk_vol_mult_L = usb_volume_format(spk_vol_usb_L);
 	spk_vol_mult_R = usb_volume_format(spk_vol_usb_R);
+
+	dsp_init();
 
 	xTaskCreate(uac2_device_audio_task,
 				configTSK_USB_DAUDIO_NAME,
@@ -377,9 +380,9 @@ void uac2_device_audio_task(void *pvParameters)
 				}
 				else {
 					// HS mode
-					// HS mode, FB rate is 4 bytes in 16.16 format per 125탎.
-					// Internal format is 18.14 samples per 1탎 = 16.16 per 250탎
-					// i.e. must right-shift once for 16.16 per 125탎.
+					// HS mode, FB rate is 4 bytes in 16.16 format per 125?s.
+					// Internal format is 18.14 samples per 1?s = 16.16 per 250?s
+					// i.e. must right-shift once for 16.16 per 125?s.
 					// So for 250us microframes it is same amount of shifting as 10.14 for 1ms frames
 
 
@@ -669,6 +672,15 @@ void uac2_device_audio_task(void *pvParameters)
 								mobo_led_select(current_freq.frequency, input_select);
 							}
 						#endif
+
+
+						if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX) {
+							sample_L = (S32)(DOWNSAMPLE_24BIT(loudness(UPSAMPLE_24BIT((U32)(sample_L >> 8)))) << 8);
+							sample_R = (S32)(DOWNSAMPLE_24BIT(loudness(UPSAMPLE_24BIT((U32)(sample_R >> 8)))) << 8);
+						} else if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {
+							sample_L = (S32)(DOWNSAMPLE_16BIT(loudness(UPSAMPLE_16BIT((U32)(sample_L >> 16)))) << 16);
+							sample_R = (S32)(DOWNSAMPLE_16BIT(loudness(UPSAMPLE_16BIT((U32)(sample_R >> 16)))) << 16);
+						}
 
 
 	#ifdef FEATURE_VOLUME_CTRL

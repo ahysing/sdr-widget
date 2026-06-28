@@ -126,4 +126,10 @@ audio-widget::
 clean::
 	rm -f widget-control widget-control.exe
 	cd Release && make clean
-	rm -f widget-control
+	rm -f widget-control tests/loudness_tests.exe
+
+tests/loudness_tests.exe::
+	gcc -I tests -I src -o tests/loudness_tests.exe tests/loudness_tests.c src/loudness.c
+	./tests/loudness_tests.exe
+
+test: tests/loudness_tests.exe
