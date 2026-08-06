@@ -382,8 +382,8 @@ int i;
 // It is very important to enable some sort of MCLK to the CPU, USB MCLK is the most reliable
 // FIX: NVRAM should store preferred source and resort to it on boot-up!
 
-	if (feature_get_nvram(feature_image_index) == feature_image_uac1_audio)
-		input_select = MOBO_SRC_UAC1;
+	if (feature_get_nvram(feature_image_index) == feature_image_uac2_audio)
+		input_select = MOBO_SRC_UAC2;
 	else
 		input_select = MOBO_SRC_UAC2;
 
@@ -407,8 +407,8 @@ int i;
 
 	// Set initial status of LEDs on the front of AB-1.1. BSB 20110903, 20111016
 	// Overriden by #if LED_STATUS == LED_STATUS_AB in SDRwdgt.h
-	if (feature_get_nvram(feature_image_index) == feature_image_uac1_audio)
-	{														// With UAC1:
+	if (feature_get_nvram(feature_image_index) == feature_image_uac2_audio)
+	{														// With UAC2:
 		mobo_led(FLED_GREEN);	}
 	else
 	{														// With UAC != 1

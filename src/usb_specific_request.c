@@ -111,7 +111,10 @@ volatile  U8	usb_alternate_setting, usb_alternate_setting_out;
 volatile  Bool  usb_alternate_setting_changed, usb_alternate_setting_out_changed;
 
 S_freq current_freq;
-Bool freq_changed = FALSE;
+
+// Denne settes til TRUE av USB-avbruddet. Hvis den ikke er volatile, vil hpsdr_AK5394A_task aldri oppdage at flagget har endret seg, og mikrokontrollerens maskinvareklokke vil aldri omstille seg.
+volatile Bool freq_changed = FALSE;
+volatile U8 spk_bit_resolution = 24;
 
 // static U8    wValue_msb;
 // static U8    wValue_lsb;

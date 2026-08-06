@@ -1,0 +1,5 @@
+pydsm
+scipy
+numpy
+argparse
+matplotlib

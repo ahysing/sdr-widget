@@ -1,3 +1,11 @@
+## Table of Contents
+
+- [Installation](docs/INSTALLATION.md) — build firmware and flash to device
+- [Loudness Filter](docs/LOUDNESS.md) — how loudness compensation works in the firmware
+- [Filter Analysis](docs/FILTER.md) — ISO 226 biquad filter design and plots
+
+---
+
 SDR-Widget is an interface based on the Atmel AT32UC3A3 microcontroller that provides the following functionality to SDR circuits such as the SoftRock.
 
    1. High quality audio using the USB Audio Class standard (UAC1 and UAC2)

@@ -88,6 +88,19 @@
 #include "device_audio_task.h"
 #include "uac2_device_audio_task.h"
 #include "taskAK5394A.h"
+#include "loudness.h"
+#ifndef USBSTATISTICS_DISABLE
+#include "usb_statistics_descriptors.h"
+#include "usb_stats_hid_report_descriptor.h"
+#include "usb_statistics.h"
+#include "audio_stats_logic.h"
+#include "stats_telemetry.h"
+#endif
+#include "usb_fifo_hw_lock.h"
+#ifdef FREERTOS_USED
+#include "FreeRTOS.h"
+#include "task.h"
+#endif
 
 //_____ M A C R O S ________________________________________________________
 
@@ -96,7 +109,6 @@
 
 
 //_____ P R I V A T E   D E C L A R A T I O N S ____________________________
-
 
 static U8 wValue_msb;
 static U8 wValue_lsb;
@@ -109,6 +121,26 @@ S_freq Mic_freq;
 extern const void *pbuffer;
 extern U16 data_to_transfer;
 
+#ifdef FREERTOS_USED
+static void uac2_wait_control_out_received(void)
+{
+	while (!Is_usb_control_out_received()) {
+		taskYIELD();
+	}
+}
+
+static void uac2_wait_control_in_ready(void)
+{
+	while (!Is_usb_control_in_ready()) {
+		taskYIELD();
+	}
+}
+#else
+#define uac2_wait_control_out_received() \
+	do { while (!Is_usb_control_out_received()) { } } while (0)
+#define uac2_wait_control_in_ready() \
+	do { while (!Is_usb_control_in_ready()) { } } while (0)
+#endif
 
 // Send a descriptor to the Host, if needed by means of multiple fillings of EP0
 void send_descriptor(U16 wLength, Bool zlp) {
@@ -427,6 +459,27 @@ void uac2_freq_change_handler() {
 		}
 
 		spk_mute = FALSE;
+#ifndef USBSTATISTICS_DISABLE
+		{
+			static uint32_t stats_last_sample_rate_khz;
+			uint32_t new_hz = current_freq.frequency;
+			uint32_t new_khz = new_hz / 1000U;
+
+			stats_telemetry_set_frequency_hz((U16)new_hz);
+			if (stats_last_sample_rate_khz != 0U && stats_last_sample_rate_khz != new_khz) {
+				audio_stats_record_event(get_usb_stats(), USB_STATS_TAG_FREQ_CHANGE,
+					(U8)stats_last_sample_rate_khz, (U8)new_khz, 0);
+			}
+			stats_last_sample_rate_khz = new_khz;
+		}
+#endif
+#ifndef LOUDNESS_DISABLE
+#ifdef FREERTOS_USED
+		loudness_request_frequency_change(current_freq.frequency);
+#else
+		loudness_change_frequency(current_freq.frequency);
+#endif
+#endif
 		// reset freq_changed flag
 		freq_changed = FALSE;
 	}
@@ -446,6 +499,9 @@ void uac2_user_endpoint_init(U8 conf_nb) {
 //			(void) Usb_configure_endpoint(UAC2_EP_HID_RX, EP_ATTRIBUTES_5, DIRECTION_OUT, EP_SIZE_5_FS, SINGLE_BANK, 0);
 		#endif
 		// BSB 20120720 HID insert attempt end
+#ifndef USBSTATISTICS_DISABLE
+		(void) Usb_configure_endpoint(EP_STATS_HID_TX, EP_ATTRIBUTES_STATS_HID, DIRECTION_IN, EP_SIZE_STATS_HID_FS, SINGLE_BANK, 0);
+#endif
 	} else {
 		(void) Usb_configure_endpoint(UAC2_EP_AUDIO_OUT_FB, EP_ATTRIBUTES_3, DIRECTION_IN, EP_SIZE_3_HS, DOUBLE_BANK, 0);
 		(void) Usb_configure_endpoint(UAC2_EP_AUDIO_OUT, EP_ATTRIBUTES_2, DIRECTION_OUT, EP_SIZE_2_HS, DOUBLE_BANK, 0);
@@ -456,6 +512,9 @@ void uac2_user_endpoint_init(U8 conf_nb) {
 //			(void) Usb_configure_endpoint(UAC2_EP_HID_RX, EP_ATTRIBUTES_5, DIRECTION_OUT, EP_SIZE_5_HS, SINGLE_BANK, 0);
 		#endif
 		// BSB 20120720 HID insert attempt end
+#ifndef USBSTATISTICS_DISABLE
+		(void) Usb_configure_endpoint(EP_STATS_HID_TX, EP_ATTRIBUTES_STATS_HID, DIRECTION_IN, EP_SIZE_STATS_HID_HS, SINGLE_BANK, 0);
+#endif
 	}
 }
 
@@ -485,9 +544,59 @@ void uac2_user_set_interface(U8 wIndex, U8 wValue) {
 
 // BSB 20120720 copy from uac1_usb_specific_request.c insert
 
-static Bool uac2_user_get_interface_descriptor() {
+#ifndef USBSTATISTICS_DISABLE
+static Bool uac2_user_get_stats_hid_descriptor(void) {
+	Bool zlp;
+	U16 wLength;
+	U16 wIndex;
+	U8 descriptor_type;
+	U16 wInterface;
 
-#ifdef FEATURE_HID		// This function relates only to HID reports
+	zlp = FALSE;
+	(void)Usb_read_endpoint_data(EP_CONTROL, 8); /* LSB of wValue (descriptor index) */
+	descriptor_type = Usb_read_endpoint_data(EP_CONTROL, 8); /* MSB of wValue (descriptor type) */
+	wInterface = usb_format_usb_to_mcu_data(16, Usb_read_endpoint_data(EP_CONTROL, 16));
+
+	if (wInterface != DSC_INTERFACE_STATISTICS) {
+		return FALSE;
+	}
+
+	switch (descriptor_type) {
+	case HID_DESCRIPTOR:
+#if (USB_HIGH_SPEED_SUPPORT==DISABLED)
+		data_to_transfer = sizeof(uac2_usb_conf_desc_fs.hid_stats);
+		pbuffer = (const U8*)&uac2_usb_conf_desc_fs.hid_stats;
+#else
+		if (Is_usb_full_speed_mode()) {
+			data_to_transfer = sizeof(uac2_usb_conf_desc_fs.hid_stats);
+			pbuffer = (const U8*)&uac2_usb_conf_desc_fs.hid_stats;
+		} else {
+			data_to_transfer = sizeof(uac2_usb_conf_desc_hs.hid_stats);
+			pbuffer = (const U8*)&uac2_usb_conf_desc_hs.hid_stats;
+		}
+#endif
+		break;
+	case HID_REPORT_DESCRIPTOR:
+		data_to_transfer = sizeof(usb_stats_hid_report_descriptor);
+		pbuffer = usb_stats_hid_report_descriptor;
+		break;
+	default:
+		return FALSE;
+	}
+
+	wIndex = Usb_read_endpoint_data(EP_CONTROL, 16);
+	wIndex = usb_format_usb_to_mcu_data(16, wIndex);
+	wLength = Usb_read_endpoint_data(EP_CONTROL, 16);
+	wLength = usb_format_usb_to_mcu_data(16, wLength);
+	Usb_ack_setup_received_free();
+	send_descriptor(wLength, zlp);
+	return TRUE;
+}
+#endif
+
+#ifdef FEATURE_HID
+static Bool uac2_user_get_interface_descriptor(void) __attribute__((unused));
+static Bool uac2_user_get_interface_descriptor(void) {
 	Bool zlp;
 	U16 wLength;
 	U16 wIndex;
@@ -576,11 +685,8 @@ static Bool uac2_user_get_interface_descriptor() {
 #endif
 
 	return TRUE;
-
-#else
-	return TRUE;
-#endif // FEATURE_HID
 }
+#endif // FEATURE_HID
 
 
 
@@ -642,8 +748,18 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 
 	// BSB 20120720 added
 	// this should vector to specified interface handler
-	if (type == IN_INTERFACE && request == GET_DESCRIPTOR)
+	if (type == IN_INTERFACE && request == GET_DESCRIPTOR) {
+#ifndef USBSTATISTICS_DISABLE
+		if (uac2_user_get_stats_hid_descriptor()) {
+			return TRUE;
+		}
+#endif
+#ifdef FEATURE_HID
 		return uac2_user_get_interface_descriptor();
+#else
+		return FALSE;
+#endif
+	}
 
 	// Read wValue
 	// why are these file statics?
@@ -1372,8 +1488,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 							== AUDIO_CS_REQUEST_CUR)) {
 
 						Usb_ack_setup_received_free();
-						while (!Is_usb_control_out_received())
-							;
+						uac2_wait_control_out_received();
 						Usb_reset_endpoint_fifo_access(EP_CONTROL);
 
 						if (wLength == 1) {
@@ -1398,17 +1513,19 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 
 						Usb_ack_control_out_received_free();
 						Usb_ack_control_in_ready_send(); //!< send a ZLP for STATUS phase
-						while (!Is_usb_control_in_ready())
-							; //!< waits for status phase done
+						uac2_wait_control_in_ready();
 						return TRUE;
 					}
 
 					// This is like audio_set_cur for volume but on UAC2
 					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_VOLUME)
 							&& (request == AUDIO_CS_REQUEST_CUR)) {
+						usb_fifo_hw_lock_t usb_lock;
+
 						Usb_ack_setup_received_free();
-						while (!Is_usb_control_out_received())
-							;
+						uac2_wait_control_out_received();
+
+						usb_fifo_hw_lock(&usb_lock);
 						Usb_reset_endpoint_fifo_access(EP_CONTROL);
 
 						if (wLength == 2) {
@@ -1417,8 +1534,6 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 							if (wValue_lsb == CH_LEFT) {
 								LSB( spk_vol_usb_L) = temp1;
 								MSB( spk_vol_usb_L) = temp2;
-								spk_vol_mult_L = usb_volume_format(
-										spk_vol_usb_L);
 
 #ifdef USB_STATE_MACHINE_DEBUG
 								print_dbg_char('s');
@@ -1431,15 +1546,14 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 							} else if (wValue_lsb == CH_RIGHT) {
 								LSB( spk_vol_usb_R) = temp1;
 								MSB( spk_vol_usb_R) = temp2;
-								spk_vol_mult_R = usb_volume_format(
-										spk_vol_usb_R);
 							}
 						}
 
 						Usb_ack_control_out_received_free();
+						usb_fifo_hw_unlock(&usb_lock);
+
 						Usb_ack_control_in_ready_send(); //!< send a ZLP for STATUS phase
-						while (!Is_usb_control_in_ready())
-							; //!< waits for status phase done
+						uac2_wait_control_in_ready();
 						return TRUE;
 					}
 

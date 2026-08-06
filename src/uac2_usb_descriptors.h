@@ -46,6 +46,9 @@
 #include "usb_standard_request.h"
 #include "usb_task.h"
 #include "hid.h" // Added BSB 20120719
+#ifndef USBSTATISTICS_DISABLE
+#include "usb_statistics_descriptors.h"
+#endif
 
 //_____ U S B    D E F I N E S _____________________________________________
 
@@ -54,15 +57,31 @@
 
 #ifdef FEATURE_HID
 	#ifdef FEATURE_CFG_INTERFACE
-		#define NB_INTERFACE	4  // Config, Audio control, audio streaming, HID     4: Was: Counting endpoints: Audio(2), HID(1), Widget-Control(1) // Audio (2), HID //4 !  DG8SAQ, Audio (2), HID
+		#ifndef USBSTATISTICS_DISABLE
+		#define NB_INTERFACE	5  // Config, Audio control, audio streaming, HID, statistics
+		#else
+		#define NB_INTERFACE	4  // Config, Audio control, audio streaming, HID
+		#endif
 	#else
-		#define NB_INTERFACE	3  //         Audio control, audio streaming, HID     3: Was: Counting endpoints: Audio(2), HID(1),                   // Audio (2), HID //4 !  DG8SAQ, Audio (2), HID
+		#ifndef USBSTATISTICS_DISABLE
+		#define NB_INTERFACE	4  //         Audio control, audio streaming, HID, statistics
+		#else
+		#define NB_INTERFACE	3  //         Audio control, audio streaming, HID
+		#endif
 	#endif
 #else
 	#ifdef FEATURE_CFG_INTERFACE
+		#ifndef USBSTATISTICS_DISABLE
+		#define NB_INTERFACE	4  // Config, Audio control, audio streaming, statistics
+		#else
 		#define NB_INTERFACE	3  // Config, Audio control, audio streaming
+		#endif
 	#else
+		#ifndef USBSTATISTICS_DISABLE
+		#define NB_INTERFACE	3  //         Audio control, audio streaming, statistics
+		#else
 		#define NB_INTERFACE	2  //         Audio control, audio streaming
+		#endif
 	#endif
 #endif
 
@@ -396,6 +415,11 @@ __attribute__((__packed__))
 	S_usb_interface_descriptor				ifc3;
 	S_usb_hid_descriptor           			hid;
 	S_usb_endpoint_descriptor     		 	ep4;
+#endif
+#ifndef USBSTATISTICS_DISABLE
+	S_usb_interface_descriptor				ifc_stats_hid;
+	S_usb_hid_descriptor						hid_stats;
+	S_usb_endpoint_descriptor     		 	ep_stats_hid;
 #endif
 }
 #if (defined __ICCAVR32__)

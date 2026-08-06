@@ -5,6 +5,18 @@
 # *.[oa]
 *~
 *.o
+*.obj
 *.d
 *.elf
+*.exe
 widget-control
+widget-control.exe
+/tests/audio_stats_logic_tests.exe
+/tests/usb_statistics_tests.exe
+/Release/tests/pc/
+__pycache__/
+*.pyc
+**/venv/
+.idea/
+.vscode/
+.junie/

@@ -43,6 +43,7 @@
 #include "taskPushButtonMenu.h"
 #include "device_audio_task.h"
 #include "hpsdr_device_audio_task.h"
+#include "loudness.h"
 #include "wdt.h"
 
 #if LCD_DISPLAY				// Multi-line LCD display
@@ -72,6 +73,11 @@ static void x_image_task_init(void) {
   usb_task_init();
 
 #if USB_DEVICE_FEATURE == ENABLED
+
+  loudness_init();
+#ifndef LOUDNESS_DISABLE
+  loudness_rtos_init();
+#endif
 
   mutexEP_IN = xSemaphoreCreateMutex(); // for co-ordinating multiple tasks using EP IN
 

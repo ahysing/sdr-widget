@@ -3,4 +3,6 @@
 //
 // USB Statistics Vendor Interface
 
+#ifndef USBSTATISTICS_DISABLE
 #include "usb_statistics_descriptors.h"
+#endif

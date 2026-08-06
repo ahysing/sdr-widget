@@ -37,8 +37,11 @@ C_SRCS += \
 ../src/uac2_usb_specific_request.c \
 ../src/usb_descriptors.c \
 ../src/usb_specific_request.c \
+../src/stats_telemetry.c \
+../src/usb_fifo_hw_lock.c \
 ../src/usb_statistics.c \
 ../src/usb_statistics_descriptors.c \
+../src/usb_stats_hid_report_descriptor.c \
 ../src/widget.c \
 ../src/wm8805.c 
 
@@ -76,8 +79,11 @@ OBJS += \
 ./src/uac2_usb_specific_request.o \
 ./src/usb_descriptors.o \
 ./src/usb_specific_request.o \
+./src/stats_telemetry.o \
+./src/usb_fifo_hw_lock.o \
 ./src/usb_statistics.o \
 ./src/usb_statistics_descriptors.o \
+./src/usb_stats_hid_report_descriptor.o \
 ./src/widget.o \
 ./src/wm8805.o 
 
@@ -116,8 +122,11 @@ C_DEPS += \
 ./src/uac2_usb_specific_request.d \
 ./src/usb_descriptors.d \
 ./src/usb_specific_request.d \
+./src/stats_telemetry.d \
+./src/usb_fifo_hw_lock.d \
 ./src/usb_statistics.d \
 ./src/usb_statistics_descriptors.d \
+./src/usb_stats_hid_report_descriptor.d \
 ./src/widget.d \
 ./src/wm8805.d
 

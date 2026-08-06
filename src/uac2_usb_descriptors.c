@@ -30,6 +30,10 @@
 #include "usb_standard_request.h"
 #include "usb_specific_request.h"
 #include "usb_audio.h"
+#ifndef USBSTATISTICS_DISABLE
+#include "usb_statistics_descriptors.h"
+#include "usb_stats_hid_report_descriptor.h"
+#endif
 
 
 //_____ M A C R O S ________________________________________________________
@@ -425,6 +429,39 @@ S_usb_user_configuration_descriptor uac2_usb_conf_desc_fs =
 	  */
 #endif
 // BSB 20120720 Insert EP 4 and 5, HID TX and RX end
+#ifndef USBSTATISTICS_DISABLE
+  ,
+  {
+	sizeof(S_usb_interface_descriptor),
+	INTERFACE_DESCRIPTOR,
+	INTERFACE_NB_STATS,
+	ALTERNATE_NB_STATS,
+	NB_ENDPOINT_STATS,
+	INTERFACE_CLASS_STATS,
+	INTERFACE_SUB_CLASS_STATS,
+	INTERFACE_PROTOCOL_STATS,
+	INTERFACE_INDEX_STATS
+  }
+  ,
+  {
+	sizeof(S_usb_hid_descriptor),
+	HID_DESCRIPTOR,
+	Usb_format_mcu_to_usb_data(16, HID_STATS_VERSION),
+	HID_STATS_COUNTRY_CODE,
+	HID_STATS_NUM_DESCRIPTORS,
+	HID_REPORT_DESCRIPTOR,
+	Usb_format_mcu_to_usb_data(16, sizeof(usb_stats_hid_report_descriptor))
+  }
+  ,
+  {
+	sizeof(S_usb_endpoint_descriptor),
+	ENDPOINT_DESCRIPTOR,
+	ENDPOINT_NB_STATS_HID,
+	EP_ATTRIBUTES_STATS_HID,
+	Usb_format_mcu_to_usb_data(16, EP_SIZE_STATS_HID_FS),
+	EP_INTERVAL_STATS_HID_FS
+  }
+#endif
 };
 
 
@@ -763,6 +800,39 @@ S_usb_user_configuration_descriptor uac2_usb_conf_desc_hs =
 */
 #endif
 // BSB 20120720 Insert EP 4 and 5, HID TX and RX end
+#ifndef USBSTATISTICS_DISABLE
+  ,
+  {
+	sizeof(S_usb_interface_descriptor),
+	INTERFACE_DESCRIPTOR,
+	INTERFACE_NB_STATS,
+	ALTERNATE_NB_STATS,
+	NB_ENDPOINT_STATS,
+	INTERFACE_CLASS_STATS,
+	INTERFACE_SUB_CLASS_STATS,
+	INTERFACE_PROTOCOL_STATS,
+	INTERFACE_INDEX_STATS
+  }
+  ,
+  {
+	sizeof(S_usb_hid_descriptor),
+	HID_DESCRIPTOR,
+	Usb_format_mcu_to_usb_data(16, HID_STATS_VERSION),
+	HID_STATS_COUNTRY_CODE,
+	HID_STATS_NUM_DESCRIPTORS,
+	HID_REPORT_DESCRIPTOR,
+	Usb_format_mcu_to_usb_data(16, sizeof(usb_stats_hid_report_descriptor))
+  }
+  ,
+  {
+	sizeof(S_usb_endpoint_descriptor),
+	ENDPOINT_DESCRIPTOR,
+	ENDPOINT_NB_STATS_HID,
+	EP_ATTRIBUTES_STATS_HID,
+	Usb_format_mcu_to_usb_data(16, EP_SIZE_STATS_HID_HS),
+	EP_INTERVAL_STATS_HID_HS
+  }
+#endif
 };
 
 // usb_qualifier_desc FS

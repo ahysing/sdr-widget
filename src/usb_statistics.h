@@ -6,65 +6,70 @@
 
 #include "compiler.h"
 
-typedef volatile struct {
-    // what generation of the struct
-    U32 generation;
-
-    // USB packet arrives, but the receive buffer is already full.
+typedef struct {
+    U8 generation;
     U32 overruns;
-
-    // DAC requires, but the receive buffer is empty.
     U32 underruns;
-
-    // USB asynchronous audio devices continuously tell the computer: speed up sending, speed down sending
-    // U32 feedback_changes;
-
-    // This is the number of samples that have been received but not yet played.
     U16 fifo_level;
-
-    // Largest number of samples that have been received but not yet played on the FIFO queue
     U16 max_fifo;
-
-    // Smallest number of samples that have been received but not yet played on the FIFO queue
     U16 min_fifo;
-
-    //audio-processing loop fails to complete before the next packet is due to arrive
     U32 deadline_misses;
+    U32 event_count;
+    U8 last_tag;
+    U8 last_arg0;
+    U8 last_arg1;
+    U8 last_arg2;
 } usb_stats_t;
 
-typedef struct __attribute__((packed)) {
-    U32 version;
+#define USB_STATS_PACKET_HID_ANCHOR  0x53u
+#define USB_STATS_PACKET_VERSION     1u
+#define USB_STATS_PACKET_WIRE_SIZE   37u
+#define USB_STATS_PACKET_CHECKSUM_OFFSET 3u
 
+#define USB_STATS_TAG_NONE         0u
+#define USB_STATS_TAG_EQUALIZER_STEP_SWITCH  1u
+#define USB_STATS_TAG_RAMP_COMPLETE 2u
+#define USB_STATS_TAG_FREQ_CHANGE  3u
+
+PACK(struct usb_stats_packet {
+    U8 hid_anchor;
+    U8 version;
+    U8 report_seq;
+    U8 checksum;
     U32 overruns;
     U32 underruns;
-
-    // U32 feedback_changes;
-
     U16 fifo_level;
     U16 max_fifo;
     U16 min_fifo;
-
     U32 deadline_misses;
-} usb_stats_packet_t;
+    U16 frequency_hz;
+    S8 track_dbfs;
+    S8 track_rms_dbfs;
+    S8 gain_dbfs;
+    S8 db_spl;
+    U32 event_count;
+    U8 last_tag;
+    U8 last_arg0;
+    U8 last_arg1;
+    U8 last_arg2;
+    U8 equalizer_step;
+});
+typedef struct usb_stats_packet usb_stats_packet_t;
 
-typedef volatile struct {
-    // packets received
-    U32 packet_count;
-
-    // packets received containing n frames
-    U32 packet_histogram[64];
-} usb_histogram_t;
-
-typedef struct __attribute__((packed)) {
-    // packets received
-    U32 packet_count;
-
-    // packets received containing n frames
-    U32 packet_histogram[64];
-} usb_histogram_packet_t;
-
+#ifndef USBSTATISTICS_DISABLE
 extern void statistics_init();
 extern void statistics_task(void *pvParameters);
-usb_stats_t* get_usb_stats();
-usb_stats_t snapshot();
+extern void statistics_report_iteration();
+volatile usb_stats_t* get_usb_stats();
+
+#ifdef UNIT_TEST
+void statistics_test_reset(void);
+void statistics_test_set_collect_index(int index);
+volatile usb_stats_t* statistics_test_get_buffer(int index);
+int statistics_test_get_collect_index(void);
+U8 statistics_test_build_wire_checksum(const U8 *wire);
+void statistics_test_build_wire_packet(U8 *wire, const volatile usb_stats_t *s, U8 report_seq);
+#endif
+#endif // USBSTATISTICS_DISABLE
+
 #endif //SDR_WIDGET_USB_STATISTICS_H

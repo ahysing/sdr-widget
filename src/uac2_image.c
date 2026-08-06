@@ -65,6 +65,10 @@
 #include "usb_specific_request.h"
 #include "uac2_usb_specific_request.h"
 #include "uac2_device_audio_task.h"
+#include "loudness.h"
+#ifndef USBSTATISTICS_DISABLE
+#include "usb_statistics.h"
+#endif
 
 // image launch
 static void x_image_boot(void) {
@@ -106,6 +110,12 @@ static void x_image_task_init(void) {
 	usb_task_init();
 
 #if USB_DEVICE_FEATURE == ENABLED
+
+	loudness_init();
+#ifndef LOUDNESS_DISABLE
+	loudness_rtos_init();
+#endif
+
 	mutexEP_IN = xSemaphoreCreateMutex(); // for co-ordinating multiple tasks using EP IN
 
 #if LCD_DISPLAY						// Multi-line LCD display

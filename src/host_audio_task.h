@@ -81,6 +81,10 @@ typedef struct
    U8  unit;
    U8  n_bmaControls;
    U8  bmaControls[MAX_BMA_CONTROLS];
+   S16 volume_min[MAX_BMA_CONTROLS];
+   S16 volume_max[MAX_BMA_CONTROLS];
+   S16 volume_res[MAX_BMA_CONTROLS];
+   S16 volume_cur[MAX_BMA_CONTROLS];
 } cs_feature_unit_t;
 
 //_____ D E C L A R A T I O N S ____________________________________________
@@ -88,7 +92,10 @@ typedef struct
 extern volatile Bool ms_connected;
 
 extern void host_audio_set_cur_mute(U16 unit, Bool cs_mute);
-extern U16  host_audio_get_max(     U16 unit, U16 channel_number);
+extern S16  host_audio_get_min(     U16 unit, U16 channel_number);
+extern S16  host_audio_get_max(     U16 unit, U16 channel_number);
+extern S16  host_audio_get_res(     U16 unit, U16 channel_number);
+extern S16  host_audio_get_cur(     U16 unit, U16 channel_number);
 extern void host_audio_set_cur(     U16 unit, U16 channel_number, U16 volume);
 extern void host_set_sampling_rate( U16 endpoint, U32 sampling_rate);
 extern void host_audio_task_init(void);

@@ -79,6 +79,11 @@
 #include "device_audio_task.h"
 #include "uac2_device_audio_task.h"
 #include "loudness.h"
+#ifndef USBSTATISTICS_DISABLE
+#include "usb_statistics.h"
+#include "audio_stats_logic.h"
+#endif
+#include "usb_fifo_hw_lock.h"
 
 #if LCD_DISPLAY				// Multi-line LCD display
 #include "taskLCD.h"
@@ -131,7 +136,8 @@ void uac2_device_audio_task_init(U8 ep_in, U8 ep_out, U8 ep_out_fb)
 	spk_vol_mult_L = usb_volume_format(spk_vol_usb_L);
 	spk_vol_mult_R = usb_volume_format(spk_vol_usb_R);
 
-	dsp_init();
+	loudness_init();
+	loudness_filter_init();
 
 	xTaskCreate(uac2_device_audio_task,
 				configTSK_USB_DAUDIO_NAME,
@@ -146,6 +152,13 @@ void uac2_device_audio_task_init(U8 ep_in, U8 ep_out, U8 ep_out_fb)
 //! @brief Entry point of the device Audio task management
 //!
 
+
+#define UAC2_USB_OUT_MAX_STEREO_SAMPLES  (EP_OUT_LENGTH_2_HS / 8u)
+
+#ifndef USBSTATISTICS_DISABLE
+/* Ignore normal loop overruns from the 1-tick UAC2 wake period; count only large scheduler slips. */
+#define STATISTICS_DEADLINE_SLIP_THRESHOLD_TICKS 100u
+#endif
 
 void uac2_device_audio_task(void *pvParameters)
 {
@@ -198,6 +211,20 @@ void uac2_device_audio_task(void *pvParameters)
 	while (TRUE) {
 		vTaskDelayUntil(&xLastWakeTime, UAC2_configTSK_USB_DAUDIO_PERIOD);
 
+#ifndef USBSTATISTICS_DISABLE
+		{
+			volatile usb_stats_t *stats = get_usb_stats();
+			portTickType now = xTaskGetTickCount();
+			portTickType slip = now - xLastWakeTime;
+
+			if (slip > STATISTICS_DEADLINE_SLIP_THRESHOLD_TICKS) {
+				stats->generation++;
+				stats->deadline_misses++;
+				stats->generation++;
+			}
+		}
+#endif
+
 		// Introduced into UAC2 code with mobodebug
 		// Must we clear the DAC buffer contents?
 		if (dac_must_clear == DAC_MUST_CLEAR) {
@@ -237,7 +264,9 @@ void uac2_device_audio_task(void *pvParameters)
 
 				if (!FEATURE_ADC_NONE) {
 					if (Is_usb_in_ready(EP_AUDIO_IN)) {	// Endpoint ready for data transfer?
+						usb_fifo_hw_lock_t usb_lock;
 
+						usb_fifo_hw_lock(&usb_lock);
 						Usb_ack_in_ready(EP_AUDIO_IN);	// acknowledge in ready
 
 						// Sync AK data stream with USB data stream
@@ -319,6 +348,7 @@ void uac2_device_audio_task(void *pvParameters)
 							}
 						}
 						Usb_send_in(EP_AUDIO_IN);		// send the current bank
+						usb_fifo_hw_unlock(&usb_lock);
 					}
 				} // end FEATURE_ADC
 			}
@@ -335,16 +365,7 @@ void uac2_device_audio_task(void *pvParameters)
 
 			/* SPDIF reduced OK */
 			if (Is_usb_in_ready(EP_AUDIO_OUT_FB)) {	// Endpoint buffer free ?
-				Usb_ack_in_ready(EP_AUDIO_OUT_FB);	// acknowledge in ready
-				Usb_reset_endpoint_fifo_access(EP_AUDIO_OUT_FB);
-
-				/* BSB 20131101
-				 * A "stupid" Host is able to read the feedback but does not consider it. Emulate that by resetting packets_since_feedback
-				 * and sending the Host the initial feedback value. Initial feedback is seeded with a hardcoded offset FB_INITIAL_OFFSET
-				 *
-				 * A "dead" Host is not reading the feedback. Emulate that by not resetting packets_since_feedbakc and sending the Host the
-				 * initial feedback value.
-				 */
+				usb_fifo_hw_lock_t usb_lock;
 
 				if (FEATURE_HDEAD_OFF)
 					packets_since_feedback = 0;
@@ -374,9 +395,6 @@ void uac2_device_audio_task(void *pvParameters)
 						sample_SB = FB_rate >> 8;
 						sample_MSB = FB_rate >> 16;
 					}
-					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_LSB);
-					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_SB);
-					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_MSB);
 				}
 				else {
 					// HS mode
@@ -411,10 +429,6 @@ void uac2_device_audio_task(void *pvParameters)
 						sample_MSB = FB_rate >> 16;
 						sample_HSB = FB_rate >> 24;
 					}
-					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_LSB);
-					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_SB);
-					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_MSB);
-					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_HSB);
 				}
 
 
@@ -435,7 +449,21 @@ void uac2_device_audio_task(void *pvParameters)
 					}
 				}
 
+				usb_fifo_hw_lock(&usb_lock);
+				Usb_ack_in_ready(EP_AUDIO_OUT_FB);
+				Usb_reset_endpoint_fifo_access(EP_AUDIO_OUT_FB);
+				if (Is_usb_full_speed_mode()) {
+					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_LSB);
+					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_SB);
+					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_MSB);
+				} else {
+					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_LSB);
+					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_SB);
+					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_MSB);
+					Usb_write_endpoint_data(EP_AUDIO_OUT_FB, 8, sample_HSB);
+				}
 				Usb_send_in(EP_AUDIO_OUT_FB);
+				usb_fifo_hw_unlock(&usb_lock);
 			} // end if (Is_usb_in_ready(EP_AUDIO_OUT_FB)) // Endpoint buffer free ?
 
 
@@ -445,17 +473,12 @@ void uac2_device_audio_task(void *pvParameters)
 
 				// Do minimal USB action to make Host believe Device is actually receiving
 				if (Is_usb_out_received(EP_AUDIO_OUT)) {
+					usb_fifo_hw_lock_t usb_lock;
+
+					usb_fifo_hw_lock(&usb_lock);
 					Usb_reset_endpoint_fifo_access(EP_AUDIO_OUT);
-
-					/*
-					// Needed in minimal USB functionality?
-					num_samples = Usb_byte_count(EP_AUDIO_OUT);
-					for (i = 0; i < num_samples; i++) {
-						Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
-					}
-					*/
-
 					Usb_ack_out_received_free(EP_AUDIO_OUT);
+					usb_fifo_hw_unlock(&usb_lock);
 				}
 			}
 			else {
@@ -464,11 +487,15 @@ void uac2_device_audio_task(void *pvParameters)
 #endif
 
 				if (Is_usb_out_received(EP_AUDIO_OUT)) {
+					usb_fifo_hw_lock_t usb_lock;
+					S32 usb_out_L[UAC2_USB_OUT_MAX_STEREO_SAMPLES];
+					S32 usb_out_R[UAC2_USB_OUT_MAX_STEREO_SAMPLES];
 
 #ifdef USB_STATE_MACHINE_GPIO
 					gpio_tgl_gpio_pin(AVR32_PIN_PX31);
 #endif
 
+					usb_fifo_hw_lock(&usb_lock);
 					Usb_reset_endpoint_fifo_access(EP_AUDIO_OUT);
 					num_samples = Usb_byte_count(EP_AUDIO_OUT);
 
@@ -480,6 +507,39 @@ void uac2_device_audio_task(void *pvParameters)
 					else
 						num_samples = 0;											// Should never get here...
 
+					for (i = 0; i < num_samples; i++) {
+						if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX) {
+							sample_HSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							sample_LSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							sample_SB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							sample_MSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							usb_out_L[i] = (S32)((((U32) sample_MSB) << 24) + (((U32)sample_SB) << 16) + (((U32) sample_LSB) << 8));
+							sample_HSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							sample_LSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							sample_SB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							sample_MSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							usb_out_R[i] = (S32)((((U32) sample_MSB) << 24) + (((U32)sample_SB) << 16) + (((U32) sample_LSB) << 8));
+						} else if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {
+							sample_LSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							sample_MSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							usb_out_L[i] = (S32)((((U32) sample_MSB) << 24) + (((U32)sample_LSB) << 16));
+							sample_LSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							sample_MSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
+							usb_out_R[i] = (S32)((((U32) sample_MSB) << 24) + (((U32)sample_LSB) << 16));
+						}
+					}
+					Usb_ack_out_received_free(EP_AUDIO_OUT);
+					usb_fifo_hw_unlock(&usb_lock);
+
+#ifdef FEATURE_VOLUME_CTRL
+					spk_vol_mult_L = usb_volume_format(spk_vol_usb_L);
+					spk_vol_mult_R = usb_volume_format(spk_vol_usb_R);
+#endif
+
+#ifndef LOUDNESS_DISABLE
+					/* Step the coefficient ramp once per packet. */
+					loudness_coeff_ramp_step();
+#endif
 
 					xSemaphoreTake( mutexSpkUSB, portMAX_DELAY );
 					spk_usb_heart_beat++;					// indicates EP_AUDIO_OUT receiving data from host
@@ -603,35 +663,10 @@ void uac2_device_audio_task(void *pvParameters)
 					silence_det_R = 0;						// We're looking for non-zero or non-static audio data..
 
 					for (i = 0; i < num_samples; i++) {
-						// bBitResolution
-						if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX) {		// Alternate 1 24 bits/sample, 8 bytes per stereo sample
-							// 24-bit code
-							sample_HSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8); // bBitResolution void input byte to fill up to 4 bytes?
-							sample_LSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
-							sample_SB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
-							sample_MSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
-							sample_L = (((U32) sample_MSB) << 24) + (((U32)sample_SB) << 16) + (((U32) sample_LSB) << 8); //  + sample_HSB; // bBitResolution
-							silence_det_L |= sample_L;
-
-							sample_HSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8); // bBitResolution void input byte to fill up to 4 bytes?
-							sample_LSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
-							sample_SB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
-							sample_MSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
-							sample_R = (((U32) sample_MSB) << 24) + (((U32)sample_SB) << 16) + (((U32) sample_LSB) << 8); // + sample_HSB; // bBitResolution
-							silence_det_R |= sample_R;
-						}
-						else if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {	// Alternate 2 16 bits/sample, 4 bytes per stereo sample
-							// 16-bit code
-							sample_LSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
-							sample_MSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
-							sample_L = (((U32) sample_MSB) << 24) + (((U32)sample_LSB) << 16);
-							silence_det_L |= sample_L;
-
-							sample_LSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
-							sample_MSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
-							sample_R = (((U32) sample_MSB) << 24) + (((U32)sample_LSB) << 16);
-							silence_det_R |= sample_R;
-						}
+						sample_L = usb_out_L[i];
+						sample_R = usb_out_R[i];
+						silence_det_L |= sample_L;
+						silence_det_R |= sample_R;
 
 						if ( (silence_det_L == sample_L) && (silence_det_R == sample_R) )
 							silence_det = 1;
@@ -674,13 +709,17 @@ void uac2_device_audio_task(void *pvParameters)
 						#endif
 
 
-						if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX) {
-							sample_L = (S32)(DOWNSAMPLE_24BIT(loudness(UPSAMPLE_24BIT((U32)(sample_L >> 8)))) << 8);
-							sample_R = (S32)(DOWNSAMPLE_24BIT(loudness(UPSAMPLE_24BIT((U32)(sample_R >> 8)))) << 8);
-						} else if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {
-							sample_L = (S32)(DOWNSAMPLE_16BIT(loudness(UPSAMPLE_16BIT((U32)(sample_L >> 16)))) << 16);
-							sample_R = (S32)(DOWNSAMPLE_16BIT(loudness(UPSAMPLE_16BIT((U32)(sample_R >> 16)))) << 16);
+#ifndef LOUDNESS_DISABLE
+						if (usb_spk_mute == 0) {
+							if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX) {
+								sample_L = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_L >> 8)) << 8;
+								sample_R = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_R >> 8)) << 8;
+							} else if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {
+								sample_L = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_L >> 16)) << 16;
+								sample_R = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_R >> 16)) << 16;
+							}
 						}
+#endif
 
 
 	#ifdef FEATURE_VOLUME_CTRL
@@ -757,8 +796,6 @@ void uac2_device_audio_task(void *pvParameters)
 					else // stereo sample is non-zero
 						silence_USB = SILENCE_USB_INIT;			// USB interface is not silent!
 
-					Usb_ack_out_received_free(EP_AUDIO_OUT);
-
 //					if ( (USB_IS_SILENT()) && (input_select == MOBO_SRC_UAC2) ) { // Oops, we just went silent, probably from pause
 					// mobodebug untested fix
 					if ( (USB_IS_SILENT()) && (input_select == MOBO_SRC_UAC2) && (playerStarted != FALSE) ) { // Oops, we just went silent, probably from pause
@@ -828,6 +865,9 @@ void uac2_device_audio_task(void *pvParameters)
 
 
 							if(playerStarted) {
+#ifndef USBSTATISTICS_DISABLE
+								audio_stats_update(get_usb_stats(), gap, DAC_BUFFER_SIZE);
+#endif
 
 	#ifndef USB_METALLIC_NOISE_SIM										// Disable skip/insert when demoing metallic noise
 								if (FEATURE_NOSKIP_OFF) { 				// If skip/insert isn't disabled...

@@ -194,7 +194,7 @@ void host_audio_task(void)
          {
             for( j=0 ; j<g_cs_feature[i].n_bmaControls ; j++ )
             {
-               U16 max;
+               S16 max;
                U8  bmaControls= g_cs_feature[i].bmaControls[j];
 
                if( bmaControls==0 )
@@ -207,8 +207,13 @@ void host_audio_task(void)
 
                if( bmaControls & 0x02)
                {
-                  max= host_audio_get_max(g_cs_feature[i].unit, j);
+                  g_cs_feature[i].volume_min[j] = host_audio_get_min(g_cs_feature[i].unit, j);
+                  g_cs_feature[i].volume_max[j] = host_audio_get_max(g_cs_feature[i].unit, j);
+                  g_cs_feature[i].volume_res[j] = host_audio_get_res(g_cs_feature[i].unit, j);
+                  
+                  max = g_cs_feature[i].volume_max[j];
                   host_audio_set_cur(g_cs_feature[i].unit, j, max);
+                  g_cs_feature[i].volume_cur[j] = max;
                }
             }
          }
@@ -307,11 +312,30 @@ void host_audio_set_cur(U16 unit, U16 channel_number, U16 cur)
 
 
 //!
+//! @brief This function returns the 'MIN setting' feature of a particular unit
+//!
+S16 host_audio_get_min(U16 unit, U16 channel_number)
+{
+   S16 min;
+   usb_request.bmRequestType   = 0xA1;
+   usb_request.bRequest        = BR_REQUEST_GET_MIN;
+   usb_request.wValue          = CS_VOLUME | channel_number;
+   usb_request.wIndex          = (unit)<<8;
+   usb_request.wLength         = 2;
+   usb_request.incomplete_read = FALSE;
+   host_transfer_control(data_stage);
+   LSB(min)= data_stage[0];
+   MSB(min)= data_stage[1];
+   return min;
+}
+
+
+//!
 //! @brief This function returns the 'MAX setting' feature of a particular unit
 //!
-U16 host_audio_get_max(U16 unit, U16 channel_number)
+S16 host_audio_get_max(U16 unit, U16 channel_number)
 {
-   U16 max;
+   S16 max;
    usb_request.bmRequestType   = 0xA1;
    usb_request.bRequest        = BR_REQUEST_GET_MAX;
    usb_request.wValue          = CS_VOLUME | channel_number;
@@ -322,6 +346,44 @@ U16 host_audio_get_max(U16 unit, U16 channel_number)
    LSB(max)= data_stage[0];
    MSB(max)= data_stage[1];
    return max;
+}
+
+
+//!
+//! @brief This function returns the 'RES setting' feature of a particular unit
+//!
+S16 host_audio_get_res(U16 unit, U16 channel_number)
+{
+   S16 res;
+   usb_request.bmRequestType   = 0xA1;
+   usb_request.bRequest        = BR_REQUEST_GET_RES;
+   usb_request.wValue          = CS_VOLUME | channel_number;
+   usb_request.wIndex          = (unit)<<8;
+   usb_request.wLength         = 2;
+   usb_request.incomplete_read = FALSE;
+   host_transfer_control(data_stage);
+   LSB(res)= data_stage[0];
+   MSB(res)= data_stage[1];
+   return res;
+}
+
+
+//!
+//! @brief This function returns the 'CUR setting' feature of a particular unit
+//!
+S16 host_audio_get_cur(U16 unit, U16 channel_number)
+{
+   S16 cur;
+   usb_request.bmRequestType   = 0xA1;
+   usb_request.bRequest        = BR_REQUEST_GET_CUR;
+   usb_request.wValue          = CS_VOLUME | channel_number;
+   usb_request.wIndex          = (unit)<<8;
+   usb_request.wLength         = 2;
+   usb_request.incomplete_read = FALSE;
+   host_transfer_control(data_stage);
+   LSB(cur)= data_stage[0];
+   MSB(cur)= data_stage[1];
+   return cur;
 }
 
 
