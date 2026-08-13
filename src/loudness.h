@@ -21,12 +21,11 @@ typedef struct {
 } biquad_state_precise_t;
 
 typedef struct {
+    int64_t a1;
+    int64_t a2;
     int64_t b0;
     int64_t b1;
     int64_t b2;
-    int64_t a0;
-    int64_t a1;
-    int64_t a2;
 } biquad_quotients_precise_t;
 #endif
 
@@ -39,12 +38,11 @@ typedef struct {
 } biquad_state_fast_t;
 
 typedef struct {
+    int32_t a1;
+    int32_t a2;
     int32_t b0;
     int32_t b1;
     int32_t b2;
-    int32_t a0;
-    int32_t a1;
-    int32_t a2;
 } biquad_quotients_fast_t;
 #endif
 
@@ -54,15 +52,17 @@ typedef enum {
 } biquad_type_t;
 
 /* Equal-loudness equalizer steps (assumes 0 dBFS == 80 dB SPL):
- *   index 0 -> 55 phon
- *   index 1 -> 65 phon
- *   index 2 -> 75 phon
- *   index 3 -> 80 phon (reference, flat)
+ *   index  0 -> 55 phon, index 1 -> 57 phon, ... index 12 -> 79 phon
+ *   index 13 -> 80 phon (neutral unity biquads)
  */
-#define LOUDNESS_NUM_EQUALIZER_STEPS    4
+#define LOUDNESS_NUM_EQUALIZER_STEPS    14
+#define LOUDNESS_MIN_PHON               55
+#define LOUDNESS_PHON_STEP_DB           2
+#define LOUDNESS_NEUTRAL_STEP           (LOUDNESS_NUM_EQUALIZER_STEPS - 1)
+#define LOUDNESS_CONTOUR_STEPS          (LOUDNESS_NEUTRAL_STEP)
 #define LOUDNESS_REF_DB_SPL   80   /* 100% (0 dBFS) corresponds to 80 dB SPL */
 #define LOUDNESS_REF_PHON     80
-#define LOUDNESS_EQUALIZER_STEP_DB 10
+#define LOUDNESS_EQUALIZER_STEP_DB LOUDNESS_PHON_STEP_DB
 
 /* --- Public API --- */
 
@@ -97,9 +97,12 @@ int64_t biquad_step_precise_24bit(int64_t sample, biquad_state_precise_t* biquad
 #ifdef FAST
 int64_t loudness_fast_24bit(int32_t sample);
 int32_t biquad_step_fast_32bit(int32_t sample, biquad_state_fast_t* biquad_states);
+S32 loudness_filter_16bit_container(S32 sample);
 #define LOUDNESS_FILTER_FAST_32(sample_32) ((S32)loudness_fast_24bit(sample_32))
+#define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) loudness_filter_16bit_container(sample_32)
 #else
 #define LOUDNESS_FILTER_FAST_32(sample_32) (sample_32)
+#define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) (sample_32)
 #endif
 
 /* Force the active loudness band from an external dBFS estimate (<= 0). */
@@ -123,11 +126,10 @@ int32_t loudness_get_db_spl(void);
 /* Current blended phon estimate (dB SPL) used for bypass and equalizer step selection. */
 int16_t loudness_get_last_db_spl(void);
 
-/* Step the coefficient ramp once (called once per stereo sample packet). */
-void loudness_coeff_ramp_step(void);
 #else /* LOUDNESS_DISABLE */
 #define LOUDNESS_FILTER_PRECISE_24(sample_64) (sample_64)
 #define LOUDNESS_FILTER_FAST_32(sample_32) (sample_32)
+#define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) (sample_32)
 #endif /* LOUDNESS_DISABLE */
 
 int32_t loudness_apply_noise_shaper_to_output(int32_t sample_32bit, int32_t* noise_shaper_error);
@@ -161,12 +163,15 @@ static inline int CLZ(uint32_t x) {
 S32 saturate_24bit_s64_to_s32(S64 acc);
 S32 saturate_24bit_s32_to_s32(S32 acc);
 U32 saturate_24bit_s32_to_u32(S32 acc);
+S32 saturate_16bit_s32_to_s32(S32 acc);
 
 /* Correct macros for upsampling/downsampling */
-#define UPSAMPLE_16BIT_64(sample) (((int64_t)((int16_t)(sample))) << 16)
+#define UPSAMPLE_16BIT_64(sample) (((int64_t)(int16_t)(sample)) << 16)
 #define UPSAMPLE_24BIT_64(sample) (((int64_t)(((int32_t)(sample) << 8) >> 8)) << 8)
-#define UPSAMPLE_16BIT_32(sample) (((int32_t)(int32_t)(sample)) << 16)
+#define UPSAMPLE_16BIT_32(sample) (((int32_t)(int16_t)(sample)) << 16)
 #define UPSAMPLE_24BIT_32(sample) ((((int32_t)(sample) << 8) >> 8) << 8)
+#define UPSAMPLE_16BIT_TO_FILTER_32(sample) (((int32_t)(int16_t)((sample) >> 16)) << 8)
+#define DOWNSAMPLE_FILTER_TO_16BIT_CONTAINER(sample) (((int32_t)saturate_16bit_s32_to_s32((sample) >> 8)) << 16)
 #define DOWNSAMPLE_24BIT(sample) ((int32_t)((sample) >> 8))
 #define DOWNSAMPLE_16BIT(sample) ((int16_t)((sample) >> 16))
 
@@ -190,9 +195,5 @@ U32 saturate_24bit_s32_to_u32(S32 acc);
  */
 #define LOUDNESS_TRACK_DBFS_MIN   (-18)
 #define LOUDNESS_TRACK_DBFS_MAX    (-6)
-
-#ifdef BUILD_TESTING
-int32_t ramp_coeff_fast(int32_t current, int32_t target, uint32_t remaining);
-#endif
 
 #endif

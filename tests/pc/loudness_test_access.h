@@ -5,7 +5,6 @@
 
 /* PC unit tests link loudness.c directly and seed the RMS integrator. */
 extern uint64_t root_mean_square;
-extern uint32_t root_mean_square_counter;
 
 #ifdef FAST
 void loudness_update_track_level_fast(int32_t sample);
@@ -18,9 +17,10 @@ void loudness_update_track_level_precise(int64_t sample);
 #ifdef BUILD_TESTING
 #include "compiler.h"
 
-/* Exposed from loudness.c when built with -DBUILD_TESTING. */
-extern volatile uint32_t coeff_ramp_remaining;
 extern volatile S16 last_db_spl;
+
+int loudness_test_get_equalizer_step(int32_t db_spl);
+Bool loudness_test_should_change_equalizer_step(int32_t db_spl_x10);
 #endif
 
 #endif

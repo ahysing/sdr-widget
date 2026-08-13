@@ -93,7 +93,7 @@ make audio-widget USBSTATISTICS_DISABLE=1
 
 ### Unit tests (host-side)
 
-PC unit tests verify loudness logic, coefficient ramping, and USB statistics without the AVR32 toolchain:
+PC unit tests verify loudness logic, 14-step equalizer selection, and USB statistics without the AVR32 toolchain:
 
 ```bash
 make test

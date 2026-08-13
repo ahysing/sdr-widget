@@ -239,9 +239,6 @@ $(TEST_BUILD_DIR):
 $(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT): tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/usb_statistics.c src/stats_telemetry.c | $(TEST_BUILD_DIR)
 	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUNIT_TEST $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/usb_statistics.c src/stats_telemetry.c
 
-$(TEST_BUILD_DIR)/loudness_ramp_tests$(EXE_EXT): tests/pc/loudness_ramp_tests.c src/loudness.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_ramp_tests.c src/loudness.c
-
 $(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c src/loudness.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
 	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c src/loudness.c tests/pc/usb_volume_stub.c
 
@@ -254,8 +251,7 @@ $(TEST_BUILD_DIR)/audio_stats_logic_tests$(EXE_EXT): tests/pc/audio_stats_logic_
 RUN_TEST_EXES = $(TEST_BUILD_DIR)/audio_stats_logic_tests$(EXE_EXT) \
 	$(TEST_BUILD_DIR)/usb_statistics_tests$(EXE_EXT)
 ifneq ($(LOUDNESS_DISABLE),1)
-RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT) \
-	$(TEST_BUILD_DIR)/loudness_ramp_tests$(EXE_EXT)
+RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT)
 ifneq ($(USBSTATISTICS_DISABLE),1)
 RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT)
 endif
@@ -279,7 +275,6 @@ endif
 run-test: $(RUN_TEST_EXES)
 	$(TEST_BUILD_DIR)/audio_stats_logic_tests$(EXE_EXT)
 ifneq ($(LOUDNESS_DISABLE),1)
-	$(TEST_BUILD_DIR)/loudness_ramp_tests$(EXE_EXT)
 ifneq ($(USBSTATISTICS_DISABLE),1)
 	$(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT)
 endif
@@ -291,8 +286,7 @@ run-test-all: run-test
 	@$(MAKE) run-test-precise LOUDNESS_TYPE=PRECISE LOUDNESS_DISABLE=$(LOUDNESS_DISABLE) USBSTATISTICS_DISABLE=$(USBSTATISTICS_DISABLE)
 
 ifneq ($(LOUDNESS_DISABLE),1)
-run-test-precise: $(TEST_BUILD_DIR)/loudness_ramp_tests$(EXE_EXT) $(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT)
-	$(TEST_BUILD_DIR)/loudness_ramp_tests$(EXE_EXT)
+run-test-precise: $(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT)
 	$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT)
 else
 run-test-precise:

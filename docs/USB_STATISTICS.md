@@ -35,7 +35,7 @@ Firmware exposes a 1 Hz statistics stream over a vendor HID interface (`usage_pa
 | 33 | `last_arg0` | U8 | Tag-specific payload |
 | 34 | `last_arg1` | U8 | Tag-specific payload |
 | 35 | `last_arg2` | U8 | Tag-specific payload |
-| 36 | `equalizer_step` | U8 | Active loudness equalizer step (0–3); telemetry |
+| 36 | `equalizer_step` | U8 | Active loudness equalizer step (0–13); telemetry |
 
 Python struct format: `"<BBBBIIHHHIHbbbbIBBBBB"`
 

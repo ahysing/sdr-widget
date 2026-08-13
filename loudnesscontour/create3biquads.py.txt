@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Overlays a fixed 2-biquad (low-shelf + high-shelf) chain on ISO 226 curves."
+        description="Overlays a fixed 3-biquad (low-shelf + peak + high-shelf) chain on ISO 226 curves."
     )
     parser.add_argument("-g", "--graph", action="store_true", help="Shows a graph")
     parser.add_argument("--graph-type", choices=["filter", "ISO226", "loudnesscontours"], default="loudnesscontours",
@@ -22,20 +22,20 @@ def float_to_q3_29(value: float) -> int:
     # 29 bits for the fractional part
     FRACTIONAL_BITS = 29
     SCALE = 1 << FRACTIONAL_BITS  # 2^29 = 536870912
-
+    
     # Define 32-bit signed integer boundaries
     INT32_MIN = -2147483648  # Corresponds to -4.0
     INT32_MAX = 2147483647   # Corresponds to ~3.999999998
-
+    
     # Scale and round to the nearest whole integer
     scaled_value = int(round(value * SCALE))
-
+    
     # Saturation (prevent overflow/underflow)
     if scaled_value > INT32_MAX:
         return INT32_MAX
     if scaled_value < INT32_MIN:
         return INT32_MIN
-
+        
     return scaled_value
 
 
@@ -44,17 +44,17 @@ def float_to_q61(value: float) -> int:
     # This matches the spirit of the Q3.29 but for 64-bit
     FRACTIONAL_BITS = 61
     SCALE = 1 << FRACTIONAL_BITS
-
+    
     INT64_MIN = -9223372036854775808
     INT64_MAX = 9223372036854775807
-
+    
     scaled_value = int(round(value * SCALE))
-
+    
     if scaled_value > INT64_MAX:
         return INT64_MAX
     if scaled_value < INT64_MIN:
         return INT64_MIN
-
+        
     return scaled_value
 
 SAMPLE_RATES_HZ = [
@@ -62,15 +62,15 @@ SAMPLE_RATES_HZ = [
     ("cd", 44100.0),
 ]
 
-PHON_LEVELS = [55, 57, 59, 61, 63, 65, 67, 69, 71, 73, 75, 77, 79]
+PHON_LEVELS = [55, 65, 75]
+# PHON_LEVELS = [45, 55, 65, 75, 85, 90]
 
-# Initial fixed biquad chain: (name, fc, Q, gain_db, kind)
+# Initial Fixed biquad chain specification: (name, fc, Q, gain_db, kind)
 BIQUAD_CHAIN_INIT = [
     ("low-shelf",  120.0,  0.5,   12.0, "low_shelf"),   # Positive bass boost guess
+    ("peak",       3500.0, 1.2,   -3.5, "peak"),        # Midrange dip correction guess
     ("high-shelf", 8000.0, 0.5,    5.0, "high_shelf"),  # Positive treble boost guess
 ]
-
-NUM_BIQUADS = len(BIQUAD_CHAIN_INIT)
 
 epsilon = 1e-7
 
@@ -95,6 +95,23 @@ def biquad_low_shelf(fc, Q, gain_db, sample_rate_hz):
     a2 /= a0
     return np.array([b0, b1, b2, a1, a2])
 
+
+def biquad_peaking(fc, Q, gain_db, sample_r):
+    A = 10**(gain_db/40)
+    w0 = 2*np.pi*fc/sample_r
+    alpha = np.sin(w0)/(2*Q)
+
+    b0 = 1 + alpha*A
+    b1 = -2*np.cos(w0)
+    b2 = 1 - alpha*A
+    a0 = 1 + alpha/A
+    a1 = -2*np.cos(w0)
+    a2 = 1 - alpha/A
+
+    # normaliser til a0 = 1
+    b0 /= a0; b1 /= a0; b2 /= a0
+    a1 /= a0; a2 /= a0
+    return np.array([b0, b1, b2, a1, a2])
 
 def biquad_high_shelf(fc, Q, gain_db, sample_rate_hz):
     A = 10**(gain_db / 40)
@@ -128,12 +145,13 @@ def freq_response(coeffs, frequencies_hz, sample_rate_hz):
 
 
 def chain_response(params, frequencies_hz, sample_rate_hz):
-    fc1, Q1, g1, fc2, Q2, g2 = params
+    fc1, Q1, g1, fc2, Q2, g2, fc3, Q3, g3 = params
     H = np.ones_like(frequencies_hz, dtype=complex)
-
+    
     H *= freq_response(biquad_low_shelf(fc1, Q1, g1, sample_rate_hz), frequencies_hz, sample_rate_hz)
-    H *= freq_response(biquad_high_shelf(fc2, Q2, g2, sample_rate_hz), frequencies_hz, sample_rate_hz)
-
+    H *= freq_response(biquad_peaking(fc2, Q2, g2, sample_rate_hz), frequencies_hz, sample_rate_hz)
+    H *= freq_response(biquad_high_shelf(fc3, Q3, g3, sample_rate_hz), frequencies_hz, sample_rate_hz)
+    
     return 20 * np.log10(np.abs(H))
 
 
@@ -162,14 +180,15 @@ def plot(args, optimized_params_per_phon, f_eval, sample_rate_hz):
     for phon in PHON_LEVELS:
         color = f"C{PHON_LEVELS.index(phon)}"
         params_opt = optimized_params_per_phon[phon]
-
+        
         # ISO226 curve
         f_iso, spl_iso = iso226_spl_contour(phon, hfe=True)
         spl_interp = CubicSpline(f_iso, spl_iso)(f_eval)
-
+        idx_1k = np.argmin(np.abs(f_eval - 1000))
+        
         # Biquad response
         resp = chain_response(params_opt, f_eval, sample_rate_hz)
-
+        
         if args.graph_type == "ISO226":
             ax.semilogx(f_eval, spl_interp, label=f"ISO226 {phon}ph", color=color)
         elif args.graph_type == "filter":
@@ -179,7 +198,7 @@ def plot(args, optimized_params_per_phon, f_eval, sample_rate_hz):
             # Target: spl_interp + resp = spl_ref - (80 - phon)
             y = spl_interp - resp
             ax.semilogx(f_eval, y, label=f"ISO226 {phon}ph * filter", color=color)
-
+            
             # Plot the individual target for this phon level
             f_iso_x, spl_iso_x = iso226_spl_contour(phon, hfe=True)
             spl_x = CubicSpline(f_iso_x, spl_iso_x)(f_eval)
@@ -199,7 +218,7 @@ def plot(args, optimized_params_per_phon, f_eval, sample_rate_hz):
     ax.ticklabel_format(style='plain', axis='x')
     ax.grid(True, which="both", axis="x", ls="-", alpha=0.3)
     ax.legend(fontsize='small', loc='upper right')
-    plt.title(f"Graph type: {args.graph_type} (fs={sample_rate_hz}Hz, {NUM_BIQUADS} biquads)")
+    plt.title(f"Graph type: {args.graph_type} (fs={sample_rate_hz}Hz)")
     plt.tight_layout()
     plt.show()
 
@@ -218,20 +237,22 @@ def print_headers(args, sample_rate_hz, phon, section_names, params_opt):
 
 def print_stdout(args, name, b0, b1, b2, a0, a1, a2):
     if args.bit_width == 32:
-        qa1 = float_to_q3_29(a1)
-        qa2 = float_to_q3_29(a2)
         qb0 = float_to_q3_29(b0)
         qb1 = float_to_q3_29(b1)
         qb2 = float_to_q3_29(b2)
-        print(f"  {{ {qa1:11d}, {qa2:11d}, {qb0:11d}, {qb1:11d}, {qb2:11d} }},  /* a0={a0:.6g} */")
+        qa0 = float_to_q3_29(a0)
+        qa1 = float_to_q3_29(a1)
+        qa2 = float_to_q3_29(a2)
+        print(f"  {{ {qb0:11d}, {qb1:11d}, {qb2:11d}, {qa0:11d}, {qa1:11d}, {qa2:11d} }},")
         print()
     elif args.bit_width == 64:
-        qa1 = float_to_q61(a1)
-        qa2 = float_to_q61(a2)
         qb0 = float_to_q61(b0)
         qb1 = float_to_q61(b1)
         qb2 = float_to_q61(b2)
-        print(f"  {{ {qa1:20d}LL, {qa2:20d}LL, {qb0:20d}LL, {qb1:20d}LL, {qb2:20d}LL }},  /* a0={a0:.6g} */")
+        qa0 = float_to_q61(a0)
+        qa1 = float_to_q61(a1)
+        qa2 = float_to_q61(a2)
+        print(f"  {{ {qb0:20d}LL, {qb1:20d}LL, {qb2:20d}LL, {qa0:20d}LL, {qa1:20d}LL, {qa2:20d}LL }},")
         print()
     else:
         print(f"  {name:10s}  {b0:18.12f} {b1:18.12f} {b2:18.12f} {a0:18.12f} {a1:18.12f} {a2:18.12f}")
@@ -239,7 +260,7 @@ def print_stdout(args, name, b0, b1, b2, a0, a1, a2):
 
 
 def main():
-    args = parse_args()
+    args = parse_args();
 
     # Determine sample rates to process
     rates_to_process = []
@@ -250,7 +271,7 @@ def main():
             if name == args.frequencymode:
                 rates_to_process = [hz]
                 break
-    section_names = ["low-shelf", "high-shelf"]
+    section_names = ["low-shelf", "peak", "high-shelf"]
     for sample_rate_hz in rates_to_process:
         # Evaluation grid
         f_min = 20.0
@@ -272,31 +293,34 @@ def main():
             spl_ref = spline_ref(f_eval)
 
             G_target = (spl_interp - spl_ref) + (80 - phon)
-
+            
             # Initial guess from BIQUAD_CHAIN_INIT
             init = [
                 BIQUAD_CHAIN_INIT[0][1], BIQUAD_CHAIN_INIT[0][2], BIQUAD_CHAIN_INIT[0][3], # low-shelf
-                BIQUAD_CHAIN_INIT[1][1], BIQUAD_CHAIN_INIT[1][2], BIQUAD_CHAIN_INIT[1][3], # high-shelf
+                BIQUAD_CHAIN_INIT[1][1], BIQUAD_CHAIN_INIT[1][2], BIQUAD_CHAIN_INIT[1][3], # peak
+                BIQUAD_CHAIN_INIT[2][1], BIQUAD_CHAIN_INIT[2][2], BIQUAD_CHAIN_INIT[2][3], # high-shelf
             ]
 
-            # Bounds
+            # Bounds (Fix: Constrain the peaking filter to the midrange region)
             lower = [
                 20,   0.1, -40,  # low-shelf (fc min, Q min, gain min)
+                2500, 0.4, -20,  # peak (Shifted fc min from 500 to 2500, Q min to 0.4)
                 4000, 0.1, -40   # high-shelf
             ]
             upper = [
-                300,   2.0, 40,  # low-shelf
+                300,   2.0, 40,  # low-shelf (Capped fc max at 300 Hz instead of 2000 Hz)
+                6000,  4.0, 20,  # peak (Capped fc max at 6000 Hz, restricted gain range)
                 18000, 2.0, 40   # high-shelf
             ]
-
+            
             # Clip init to bounds
-            init = [min(max(init_i, lower_i + epsilon), upper_i - epsilon)
+            init = [min(max(init_i, lower_i + epsilon), upper_i - epsilon) 
                     for init_i, lower_i, upper_i in zip(init, lower, upper)]
 
             res = least_squares(cost, init, bounds=(lower, upper), args=(f_eval, sample_rate_hz, G_target))
             params_opt = res.x
             optimized_params_per_phon[phon] = params_opt
-
+    
         for phon in PHON_LEVELS:
             params_opt = optimized_params_per_phon[phon]
             print_headers(args, sample_rate_hz=sample_rate_hz, phon=phon, section_names=section_names, params_opt=params_opt)
@@ -306,9 +330,11 @@ def main():
                 dsp_gain = g
                 if name == "low-shelf":
                     coeffs = biquad_low_shelf(fc, Q, dsp_gain, sample_rate_hz)
+                elif name == "peak":
+                    coeffs = biquad_peaking(fc, Q, dsp_gain, sample_rate_hz)
                 elif name == "high-shelf":
                     coeffs = biquad_high_shelf(fc, Q, dsp_gain, sample_rate_hz)
-
+                
                 b0, b1, b2, a1, a2 = coeffs
                 a0 = 1.0
 
@@ -316,6 +342,6 @@ def main():
 
         if args.graph:
             plot(args, optimized_params_per_phon, f_eval=f_eval, sample_rate_hz=sample_rate_hz)
-
+                
 if __name__ == "__main__":
     main()

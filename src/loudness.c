@@ -142,6 +142,16 @@ U32 saturate_24bit_s32_to_u32(S32 acc) {
     return (U32)saturate_24bit_s32_to_s32(acc);
 }
 
+S32 saturate_16bit_s32_to_s32(S32 acc) {
+    if (acc > INT16_MAX) {
+        return (S32)INT16_MAX;
+    }
+    if (acc < INT16_MIN) {
+        return (S32)INT16_MIN;
+    }
+    return acc;
+}
+
 static void loudness_print_build_config(void) {
     LOUDNESS_PRINT("Audio firmware build options:\n");
 #ifndef LOUDNESS_DISABLE
@@ -236,9 +246,6 @@ static inline uint64_t mulu_d(uint32_t a, uint32_t b) {
 /* Unity (1.0) in Q61 fixed-point; PRECISE biquad coefficients use this scale. */
 #define LOUDNESS_Q61_ONE  ((int64_t)1 << 61)
 #define LOUDNESS_Q29_ONE  ((int32_t)1 << 29)
-/* Coefficient de-zip ramp duration (ms). ~15 ms => 662 samples @ 44.1 kHz, 2880 @ 192 kHz. */
-#define LOUDNESS_COEFF_RAMP_MS 15
-
 #define Q30_ONE             (1LL << 30)
 /* Speaker volume factor in Q30. Set to 1.0 (unity); change to e.g.
  * ((S64)((1LL<<30) * 4 / 5)) for 0.8. Applied only to the feed-forward
@@ -246,8 +253,7 @@ static inline uint64_t mulu_d(uint32_t a, uint32_t b) {
 #define SPEAKER_VOLUME_Q30  Q30_ONE
 
 /* Equalizer-step coefficient table. Indexed [equalizer_step][filter].
- * Layout per filter row: { b0, b1, b2, a1, a2 } in Q30 for PRECISE,
- * and Q2.30 for FAST (32-bit signed).
+ * Layout per filter row: { a1, a2, b0, b1, b2 } (a0 normalized to 1, not stored).
  * Designed offline (RBJ cookbook, fs=44100 Hz):
  *   filter 0: low-shelf
  *   filter 1: high-shelf
@@ -259,48 +265,150 @@ static const biquad_quotients_precise_t
 loudness_quotients_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS][LOUDNESS_FILTERS] = {
     /* 55 phon */
     {
-        {  2348449834323295744LL, -4541805258938481152LL,  2194782095529568256LL,  LOUDNESS_Q61_ONE, -4542374673978030080LL,  2236819505599620096LL },
-        {  3715021076448667136LL,   158237355048826912LL,   431624141683216128LL,  LOUDNESS_Q61_ONE,  1529017445594673408LL,   470022118372342080LL },
+        { -4544594964962185216LL,  2239043835069701376LL,  2346434730249055744LL, -4544030131664932864LL,  2199016947331592192LL },
+        {  1082560395763763712LL,   661268705817253248LL,  3434008590088733184LL,  -258364970506451648LL,   874028491212429312LL },
+    },
+    /* 57 phon */
+    {
+        { -4541995269362138624LL,  2236466595495678464LL,  2343248147601199104LL, -4541478420180965376LL,  2199578306289345792LL },
+        {  1027618965036025984LL,   647958575822061952LL,  3328269619333880832LL,  -183902238188864672LL,   837053168926765312LL },
+    },
+    /* 59 phon */
+    {
+        { -4539336313756435456LL,  2233831557928468736LL,  2340042694246722048LL, -4538866735204360704LL,  2200101451447515136LL },
+        {   973164440619111680LL,   635538229899741952LL,  3225339101669282304LL,  -113313669654873440LL,   802520247718138752LL },
+    },
+    /* 61 phon */
+    {
+        { -4536618107120222208LL,  2231138787148195584LL,  2336822257747526656LL, -4536195143259076608LL,  2200582502475508736LL },
+        {   919182763010035968LL,   623993490520784384LL,  3125207602411523584LL,   -46479149678316232LL,   770290810011307264LL },
+    },
+    /* 63 phon */
+    {
+        { -4533838294316304384LL,  2228386039191132160LL,  2333589574931922944LL, -4533461318943725568LL,  2201016448845482496LL },
+        {   865600393636043648LL,   613299414752994048LL,  3027849339827409920LL,    16669731454998906LL,   740223746320323200LL },
     },
     /* 65 phon */
     {
-        {  2331457254426197504LL, -4527686235807184896LL,  2197327148297707264LL,  LOUDNESS_Q61_ONE, -4528023852580137472LL,  2222603776737257984LL },
-        {  3078756756369804800LL,   493916885933517312LL,   336448630401514112LL,  LOUDNESS_Q61_ONE,  1229518856989233152LL,   373760406501908864LL },
+        { -4530997758508082176LL,  2225574245287986944LL,  2330347125107535872LL, -4530666232897932288LL,  2201401655004295168LL },
+        {   812377803749021824LL,   603451939735328768LL,  2933226924565017088LL,    76243198267788560LL,   712202629865239424LL },
+    },
+    /* 67 phon */
+    {
+        { -4528094105972418560LL,  2222701127352272384LL,  2327096719355233280LL, -4527807546271639552LL,  2201733976911512064LL },
+        {   759471493723527808LL,   594441926638050432LL,  2841298349180923904LL,   132350825634692544LL,   686107254759655424LL },
+    },
+    /* 69 phon */
+    {
+        { -4525125038186378240LL,  2219764509413321728LL,  2323839817467394560LL, -4524883030920565248LL,  2202009708425434880LL },
+        {   706841569276866304LL,   586261496915460608LL,  2752016493159427584LL,   185108002433245920LL,   661821579813347328LL },
+    },
+    /* 71 phon */
+    {
+        { -4522090351544483328LL,  2216764265924469248LL,  2320577535500458496LL, -4521892582210855936LL,  2202227508971332096LL },
+        {   654486203185031808LL,   578901536085074688LL,  2665332152379604480LL,   234669590548644256LL,   639229005555551232LL },
+    },
+    /* 73 phon */
+    {
+        { -4518990940801205248LL,  2213701353656891648LL,  2317310534975097856LL, -4518837196511904768LL,  2202387572184788992LL },
+        {   602312110870820096LL,   572361455427760640LL,  2581186382350857728LL,   281097190765210976LL,   618233002396205696LL },
     },
     /* 75 phon */
     {
-        {  2314395388020622848LL, -4512055621803879424LL,  2198486932718281216LL,  LOUDNESS_Q61_ONE, -4512167933961389568LL,  2206926999367699456LL },
-        {  2540423121366800896LL,   710477326520095232LL,   291992445812729152LL,  LOUDNESS_Q61_ONE,   931626744154566656LL,   305423140331365120LL },
+        { -4515821764084009472LL,  2210570941594736128LL,  2314039193856607232LL, -4515711907671009280LL,  2202484613364823040LL },
+        {   550278219221001280LL,   566640732497040320LL,  2499522764500645376LL,   324504398268713856LL,   598734798162376448LL },
+    },
+    /* 77 phon */
+    {
+        { -4512583558079280128LL,  2207373834636114432LL,  2310763798611542528LL, -4512517567521567232LL,  2202519035795978496LL },
+        {   498442609824688000LL,   561718805167060288LL,  2420285976317830144LL,   365102996095559936LL,   580615451792051712LL },
+    },
+    /* 79 phon */
+    {
+        { -4509272346573570048LL,  2204106247004356864LL,  2307484334153939456LL, -4509250304339496960LL,  2202486964298184960LL },
+        {   446732285439977344LL,   557601166357438080LL,  2343412635966013952LL,   402969402806003584LL,   563794422239092288LL },
     },
     /* 80 phon */
     {
-        {  LOUDNESS_Q61_ONE, 0, 0, LOUDNESS_Q61_ONE, 0, 0 },
-        {  LOUDNESS_Q61_ONE, 0, 0, LOUDNESS_Q61_ONE, 0, 0 },
+        { 0, 0, LOUDNESS_Q61_ONE, 0, 0 },
+        { 0, 0, LOUDNESS_Q61_ONE, 0, 0 },
     },
+
 };
 
 static const biquad_quotients_precise_t
 loudness_quotients_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS][LOUDNESS_FILTERS] = {
     /* 55 phon */
     {
-        {  2345086951461462016LL, -4547376282380467712LL,  2203495877909601536LL,  LOUDNESS_Q61_ONE, -4547857895502438400LL,  2242258207035398656LL },
-        {  3956091077457189376LL,  -496402134921083648LL,   564147130472615680LL,  LOUDNESS_Q61_ONE,  1264149353203375616LL,   453843710591652096LL },
+        { -4549984990155025920LL,  2244388596002164480LL,  2343170573435714560LL, -4549507664721170432LL,  2207538357213998336LL },
+        {   715730939798030464LL,   652304573352203904LL,  3589717238135678976LL,  -915009802436835968LL,   999171086665085056LL },
+    },
+    /* 57 phon */
+    {
+        { -4547591078082438656LL,  2242013689312390144LL,  2340241598440835072LL, -4547154267007306752LL,  2208051911160380416LL },
+        {   657091860763613952LL,   641096680271087232LL,  3465884636911263744LL,  -812201433117264128LL,   950348346454395648LL },
+    },
+    /* 59 phon */
+    {
+        { -4545142767135882240LL,  2239585615425062144LL,  2337295246005512192LL, -4544745879049984000LL,  2208530266719141120LL },
+        {   599253296632956416LL,   630863775778640128LL,  3346129493171741184LL,  -714929926419497088LL,   904760514873046144LL },
+    },
+    /* 61 phon */
+    {
+        { -4542640796944227328LL,  2237105156772112384LL,  2334334676389210112LL, -4542283292244551680LL,  2208970994296271104LL },
+        {   542156596902418752LL,   621581462644094208LL,  3230338417459191296LL,  -622966241248392704LL,   862208892549409024LL },
+    },
+    /* 63 phon */
+    {
+        { -4540081414579860992LL,  2234568669826904320LL,  2331362748504799744LL, -4539762763705006592LL,  2209367581410653184LL },
+        {   485719797385116096LL,   613229496157792256LL,  3118390752947205632LL,  -536108665352953472LL,   822510215162349952LL },
     },
     /* 65 phon */
     {
-        {  2329436069369872896LL, -4534344608244988416LL,  2205837698611165696LL,  LOUDNESS_Q61_ONE, -4534630291457484288LL,  2229145075554848256LL },
-        {  3194123349551754752LL,      832382984908222LL,   404153643991243904LL,  LOUDNESS_Q61_ONE,   928706015203938048LL,   364560352110274624LL },
+        { -4537465327589775360LL,  2231976909327117824LL,  2328381589455526912LL, -4537185073644899840LL,  2209718583030159872LL },
+        {   429894023513245120LL,   605789959016356992LL,  3010171348812148736LL,  -454132209614052928LL,   785487852545200640LL },
+    },
+    /* 67 phon */
+    {
+        { -4534790815937808384LL,  2229328249068541952LL,  2325392829996227584LL, -4534548552858652160LL,  2210020691365164288LL },
+        {   374574763958811520LL,   599243984956872704LL,  2905558954690131968LL,  -376872747873006400LL,   750975551312252288LL },
+    },
+    /* 69 phon */
+    {
+        { -4532057362127641600LL,  2226622236102765824LL,  2322397895561377280LL, -4531852758749741056LL,  2210271953132983808LL },
+        {   319718876736702784LL,   593580454592561280LL,  2804440870209056256LL,  -304116152496551168LL,   718817622830452480LL },
+    },
+    /* 71 phon */
+    {
+        { -4529262615289694208LL,  2223856631084658176LL,  2319397707738387968LL, -4529095403984148992LL,  2210469143865508608LL },
+        {   265274269837931392LL,   588787208720238336LL,  2706704988542221824LL,  -235664902127274432LL,   688864401356916096LL },
+    },
+    /* 73 phon */
+    {
+        { -4526407785935123456LL,  2221032701539209728LL,  2316392775251419136LL, -4526277787528607232LL,  2210612933908001536LL },
+        {   211199551497707936LL,   584856152625080704LL,  2612241116309018624LL,  -171319098046413120LL,   660976695073877120LL },
     },
     /* 75 phon */
     {
-        {  2313722089908387840LL, -4519914297063417856LL,  2206891915723137536LL,  LOUDNESS_Q61_ONE, -4520009365427488256LL,  2214675928053760768LL },
-        {  2571359374490702336LL,   328712754173955904LL,   318592361904885248LL,  LOUDNESS_Q61_ONE,   603488473017925376LL,   309333008337924480LL },
+        { -4523488985334932480LL,  2218146698746236672LL,  2313383671261484032LL, -4523396092019512320LL,  2210698930013865984LL },
+        {   157437848176375168LL,   581773308460217984LL,  2520941099633763328LL,  -110902591969354176LL,   635015658185878144LL },
+    },
+    /* 77 phon */
+    {
+        { -4520507651477720064LL,  2215200103186459136LL,  2310370513824201216LL, -4520451850852480000LL,  2210728399201191680LL },
+        {   103912672824484496LL,   579543794145904896LL,  2432697599983670272LL,   -54266868621410952LL,   610868744821824256LL },
+    },
+    /* 79 phon */
+    {
+        { -4517452902898677760LL,  2212182379534243584LL,  2307353250617307648LL, -4517434260588528128LL,  2210690780440779776LL },
+        {    50728125275401992LL,   578119439999038720LL,  2347411236157759488LL,    -1091948743144148LL,   588371287073518976LL },
     },
     /* 80 phon */
     {
-        {  LOUDNESS_Q61_ONE, 0, 0, LOUDNESS_Q61_ONE, 0, 0 },
-        {  LOUDNESS_Q61_ONE, 0, 0, LOUDNESS_Q61_ONE, 0, 0 },
+        { 0, 0, LOUDNESS_Q61_ONE, 0, 0 },
+        { 0, 0, LOUDNESS_Q61_ONE, 0, 0 },
     },
+
 };
 #endif
 
@@ -309,48 +417,150 @@ static const biquad_quotients_fast_t
 loudness_quotients_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS][LOUDNESS_FILTERS] = {
     /* 55 phon */
     {
-        {   546791087, -1057471442,   511012528,   536870912, -1057604019,   520800125 },
-        {   864970748,    36842505,   100495327,   536870912,   356002116,   109435552 },
+        { -1058120971,   521318017,   546321909, -1057989460,   511998531 },
+        {   252053234,   153963618,   799542430,   -60155282,   203500616 },
+    },
+    /* 57 phon */
+    {
+        { -1057515682,   520717957,   545579974, -1057395344,   512129233 },
+        {   239261185,   150864612,   774923158,   -42818076,   194891628 },
+    },
+    /* 59 phon */
+    {
+        { -1056896596,   520104439,   544833647, -1056787263,   512251037 },
+        {   226582503,   147972775,   750957779,   -26382895,   186851306 },
+    },
+    /* 61 phon */
+    {
+        { -1056263714,   519477480,   544083830, -1056165235,   512363040 },
+        {   214013914,   145284806,   727644098,   -10821770,   179347305 },
+    },
+    /* 63 phon */
+    {
+        { -1055616488,   518836556,   543331163, -1055528717,   512464076 },
+        {   201538297,   142794897,   704976111,     3881224,   172346771 },
     },
     /* 65 phon */
     {
-        {   542834693, -1054184101,   511605094,   536870912, -1054262708,   517490268 },
-        {   716828917,   114998986,    78335551,   536870912,   286269667,    87022876 },
+        { -1054955125,   518181884,   542576221, -1054877935,   512553764 },
+        {   189146447,   140502104,   682945113,    17751753,   165822597 },
+    },
+    /* 67 phon */
+    {
+        { -1054279065,   517512934,   541819427, -1054212345,   512631139 },
+        {   176828237,   138404296,   661541323,    30815328,   159746794 },
+    },
+    /* 69 phon */
+    {
+        { -1053587775,   516829199,   541061120, -1053531429,   512695338 },
+        {   164574378,   136499642,   640753771,    43098815,   154092344 },
+    },
+    /* 71 phon */
+    {
+        { -1052881207,   516130651,   540301561, -1052835160,   512746048 },
+        {   152384444,   134786017,   620571001,    54638272,   148832101 },
+    },
+    /* 73 phon */
+    {
+        { -1052159569,   515417511,   539540903, -1052123773,   512783316 },
+        {   140236716,   133263286,   600979287,    65448040,   143943588 },
     },
     /* 75 phon */
     {
-        {   538862168, -1050544815,   511875128,   536870912, -1050570964,   513840234 },
-        {   591488351,   165420893,    67984789,   536870912,   216911254,    71111866 },
+        { -1051421688,   514688655,   538779235, -1051396110,   512805910 },
+        {   128121632,   131931326,   581965494,    75554568,   139403808 },
     },
-     /* 80 phon */
+    /* 77 phon */
     {
-        {  LOUDNESS_Q29_ONE, 0, 0, LOUDNESS_Q29_ONE, 0, 0 },
-        {  LOUDNESS_Q29_ONE, 0, 0, LOUDNESS_Q29_ONE, 0, 0 },
+        { -1050667734,   513944271,   538016623, -1050652370,   512813925 },
+        {   116052714,   130785351,   563516742,    85007166,   135185069 },
     },
+    /* 79 phon */
+    {
+        { -1049896783,   513183476,   537253063, -1049891651,   512806458 },
+        {   104012966,   129826638,   545618272,    93823625,   131268618 },
+    },
+    /* 80 phon */
+    {
+        { 0, 0, LOUDNESS_Q29_ONE, 0, 0 },
+        { 0, 0, LOUDNESS_Q29_ONE, 0, 0 },
+    },
+
 };
 
 static const biquad_quotients_fast_t
 loudness_quotients_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS][LOUDNESS_FILTERS] = {
     /* 55 phon */
     {
-        {   546008104, -1058768547,   513041364,   536870912, -1058880681,   522066422 },
-        {   921099232,  -115577629,   131350740,   536870912,   294332708,   105668723 },
+        { -1059375934,   522562441,   545561913, -1059264798,   513982577 },
+        {   166644095,   151876494,   835796175,  -213042321,   232637647 },
+    },
+    /* 57 phon */
+    {
+        { -1058818558,   522009490,   544879958, -1058716855,   514102148 },
+        {   152991121,   149266953,   806964151,  -189105382,   221270217 },
+    },
+    /* 59 phon */
+    {
+        { -1058248516,   521444160,   544193957, -1058156108,   514213524 },
+        {   139524531,   146884419,   779081484,  -166457595,   210655973 },
+    },
+    /* 61 phon */
+    {
+        { -1057665981,   520866634,   543504645, -1057582743,   514316138 },
+        {   126230669,   144723212,   752121773,  -145045631,   200748651 },
+    },
+    /* 63 phon */
+    {
+        { -1057070078,   520276062,   542812689, -1056995886,   514408476 },
+        {   113090453,   142778618,   726056926,  -124822526,   191505583 },
     },
     /* 65 phon */
     {
-        {   542364099, -1055734374,   513586611,   536870912, -1055800889,   519013283 },
-        {   743689795,      193804,    94099353,   536870912,   216231219,    84880821 },
+        { -1056460973,   519672620,   542118584, -1056395721,   514490200 },
+        {   100092502,   141046466,   700860133,  -105735895,   182885642 },
+    },
+    /* 67 phon */
+    {
+        { -1055838265,   519055931,   541422709, -1055781858,   514560540 },
+        {    87212483,   139522363,   676503162,   -87747524,   174850121 },
+    },
+    /* 69 phon */
+    {
+        { -1055201833,   518425888,   540725397, -1055154195,   514619041 },
+        {    74440352,   138203719,   652959773,   -70807560,   167362770 },
+    },
+    /* 71 phon */
+    {
+        { -1054551130,   517781971,   540026861, -1054512198,   514664954 },
+        {    61763979,   137087705,   630203865,   -54870011,   160388742 },
+    },
+    /* 73 phon */
+    {
+        { -1053886438,   517124473,   539327221, -1053856171,   514698432 },
+        {    49173728,   136172434,   608209780,   -39888336,   153895629 },
     },
     /* 75 phon */
     {
-        {   538705403, -1052374555,   513832065,   536870912, -1052396690,   515644422 },
-        {   598691258,    76534402,    74178065,   536870912,   140510610,    72022203 },
+        { -1053206852,   516452524,   538626609, -1053185224,   514718455 },
+        {    36656356,   135454654,   586952339,   -25821522,   147851104 },
     },
-     /* 80 phon */
+    /* 77 phon */
     {
-        {  LOUDNESS_Q29_ONE, 0, 0, LOUDNESS_Q29_ONE, 0, 0 },
-        {  LOUDNESS_Q29_ONE, 0, 0, LOUDNESS_Q29_ONE, 0, 0 },
+        { -1052512706,   515766466,   537925054, -1052499714,   514725316 },
+        {    24194054,   134935555,   566406548,   -12634990,   142228963 },
     },
+    /* 79 phon */
+    {
+        { -1051801467,   515063847,   537222542, -1051797127,   514716557 },
+        {    11811062,   134603921,   546549269,     -254239,   136990865 },
+    },
+    /* 80 phon */
+    {
+        { 0, 0, LOUDNESS_Q29_ONE, 0, 0 },
+        { 0, 0, LOUDNESS_Q29_ONE, 0, 0 },
+    },
+
 };
 #endif
 
@@ -360,31 +570,14 @@ static Bool loudness_rtos_initialized = FALSE;
 static volatile Bool loudness_task_ready = FALSE;
 #endif
 
-#ifdef BUILD_TESTING
-/* Samples remaining in the coefficient de-zip ramp (audio path decrements). */
-volatile uint32_t coeff_ramp_remaining = 0;
-#else
-/* Samples remaining in the coefficient de-zip ramp (audio path decrements). */
-static volatile uint32_t coeff_ramp_remaining = 0;
-#endif
-
 #ifdef PRECISE
 static biquad_quotients_precise_t loudness_quotients_scaled[LOUDNESS_NUM_EQUALIZER_STEPS][LOUDNESS_FILTERS];
 
 /* Pointer to the currently active equalizer-step table */
 static const biquad_quotients_precise_t (*active_equalizer_step_table)[LOUDNESS_FILTERS] = loudness_quotients_44100hz;
 
-/* Active coefficients (audio path); target coefficients (background task). */
-static biquad_quotients_precise_t coeff_buf_endpoint_ping[LOUDNESS_FILTERS];
-static biquad_quotients_precise_t coeff_buf_endpoint_pong[LOUDNESS_FILTERS];
-static biquad_quotients_precise_t coeff_buf_ramp_blend[LOUDNESS_FILTERS];
-
-static biquad_quotients_precise_t *current_quotients = coeff_buf_endpoint_ping;
-static biquad_quotients_precise_t *target_quotients = coeff_buf_endpoint_pong;
-static biquad_quotients_precise_t *active_quotients = coeff_buf_endpoint_ping;
-
-/* Pointer used by real-time biquad steps. */
-biquad_quotients_precise_t * volatile loudness_quotients = coeff_buf_endpoint_ping;
+/* Active coefficients used by the real-time biquad path. */
+static biquad_quotients_precise_t active_quotients[LOUDNESS_FILTERS];
 
 static biquad_state_precise_t     loudness_states[LOUDNESS_FILTERS];
 
@@ -397,17 +590,8 @@ static biquad_quotients_fast_t loudness_quotients_scaled[LOUDNESS_NUM_EQUALIZER_
 /* Pointer to the currently active equalizer-step table */
 static const biquad_quotients_fast_t (*active_equalizer_step_table)[LOUDNESS_FILTERS] = loudness_quotients_44100hz;
 
-/* Active coefficients (audio path); target coefficients (background task). */
-static biquad_quotients_fast_t coeff_buf_endpoint_ping[LOUDNESS_FILTERS];
-static biquad_quotients_fast_t coeff_buf_endpoint_pong[LOUDNESS_FILTERS];
-static biquad_quotients_fast_t coeff_buf_ramp_blend[LOUDNESS_FILTERS];
-
-static biquad_quotients_fast_t *current_quotients = coeff_buf_endpoint_ping;
-static biquad_quotients_fast_t *target_quotients = coeff_buf_endpoint_pong;
-static biquad_quotients_fast_t *active_quotients = coeff_buf_endpoint_ping;
-
-/* Pointer used by real-time biquad steps. */
-biquad_quotients_fast_t * volatile loudness_quotients = coeff_buf_endpoint_ping;
+/* Active coefficients used by the real-time biquad path. */
+static biquad_quotients_fast_t active_quotients[LOUDNESS_FILTERS];
 
 static biquad_state_fast_t     loudness_states[LOUDNESS_FILTERS];
 
@@ -566,7 +750,10 @@ int64_t biquad_step_precise_24bit(int64_t sample, biquad_state_precise_t* biquad
 {
     int64_t x_n = sample;
     int filter_idx = (int)(biquad_states - loudness_states);
-    const biquad_quotients_precise_t* q = &loudness_quotients[filter_idx];
+    const biquad_quotients_precise_t* q = &active_quotients[filter_idx];
+
+    /* a0 is normalized to 1 (Q61/Q29 unity); not stored in biquad_quotients_*_t. */
+    /* y_n += q->a0 * x_n; */
 
 #if defined(_MSC_VER)
     /* MSVC doesn't support __int128. Use double for intermediate calculation in tests. */
@@ -607,7 +794,10 @@ int64_t biquad_step_precise_24bit(int64_t sample, biquad_state_precise_t* biquad
 int32_t biquad_step_fast_32bit(int32_t x_n, biquad_state_fast_t* biquad_states)
 {
     int filter_idx = (int)(biquad_states - loudness_states);
-    const biquad_quotients_fast_t* q = &loudness_quotients[filter_idx];
+    const biquad_quotients_fast_t* q = &active_quotients[filter_idx];
+
+    /* a0 is normalized to 1 (Q61/Q29 unity); not stored in biquad_quotients_*_t. */
+    /* y_n += q->a0 * x_n; */
 
     int64_t y_n = (int64_t)q->b0 * x_n;
     y_n = FMA_24BIT(y_n, q->b1, biquad_states->xn_1);
@@ -628,139 +818,8 @@ int32_t biquad_step_fast_32bit(int32_t x_n, biquad_state_fast_t* biquad_states)
 #endif
 
 /* ---------------------------------------------------------------------------
- * Equalizer-step selection + coefficient de-zipping (interpolation)
+ * Equalizer-step selection (immediate coefficient commit)
  * -------------------------------------------------------------------------*/
-
-#define SPEAKER_VOLUME_Q61  ((S64)1 << 61)
-
-#define LOUDNESS_RAMP_44100   662u
-#define LOUDNESS_RAMP_88200  1323u
-#define LOUDNESS_RAMP_132300 1985u
-#define LOUDNESS_RAMP_176400 2646u
-#define LOUDNESS_RAMP_48000   720u
-#define LOUDNESS_RAMP_96000  1440u
-#define LOUDNESS_RAMP_144000 2160u
-#define LOUDNESS_RAMP_192000 2880u
-
-static inline uint32_t loudness_coeff_ramp_length(void) {
-    /* Coarse ramping: called once per 1 ms packet.
-     * We ramp over LOUDNESS_COEFF_RAMP_MS packets. */
-    return LOUDNESS_COEFF_RAMP_MS;
-}
-
-#ifdef PRECISE
-static inline int64_t ramp_coeff_precise(int64_t current, int64_t target, uint32_t remaining) {
-    int64_t diff = target - current;
-    if (diff == 0 || remaining <= 1) {
-        return target;
-    }
-#if defined(HAS_INT128)
-    {
-        uint32_t inv_rem = (uint32_t)(0x80000000ULL / remaining);
-        __int128 step = ((__int128)diff * inv_rem) >> 31;
-        return current + (int64_t)step;
-    }
-#else
-    {
-        int64_t rem = (int64_t)remaining;
-        int64_t adj = (rem >> 1) ^ (diff >> 63);
-        return current + (diff + adj) / rem;
-    }
-#endif
-}
-#endif
-
-#ifdef FAST
-
-
-/**
- * @brief Estimate dB FS from an RMS magnitude in the 24-bit sample domain.
- *
- * Converts the RMS magnitude (post-sqrt_i, in the 24-bit sample domain) to dBFS
- * for equalizer-step blending via loudness_get_track_dbfs().
- *
- * Silence (rms == 0) returns -144 dBFS, the 24-bit dynamic-range floor, not 0 dBFS.
- *
- * Integer log2 via CLZ: bit_position = 32 - CLZ(rms) locates the MSB. An 8-bit
- * fraction below the MSB approximates the sub-bit position. Each bit is mapped to
- * 6 dB (log2(10) ~ 6.02); fractional correction is (fraction * 6) >> 8 for ~1 dB
- * resolution without floating point. Result is clamped to 0 dBFS maximum.
- * SAMPLE_24BITS (24) is the full-scale reference.
- *
- * @return A non-positive signed value in the range -144 .. 0 dBFS.
- */
-#ifdef BUILD_TESTING
-int32_t ramp_coeff_fast(int32_t current, int32_t target, uint32_t remaining) {
-#else
-static inline int32_t ramp_coeff_fast(int32_t current, int32_t target, uint32_t remaining) {
-#endif
-    int32_t diff = target - current;
-    if (diff == 0 || remaining <= 1) {
-        return target;
-    }
-    uint32_t inv_rem = 0x7FFFFFFFu / remaining;
-//#if defined(__GNUC__) && defined(__AVR32_HAS_DSP__)
-//    int32_t step = __builtin_mfrsrd(diff, inv_rem);
-// #else
-    int32_t step = (int32_t)(((int64_t)diff * inv_rem) >> 31);
-// #endif
-    return current + step;
-}
-#endif
-
-#ifdef PRECISE
-static Bool loudness_coeffs_converged_precise(void) {
-    int i;
-    for (i = 0; i < LOUDNESS_FILTERS; i++) {
-        if (active_quotients[i].b0 != target_quotients[i].b0 ||
-            active_quotients[i].b1 != target_quotients[i].b1 ||
-            active_quotients[i].b2 != target_quotients[i].b2 ||
-            active_quotients[i].a1 != target_quotients[i].a1 ||
-            active_quotients[i].a2 != target_quotients[i].a2) {
-            return FALSE;
-        }
-    }
-    return TRUE;
-}
-
-static void loudness_ramp_blend_step_precise(uint32_t remaining) {
-    int i;
-    for (i = 0; i < LOUDNESS_FILTERS; i++) {
-        active_quotients[i].b0 = ramp_coeff_precise(active_quotients[i].b0, target_quotients[i].b0, remaining);
-        active_quotients[i].b1 = ramp_coeff_precise(active_quotients[i].b1, target_quotients[i].b1, remaining);
-        active_quotients[i].b2 = ramp_coeff_precise(active_quotients[i].b2, target_quotients[i].b2, remaining);
-        active_quotients[i].a1 = ramp_coeff_precise(active_quotients[i].a1, target_quotients[i].a1, remaining);
-        active_quotients[i].a2 = ramp_coeff_precise(active_quotients[i].a2, target_quotients[i].a2, remaining);
-    }
-}
-#endif
-
-#ifdef FAST
-static Bool loudness_coeffs_converged_fast(void) {
-    int i;
-    for (i = 0; i < LOUDNESS_FILTERS; i++) {
-        if (active_quotients[i].b0 != target_quotients[i].b0 ||
-            active_quotients[i].b1 != target_quotients[i].b1 ||
-            active_quotients[i].b2 != target_quotients[i].b2 ||
-            active_quotients[i].a1 != target_quotients[i].a1 ||
-            active_quotients[i].a2 != target_quotients[i].a2) {
-            return FALSE;
-        }
-    }
-    return TRUE;
-}
-
-static void loudness_ramp_blend_step_fast(uint32_t remaining) {
-    int i;
-    for (i = 0; i < LOUDNESS_FILTERS; i++) {
-        active_quotients[i].b0 = ramp_coeff_fast(active_quotients[i].b0, target_quotients[i].b0, remaining);
-        active_quotients[i].b1 = ramp_coeff_fast(active_quotients[i].b1, target_quotients[i].b1, remaining);
-        active_quotients[i].b2 = ramp_coeff_fast(active_quotients[i].b2, target_quotients[i].b2, remaining);
-        active_quotients[i].a1 = ramp_coeff_fast(active_quotients[i].a1, target_quotients[i].a1, remaining);
-        active_quotients[i].a2 = ramp_coeff_fast(active_quotients[i].a2, target_quotients[i].a2, remaining);
-    }
-}
-#endif
 
 #if !defined(USBSTATISTICS_DISABLE)
 #include "stats_telemetry.h"
@@ -790,66 +849,7 @@ static int8_t loudness_clamp_s8(int32_t value)
 }
 #endif
 
-void loudness_coeff_ramp_step(void) {
-    uint32_t remaining = coeff_ramp_remaining;
-    if (remaining == 0) {
-        return;
-    }
-
-    if (active_quotients == current_quotients) {
-        int i;
-        for (i = 0; i < LOUDNESS_FILTERS; i++) {
-            coeff_buf_ramp_blend[i] = current_quotients[i];
-        }
-        active_quotients = coeff_buf_ramp_blend;
-    }
-
-#ifdef PRECISE
-    loudness_ramp_blend_step_precise(remaining);
-#else
-    loudness_ramp_blend_step_fast(remaining);
-#endif
-
-    loudness_quotients = active_quotients;
-    remaining--;
-
-    if (remaining == 0) {
-#ifdef PRECISE
-        Bool converged = loudness_coeffs_converged_precise();
-#else
-        Bool converged = loudness_coeffs_converged_fast();
-#endif
-        if (!converged) {
-            remaining = 1;
-        } else {
-            taskENTER_CRITICAL();
-#ifdef PRECISE
-            {
-                biquad_quotients_precise_t *swap_tmp = current_quotients;
-                current_quotients = target_quotients;
-                target_quotients = swap_tmp;
-                active_quotients = current_quotients;
-                loudness_quotients = current_quotients;
-            }
-#else
-            {
-                biquad_quotients_fast_t *swap_tmp = current_quotients;
-                current_quotients = target_quotients;
-                target_quotients = swap_tmp;
-                active_quotients = current_quotients;
-                loudness_quotients = current_quotients;
-            }
-#endif
-            remaining = 0;
-            taskEXIT_CRITICAL();
-#if !defined(USBSTATISTICS_DISABLE)
-            loudness_record_event_tag(USB_STATS_TAG_RAMP_COMPLETE, 0, 0, 0);
-#endif
-        }
-    }
-
-    coeff_ramp_remaining = remaining;
-}
+#define SPEAKER_VOLUME_Q61  ((S64)1 << 61)
 
 /* Apply the speaker volume to the feed-forward (b*) coefficients in Q61. */
 static inline S64 apply_volume_q61(S64 coeff)
@@ -865,19 +865,73 @@ static inline S64 apply_volume_q61(S64 coeff)
 }
 
 static int loudness_get_equalizer_step(int32_t db_spl) {
-    if (db_spl < 55) {
+    if (db_spl >= LOUDNESS_REF_DB_SPL) {
+        return LOUDNESS_NEUTRAL_STEP;
+    }
+    if (db_spl < LOUDNESS_MIN_PHON) {
         return 0;
-    } else if (db_spl < 65) {
-        return 1;
-    } else if (db_spl < 75) {
-        return 2;
-    } else {
-        return 3;
+    }
+    {
+        int step = (db_spl - LOUDNESS_MIN_PHON) / LOUDNESS_PHON_STEP_DB;
+        if (step >= LOUDNESS_CONTOUR_STEPS) {
+            step = LOUDNESS_CONTOUR_STEPS - 1;
+        }
+        return step;
     }
 }
 
+#ifdef BUILD_TESTING
+int loudness_test_get_equalizer_step(int32_t db_spl) {
+    return loudness_get_equalizer_step(db_spl);
+}
+#endif
+
+static int loudness_get_current_equalizer_step(void) {
+    return loudness_get_equalizer_step((int32_t)last_db_spl);
+}
+
+static Bool loudness_should_change_equalizer_step(int32_t db_spl_x10) {
+    int current = loudness_get_current_equalizer_step();
+
+    if (current == LOUDNESS_NEUTRAL_STEP) {
+        return db_spl_x10 < 795;
+    }
+
+    if (current == (LOUDNESS_CONTOUR_STEPS - 1)) {
+        if (db_spl_x10 >= 800) {
+            return TRUE;
+        }
+        {
+            int band_start_phon = LOUDNESS_MIN_PHON + current * LOUDNESS_PHON_STEP_DB;
+            int32_t lower_x10 = band_start_phon * 10 - 5;
+            return db_spl_x10 < lower_x10;
+        }
+    }
+
+    {
+        int band_start_phon = LOUDNESS_MIN_PHON + current * LOUDNESS_PHON_STEP_DB;
+        int32_t lower_x10 = band_start_phon * 10 - 5;
+        int next_phon = band_start_phon + LOUDNESS_PHON_STEP_DB;
+        int32_t upper_x10 = next_phon * 10;
+
+        if (db_spl_x10 >= upper_x10) {
+            return TRUE;
+        }
+        if (db_spl_x10 < lower_x10) {
+            return TRUE;
+        }
+        return FALSE;
+    }
+}
+
+#ifdef BUILD_TESTING
+Bool loudness_test_should_change_equalizer_step(int32_t db_spl_x10) {
+    return loudness_should_change_equalizer_step(db_spl_x10);
+}
+#endif
+
 #ifdef PRECISE
-static void loudness_set_target_from_equalizer_step_precise(int equalizer_step) {
+static void loudness_load_active_quotients_precise(int equalizer_step) {
     int i;
     for (i = 0; i < LOUDNESS_FILTERS; i++) {
         const biquad_quotients_precise_t* src = &active_equalizer_step_table[equalizer_step][i];
@@ -885,45 +939,23 @@ static void loudness_set_target_from_equalizer_step_precise(int equalizer_step) 
         int64_t b1 = apply_volume_q61(src->b1);
         int64_t b2 = apply_volume_q61(src->b2);
 
-        target_quotients[i].b0 = b0;
-        target_quotients[i].b1 = b1;
-        target_quotients[i].b2 = b2;
-        target_quotients[i].a0 = src->a0;
-        target_quotients[i].a1 = src->a1;
-        target_quotients[i].a2 = src->a2;
+        active_quotients[i].b0 = b0;
+        active_quotients[i].b1 = b1;
+        active_quotients[i].b2 = b2;
+        active_quotients[i].a1 = src->a1;
+        active_quotients[i].a2 = src->a2;
     }
 }
 
-static void loudness_commit_coefficients_precise(void) {
-    int i;
-    for (i = 0; i < LOUDNESS_FILTERS; i++) {
-        current_quotients[i] = target_quotients[i];
-    }
-    active_quotients = current_quotients;
-    loudness_quotients = current_quotients;
-}
-
-static void loudness_select_equalizer_step_precise(int32_t db_spl, int equalizer_step, Bool immediate) {
+static void loudness_select_equalizer_step_precise(int32_t db_spl, int equalizer_step) {
     int32_t prev_db_spl = (int32_t)last_db_spl;
-    loudness_set_target_from_equalizer_step_precise(equalizer_step);
 
     taskENTER_CRITICAL();
+    loudness_load_active_quotients_precise(equalizer_step);
     last_db_spl = (int16_t)db_spl;
 #ifdef FREERTOS_USED
     target_db_spl = (int16_t)db_spl;
 #endif
-    if (immediate) {
-        loudness_commit_coefficients_precise();
-        coeff_ramp_remaining = 0;
-    } else {
-        uint32_t ramp = loudness_coeff_ramp_length();
-        if (ramp == 0) {
-            loudness_commit_coefficients_precise();
-            coeff_ramp_remaining = 0;
-        } else {
-            coeff_ramp_remaining = ramp;
-        }
-    }
     taskEXIT_CRITICAL();
 #if !defined(USBSTATISTICS_DISABLE)
     loudness_record_equalizer_step_switch_event(prev_db_spl, db_spl, equalizer_step);
@@ -942,7 +974,7 @@ static inline int64_t apply_volume_q29(int64_t coeff) {
 #endif
 
 #ifdef FAST
-static void loudness_set_target_from_equalizer_step_fast(int equalizer_step) {
+static void loudness_load_active_quotients_fast(int equalizer_step) {
     int i;
     for (i = 0; i < LOUDNESS_FILTERS; i++) {
         const biquad_quotients_fast_t* src = &active_equalizer_step_table[equalizer_step][i];
@@ -950,45 +982,23 @@ static void loudness_set_target_from_equalizer_step_fast(int equalizer_step) {
         int64_t b1 = apply_volume_q29(src->b1);
         int64_t b2 = apply_volume_q29(src->b2);
 
-        target_quotients[i].b0 = (int32_t)b0;
-        target_quotients[i].b1 = (int32_t)b1;
-        target_quotients[i].b2 = (int32_t)b2;
-        target_quotients[i].a0 = src->a0;
-        target_quotients[i].a1 = src->a1;
-        target_quotients[i].a2 = src->a2;
+        active_quotients[i].b0 = (int32_t)b0;
+        active_quotients[i].b1 = (int32_t)b1;
+        active_quotients[i].b2 = (int32_t)b2;
+        active_quotients[i].a1 = src->a1;
+        active_quotients[i].a2 = src->a2;
     }
 }
 
-static void loudness_commit_coefficients_fast(void) {
-    int i;
-    for (i = 0; i < LOUDNESS_FILTERS; i++) {
-        current_quotients[i] = target_quotients[i];
-    }
-    active_quotients = current_quotients;
-    loudness_quotients = current_quotients;
-}
-
-static void loudness_select_equalizer_step_fast(int32_t db_spl, int equalizer_step, Bool immediate) {
+static void loudness_select_equalizer_step_fast(int32_t db_spl, int equalizer_step) {
     int32_t prev_db_spl = (int32_t)last_db_spl;
-    loudness_set_target_from_equalizer_step_fast(equalizer_step);
 
     taskENTER_CRITICAL();
+    loudness_load_active_quotients_fast(equalizer_step);
     last_db_spl = (int16_t)db_spl;
 #ifdef FREERTOS_USED
     target_db_spl = (int16_t)db_spl;
 #endif
-    if (immediate) {
-        loudness_commit_coefficients_fast();
-        coeff_ramp_remaining = 0;
-    } else {
-        uint32_t ramp = loudness_coeff_ramp_length();
-        if (ramp == 0) {
-            loudness_commit_coefficients_fast();
-            coeff_ramp_remaining = 0;
-        } else {
-            coeff_ramp_remaining = ramp;
-        }
-    }
     taskEXIT_CRITICAL();
 #if !defined(USBSTATISTICS_DISABLE)
     loudness_record_equalizer_step_switch_event(prev_db_spl, db_spl, equalizer_step);
@@ -997,15 +1007,16 @@ static void loudness_select_equalizer_step_fast(int32_t db_spl, int equalizer_st
 }
 #endif
 
-static void loudness_select_equalizer_step(int32_t db_spl, Bool immediate) {
+static void loudness_select_equalizer_step(int32_t db_spl) {
     int equalizer_step = loudness_get_equalizer_step(db_spl);
 #ifdef PRECISE
-    loudness_select_equalizer_step_precise(db_spl, equalizer_step, immediate);
+    loudness_select_equalizer_step_precise(db_spl, equalizer_step);
 #endif
 #ifdef FAST
-    loudness_select_equalizer_step_fast(db_spl, equalizer_step, immediate);
+    loudness_select_equalizer_step_fast(db_spl, equalizer_step);
 #endif
 }
+
 
 #ifdef FREERTOS_USED
 xQueueHandle xLoudnessFreqQueue = NULL;
@@ -1089,19 +1100,7 @@ void loudness_request_frequency_change(uint32_t frequency)
 }
 #endif
 
-/**
- * @brief Compute blended listening level in dB SPL (phon estimate).
- *
- * Clamps measured track dBFS to [LOUDNESS_TRACK_DBFS_MIN, LOUDNESS_TRACK_DBFS_MAX].
- * Normalizes track level relative to -18 dBFS (uncompressed master reference): a
- * brickwalled -6 dBFS track yields +12 dB offset. Blends host gain (90%) with
- * normalized track level (10%) at 0.1 dB resolution. Symmetric round-half-up is
- * applied for negative blends: (blended_scaled_x100 - 50) / 100. Adds
- * LOUDNESS_REF_DB_SPL (80) and rounds to integer dB SPL.
- *
- * @return Blended dB SPL (~53..81 for typical volume/RMS combinations).
- */
-static int32_t loudness_calculate_db_spl(void) {
+static int32_t loudness_calculate_db_spl_x10(void) {
     int32_t track_dbfs = loudness_get_track_dbfs();
     int32_t track_normalized = track_dbfs - LOUDNESS_TRACK_DBFS_MIN;
     int32_t host_gain_dbfs = loudness_get_gain_dbfs();
@@ -1112,35 +1111,31 @@ static int32_t loudness_calculate_db_spl(void) {
                                   (track_scaled * LOUDNESS_TRACK_WEIGHT_PCT);
 
     int32_t blended_dbfs_x10 = (blended_scaled_x100 - 50) / 100;
-    int32_t db_spl_x10 = blended_dbfs_x10 + (LOUDNESS_REF_DB_SPL * 10);
+    return blended_dbfs_x10 + (LOUDNESS_REF_DB_SPL * 10);
+}
+
+static int32_t loudness_calculate_db_spl(void) {
+    int32_t db_spl_x10 = loudness_calculate_db_spl_x10();
     return (db_spl_x10 + 5) / 10;
 }
 
 void loudness_update_active_equalizer_step(void) {
-    int32_t db_spl = loudness_calculate_db_spl();
-    int32_t current_last = (int32_t)last_db_spl;
+    int32_t db_spl_x10 = loudness_calculate_db_spl_x10();
+    int32_t db_spl = (db_spl_x10 + 5) / 10;
     Bool db_spl_changed;
 
 #ifdef FREERTOS_USED
     target_db_spl = (int16_t)db_spl;
 #endif
 
-    /* Add 2 dB hysteresis to avoid frequent step switching and coefficient ramping
-     * when phon level flutters due to small track RMS or volume changes.
-     * Hysteresis is disabled in unit tests for precise validation. */
-#ifndef BUILD_TESTING
-    int32_t diff = db_spl - current_last;
-    if (diff >= 2 || diff <= -2) {
-        db_spl_changed = TRUE;
-    } else {
-        db_spl_changed = FALSE;
-    }
+#ifdef BUILD_TESTING
+    db_spl_changed = (db_spl != (int32_t)last_db_spl);
 #else
-    db_spl_changed = (db_spl != current_last);
+    db_spl_changed = loudness_should_change_equalizer_step(db_spl_x10);
 #endif
 
     if (db_spl_changed) {
-        loudness_select_equalizer_step(db_spl, FALSE);
+        loudness_select_equalizer_step(db_spl);
     }
 #if !defined(USBSTATISTICS_DISABLE)
     {
@@ -1228,36 +1223,10 @@ void loudness_filter_init(void) {
         loudness_states[i].xn_2 = 0;
         loudness_states[i].yn_1 = 0;
         loudness_states[i].yn_2 = 0;
-
-        coeff_buf_endpoint_ping[i].b0 = 0;
-        coeff_buf_endpoint_ping[i].b1 = 0;
-        coeff_buf_endpoint_ping[i].b2 = 0;
-        coeff_buf_endpoint_ping[i].a0 = 0;
-        coeff_buf_endpoint_ping[i].a1 = 0;
-        coeff_buf_endpoint_ping[i].a2 = 0;
-
-        coeff_buf_endpoint_pong[i].b0 = 0;
-        coeff_buf_endpoint_pong[i].b1 = 0;
-        coeff_buf_endpoint_pong[i].b2 = 0;
-        coeff_buf_endpoint_pong[i].a0 = 0;
-        coeff_buf_endpoint_pong[i].a1 = 0;
-        coeff_buf_endpoint_pong[i].a2 = 0;
-
-        coeff_buf_ramp_blend[i].b0 = 0;
-        coeff_buf_ramp_blend[i].b1 = 0;
-        coeff_buf_ramp_blend[i].b2 = 0;
-        coeff_buf_ramp_blend[i].a0 = 0;
-        coeff_buf_ramp_blend[i].a1 = 0;
-        coeff_buf_ramp_blend[i].a2 = 0;
     }
 
-    current_quotients = coeff_buf_endpoint_ping;
-    target_quotients = coeff_buf_endpoint_pong;
-    active_quotients = coeff_buf_endpoint_ping;
-    loudness_quotients = coeff_buf_endpoint_ping;
-
-    /* Start at the reference equalizer step (flat) -- snap immediately, no ramp from zero. */
-    loudness_select_equalizer_step((int32_t)LOUDNESS_REF_PHON, TRUE);
+    /* Start at the reference equalizer step (unity biquads at 80 phon). */
+    loudness_select_equalizer_step((int32_t)LOUDNESS_REF_PHON);
 
 #ifdef FREERTOS_USED
     loudness_state_initialized = TRUE;
@@ -1287,6 +1256,13 @@ int64_t loudness_fast_24bit(int32_t sample)
         sample = biquad_step_fast_32bit(sample, &loudness_states[i]);
     }
     return (S64)saturate_24bit_s32_to_s32(sample);
+}
+
+S32 loudness_filter_16bit_container(S32 sample)
+{
+    S32 x = UPSAMPLE_16BIT_TO_FILTER_32(sample);
+    S32 y = (S32)loudness_fast_24bit(x);
+    return DOWNSAMPLE_FILTER_TO_16BIT_CONTAINER(y);
 }
 #endif
 
@@ -1398,7 +1374,6 @@ static biquad_quotients_precise_t loudness_scale_quotients_precise(biquad_quotie
     result.b0 = (int64_t)round(b0_n * (double)LOUDNESS_Q61_ONE);
     result.b1 = (int64_t)round(b1_n * (double)LOUDNESS_Q61_ONE);
     result.b2 = (int64_t)round(b2_n * (double)LOUDNESS_Q61_ONE);
-    result.a0 = (int64_t)LOUDNESS_Q61_ONE;
     result.a1 = (int64_t)round(a1_n * (double)LOUDNESS_Q61_ONE);
     result.a2 = (int64_t)round(a2_n * (double)LOUDNESS_Q61_ONE);
 
@@ -1471,7 +1446,6 @@ static biquad_quotients_fast_t loudness_scale_quotients_fast(biquad_quotients_fa
     result.b0 = (int32_t)round(b0_n * (double)LOUDNESS_Q29_ONE);
     result.b1 = (int32_t)round(b1_n * (double)LOUDNESS_Q29_ONE);
     result.b2 = (int32_t)round(b2_n * (double)LOUDNESS_Q29_ONE);
-    result.a0 = (int32_t)536870912LL;
     result.a1 = (int32_t)round(a1_n * (double)LOUDNESS_Q29_ONE);
     result.a2 = (int32_t)round(a2_n * (double)LOUDNESS_Q29_ONE);
 
@@ -1507,31 +1481,22 @@ void loudness_change_frequency_precise(uint32_t frequency) {
                 loudness_quotients_scaled[b][f] = loudness_scale_quotients_precise(base_table[b][f], n, (biquad_type_t)f);
             }
         }
-        active_equalizer_step_table = (const biquad_quotients_precise_t (*)[LOUDNESS_FILTERS])(void*)loudness_quotients_scaled;
-    } else {
-        active_equalizer_step_table = base_table;
+        base_table = (const biquad_quotients_precise_t (*)[LOUDNESS_FILTERS])(void*)loudness_quotients_scaled;
     }
 
-    // Recalculate target quotients for the current equalizer step and ramp
+    // Recalculate coefficients for the current equalizer step
 #ifdef FREERTOS_USED
     int32_t db_spl_val = (int32_t)target_db_spl;
 #else
     int32_t db_spl_val = (int32_t)last_db_spl;
 #endif
     int equalizer_step = loudness_get_equalizer_step(db_spl_val);
-    loudness_set_target_from_equalizer_step_precise(equalizer_step);
 
     taskENTER_CRITICAL();
-    {
-        uint32_t ramp = loudness_coeff_ramp_length();
-        if (ramp == 0) {
-            loudness_commit_coefficients_precise();
-            coeff_ramp_remaining = 0;
-        } else {
-            coeff_ramp_remaining = ramp;
-        }
-    }
+    active_equalizer_step_table = base_table;
+    loudness_load_active_quotients_precise(equalizer_step);
     taskEXIT_CRITICAL();
+
 }
 #endif
 
@@ -1563,30 +1528,20 @@ void loudness_change_frequency_fast(uint32_t frequency) {
                 loudness_quotients_scaled[b][f] = loudness_scale_quotients_fast(base_table[b][f], n, (biquad_type_t)f);
             }
         }
-        active_equalizer_step_table = (const biquad_quotients_fast_t (*)[LOUDNESS_FILTERS])(void*)loudness_quotients_scaled;
-    } else {
-        active_equalizer_step_table = base_table;
+        base_table = (const biquad_quotients_fast_t (*)[LOUDNESS_FILTERS])(void*)loudness_quotients_scaled;
     }
 
-    // Recalculate target quotients for the current equalizer step and ramp
+    // Recalculate coefficients for the current equalizer step
 #ifdef FREERTOS_USED
     int32_t db_spl_val = (int32_t)target_db_spl;
 #else
     int32_t db_spl_val = (int32_t)last_db_spl;
 #endif
     int equalizer_step = loudness_get_equalizer_step(db_spl_val);
-    loudness_set_target_from_equalizer_step_fast(equalizer_step);
 
     taskENTER_CRITICAL();
-    {
-        uint32_t ramp = loudness_coeff_ramp_length();
-        if (ramp == 0) {
-            loudness_commit_coefficients_fast();
-            coeff_ramp_remaining = 0;
-        } else {
-            coeff_ramp_remaining = ramp;
-        }
-    }
+    active_equalizer_step_table = base_table;
+    loudness_load_active_quotients_fast(equalizer_step);
     taskEXIT_CRITICAL();
 }
 #endif

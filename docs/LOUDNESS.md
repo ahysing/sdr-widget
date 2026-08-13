@@ -20,13 +20,12 @@ In the digital age we can measure the volume of the playback and find the exact 
 
 The firmware uses a fixed reference: **0 dBFS digital full scale = 80 dB SPL** (`LOUDNESS_REF_DB_SPL` / `LOUDNESS_REF_PHON` = 80).
 
-When the estimated listening level is **at or above 80 phon**, the loudness filter **bypasses** — audio passes through unchanged (USB volume attenuation still applies). Below 80 phon, three IIR biquad sections apply frequency-dependent gain to restore tonal balance:
+When the estimated listening level is **at or above 80 phon**, step **13** loads **unity biquads** (transparent IIR pass-through). Below 80 phon, two IIR biquad sections apply frequency-dependent gain to restore tonal balance:
 
 | Filter | Type | Approx. frequency | Role |
 |--------|------|-------------------|------|
 | 0 | Low-shelf | ~120 Hz | Bass boost |
-| 1 | Peak | ~3.5 kHz | Midrange correction |
-| 2 | High-shelf | ~8 kHz | Treble boost |
+| 1 | High-shelf | ~8 kHz | Treble boost |
 
 This is the classic hi-fi “loudness” control, implemented digitally in the device audio task before DAC output.
 
@@ -56,20 +55,20 @@ A FreeRTOS task runs every **~20 ms** and calls [`loudness_update_active_equaliz
 1. Blends host gain and track level into an integer **dB SPL** estimate.
 2. Compares it to `last_db_spl` to select an equalizer step and update statistics snapshots.
 
-The per-sample audio path only runs coefficient ramping and biquad filtering — it does not recompute the full blend.
+The per-sample audio path runs the active biquad chain — it does not recompute the full blend.
 
 ## Equalizers
 
-Four pre-designed coefficient sets (steps 0–3) target **55, 65, 75, and 80 phon**. Step 3 (≥ 80 phon) is flat (bypass).
+**14** pre-designed coefficient sets: steps **0–12** at **2 phon** spacing (**55, 57, …, 79 phon**), plus step **13** (**80 phon**, unity biquads).
 
-| Step | Phon range | Compensation |
-|------|------------|--------------|
-| 0 | < 55 | Strongest bass/treble lift |
-| 1 | 55–64 | Moderate |
-| 2 | 65–74 | Light |
-| 3 | ≥ 75 | Near-flat / bypass at ≥ 80 |
+| Step | Phon | Compensation |
+|------|------|--------------|
+| 0 | 55 | Strongest bass/treble lift |
+| 1–11 | 57–77 | Intermediate contours |
+| 12 | 79 | Near-reference contour |
+| 13 | ≥ 80 | Unity biquads (transparent) |
 
-Boundaries: [`loudness_get_equalizer_step()`](../src/loudness.c).
+Step lookup: [`loudness_get_equalizer_step()`](../src/loudness.c). Per-step boundary **hysteresis** (0.5 dB below each band floor) avoids flutter; step **12↔13** switches at **79.5 / 80.0 phon**.
 
 ### Track compensation (`track_dbfs`) — compression and the loudness war
 
@@ -121,30 +120,19 @@ Round-half-up is applied for negative blends. Typical result range: **~53–81 d
 
 ## Transitioning between loudness levels
 
-```mermaid
-stateDiagram-v2
-    direction LR
-    [*] --> Step3Bypass: db_spl >= 80
-    Step3Bypass --> Step2: db_spl drops below 75 boundary
-    Step2 --> Step1: db_spl drops below 65
-    Step1 --> Step0: db_spl drops below 55
-    Step0 --> Step1: db_spl rises
-    Step1 --> Step2: db_spl rises
-    Step2 --> Step3Bypass: db_spl reaches 80+
-```
+Coefficients commit **immediately** when the background task selects a new step. Filter **state** (`loudness_states[]`) is preserved across step changes — adjacent 2 phon steps are close enough that no coefficient ramp or crossfade is required.
 
-1. **Step change:** when integer `db_spl != last_db_spl`, [`loudness_select_equalizer_step()`](../src/loudness.c) loads new biquad coefficient targets for the selected step.
-2. **Coefficient ramp:** targets interpolate over **~15 ms** (`LOUDNESS_COEFF_RAMP_MS`, sample-rate dependent length) to avoid clicks. [`loudness_coeff_ramp_step()`](../src/loudness.c) runs on every audio sample during the ramp.
-3. **Events:** when the ramp converges, firmware records `USB_STATS_TAG_RAMP_COMPLETE`. When the step changes, it records `USB_STATS_TAG_EQUALIZER_STEP_SWITCH` (prev dB SPL, new dB SPL, step index).
-4. **Bypass:** while `last_db_spl ≥ 80`, biquads are skipped entirely on the hot path.
+1. **Step change:** when hysteresis boundaries are crossed, [`loudness_select_equalizer_step()`](../src/loudness.c) loads new biquad coefficients for the selected step.
+2. **Events:** firmware records `USB_STATS_TAG_EQUALIZER_STEP_SWITCH` (prev dB SPL, new dB SPL, step index 0–13).
+3. **Step 13:** at ≥ 80 phon the unity biquad row runs through the normal filter chain (not a separate hot-path skip).
 
 Sample-rate changes re-scale coefficient tables via [`loudness_change_frequency()`](../src/loudness.c) (queued from the USB sample-rate handler).
 
 ## Signal chain summary
 
-1. Track RMS integrator (30 s stereo window)
-2. ~20 ms task: blend gain + track → integer dB SPL → equalizer step
-3. Per sample: coefficient ramp + biquad filter (if below 80 phon)
+1. Track RMS integrator (~22 s stereo window at 48 kHz)
+2. ~20 ms task: blend gain + track → integer dB SPL → equalizer step (with hysteresis)
+3. Per sample: biquad filter chain (unity at step 13)
 4. USB volume lookup table
 5. DAC output
 

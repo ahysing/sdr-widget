@@ -42,7 +42,8 @@ void test_loudness_update_track_level() {
     loudness_reset_rms();
     printf("  Testing decay to silence...\n");
     int i;
-    for (i = 0; i < 20000; i++) {
+    uint32_t window = 1UL << 21;
+    for (i = 0; i < (int)(window * 8); i++) {
         loudness_update_track_level(0);
     }
 
@@ -145,9 +146,6 @@ void test_loudness_24bit_processing() {
     loudness_update_active_equalizer_step();
     int differs = 0;
     for (int i = 0; i < 200; i++) {
-        if (i % 48 == 0) {
-            loudness_coeff_ramp_step();
-        }
         int64_t in = (i & 1) ? 100000 : -100000;
         int64_t out = loudness_24bit_wrapper(in);
         if (out != in) differs = 1;
@@ -266,6 +264,14 @@ void test_saturate_24bit_s32_to_u32(void) {
     printf("test_saturate_24bit_s32_to_u32 passed\n");
 }
 
+void test_saturate_16bit_s32_to_s32(void) {
+    printf("Running test_saturate_16bit_s32_to_s32...\n");
+    assert(saturate_16bit_s32_to_s32(50000) == INT16_MAX);
+    assert(saturate_16bit_s32_to_s32(-50000) == INT16_MIN);
+    assert(saturate_16bit_s32_to_s32(1000) == 1000);
+    printf("test_saturate_16bit_s32_to_s32 passed\n");
+}
+
 void test_loudness_get_gain_dbfs() {
     printf("Running test_loudness_get_gain_dbfs...\n");
     spk_vol_usb_L = 0;
@@ -282,13 +288,14 @@ void test_loudness_get_track_dbfs(void) {
     loudness_init();
     loudness_reset_rms();
 
+    uint32_t window = 1UL << 21;
     int i;
-    for (i = 0; i < 20000; i++) {
+    for (i = 0; i < (int)(window * 8); i++) {
         loudness_update_track_level(0);
     }
     assert(loudness_get_track_dbfs() == LOUDNESS_TRACK_DBFS_MIN);
 
-    for (i = 0; i < 20000; i++) {
+    for (i = 0; i < (int)(window * 8); i++) {
         if (i % 2 == 0) {
             loudness_update_track_level(8388607LL);
         } else {
@@ -310,21 +317,45 @@ void test_loudness_16bit_cd_audio_processing(void) {
     spk_vol_usb_L = -20 * 256;
     loudness_update_active_equalizer_step();
 
-    int32_t raw_usb_16bit_sample = (int32_t)((uint16_t)-4000);
+    int32_t usb_container = ((int32_t)(int16_t)-4000) << 16;
 
-    // 1. Verifiser at vår 16-bit FAST oppsamplingsmakro utfører korrekt fortegnsutvidelse
-    int32_t sample_32 = UPSAMPLE_16BIT_32(raw_usb_16bit_sample);
+    int32_t filtered_container = loudness_filter_16bit_container(usb_container);
 
-    // Siden tallet er negativt, må det forbli negativt i 32-bit domenet!
-    assert(sample_32 < 0);
-
-    // 2. Kjør samplet gjennom 32-bit filterkaskaden
-    int32_t filtered_32 = loudness_fast_24bit(sample_32);
-
-    // Verifiser at filteret faktisk har transformerte verdien (ikke ren bypass)
-    assert(filtered_32 != sample_32);
+    assert(filtered_container < 0);
+    assert((filtered_container & 0xFFFF) == 0);
+    assert(filtered_container != usb_container);
 
     printf("test_loudness_16bit_cd_audio_processing passed\n");
+}
+
+void test_loudness_16bit_container_no_int32_overflow(void) {
+    printf("Running test_loudness_16bit_container_no_int32_overflow...\n");
+    loudness_init();
+    spk_vol_usb_L = -20 * 256;
+    loudness_set_level_dbfs(-18);
+
+    int32_t usb_container = ((int32_t)INT16_MAX) << 16;
+    int i;
+
+    for (i = 0; i < 4096; i++) {
+        (void)loudness_filter_16bit_container(usb_container);
+    }
+
+    int32_t filtered_container = loudness_filter_16bit_container(usb_container);
+    int32_t amp = (int16_t)(filtered_container >> 16);
+
+    assert((filtered_container & 0xFFFF) == 0);
+    assert(filtered_container == (amp << 16));
+    assert(amp >= INT16_MIN && amp <= INT16_MAX);
+
+    {
+        int32_t filter_domain = UPSAMPLE_16BIT_TO_FILTER_32(usb_container);
+        int32_t filter_out = (int32_t)loudness_fast_24bit(filter_domain);
+        int32_t expected = DOWNSAMPLE_FILTER_TO_16BIT_CONTAINER(filter_out);
+        assert(filtered_container == expected);
+    }
+
+    printf("test_loudness_16bit_container_no_int32_overflow passed\n");
 }
 #endif
 
@@ -451,95 +482,40 @@ void test_loudness_intersample_peak_saturation(void) {
     printf("test_loudness_intersample_peak_saturation passed\n\n");
 }
 
-void test_loudness_coeff_ramp_convergence(void) {
-    printf("Running test_loudness_coeff_ramp_convergence...\n");
-    current_freq.frequency = 44100;
-    loudness_init();
-    root_mean_square = 1099511627776ULL;
-
-    spk_vol_usb_L = 0;
-    loudness_update_active_equalizer_step();
-    assert(loudness_get_last_db_spl() == 80);
-
-    spk_vol_usb_L = -30 * 256;
-    loudness_update_active_equalizer_step();
-    assert(loudness_get_last_db_spl() == 53);
-
-    int i;
-    for (i = 0; i < 800; i++) {
-        (void)loudness_24bit_wrapper((i & 1) ? 1000 : -1000);
-    }
-
-    spk_vol_usb_L = 0;
-    loudness_update_active_equalizer_step();
-    for (i = 0; i < 800; i++) {
-        (void)loudness_24bit_wrapper((i & 1) ? 1000 : -1000);
-    }
-    assert(loudness_get_last_db_spl() == 80);
-
-    printf("test_loudness_coeff_ramp_convergence passed\n");
+void test_loudness_get_equalizer_step_14_levels(void) {
+    printf("Running test_loudness_get_equalizer_step_14_levels...\n");
+    assert(loudness_test_get_equalizer_step(54) == 0);
+    assert(loudness_test_get_equalizer_step(55) == 0);
+    assert(loudness_test_get_equalizer_step(79) == 12);
+    assert(loudness_test_get_equalizer_step(80) == 13);
+    assert(loudness_test_get_equalizer_step(81) == 13);
+    printf("test_loudness_get_equalizer_step_14_levels passed\n\n");
 }
 
-/**
- * @brief Test for dynamic coefficient ramping and fixed-point convergence.
- *
- * Verifies that ramp_coeff_fast calculates smooth linear trajectories using the
- * Q31 reciprocal scale, handles both positive and negative diffs, and safely
- * snaps directly to the target value when the sample window reaches its end.
- */
-void test_loudness_coefficient_ramping(void) {
-    printf("Running test_loudness_coefficient_ramping...\n");
+void test_loudness_80_phon_unity_filter(void) {
+    printf("Running test_loudness_80_phon_unity_filter...\n");
+    loudness_init();
+    spk_vol_usb_L = 0;
+    loudness_update_active_equalizer_step();
+    assert(loudness_test_get_equalizer_step(loudness_get_last_db_spl()) == 13);
 
-    int32_t start_coeff = 0;
-    int32_t target_coeff = 536870912; // 1.0 i Q29 (Q29_ONE)
-    int32_t current = start_coeff;
+    int64_t sample = 123456;
+    int64_t result = loudness_24bit_wrapper(sample);
+    assert(result == sample);
+    printf("test_loudness_80_phon_unity_filter passed\n\n");
+}
 
-    // Total tidsramme for overgangen (f.eks. 15 ms = 660 sampler ved 44.1 kHz)
-    int total_samples = 660;
+void test_loudness_equalizer_step_hysteresis_79_80(void) {
+    printf("Running test_loudness_equalizer_step_hysteresis_79_80...\n");
+    loudness_init();
+    last_db_spl = 80;
+    assert(loudness_test_should_change_equalizer_step(796) == FALSE);
+    assert(loudness_test_should_change_equalizer_step(794) == TRUE);
 
-    // =========================================================================
-    // SCENARIO 1: Test oppadgående kurve (Ramp Up) og jevn stigning
-    // =========================================================================
-    current = ramp_coeff_fast(current, target_coeff, total_samples);
-
-    /* Etter nøyaktig 1 sample ut av 660, må koeffisienten ha steget,
-     * men den må fortsatt være et veldig lite tall nær starten */
-    assert(current > start_coeff);
-    assert(current < (target_coeff / 10));
-    printf("  Ramp up step 1 passed (current: %d)\n", current);
-
-    // =========================================================================
-    // SCENARIO 2: Test nedadgående kurve (Ramp Down / Slå av filter)
-    // =========================================================================
-    int32_t high_coeff = 536870912;
-    int32_t low_target = 0;
-    int32_t current_down = high_coeff;
-
-    current_down = ramp_coeff_fast(current_down, low_target, total_samples);
-
-    /* Sjekk at fortegnsmatematikken (sign extension) i muls.d fungerer
-     * for negative differanser, slik at koeffisienten faller korrekt */
-    assert(current_down < high_coeff);
-    assert(current_down > low_target);
-    printf("  Ramp down step 1 passed (current: %d)\n", current_down);
-
-    // =========================================================================
-    // SCENARIO 3: Test matematisk konvergens (Låsing til målet)
-    // =========================================================================
-    /* Vi simulerer den aller siste samplings-syklusen i vinduet (remaining = 1).
-     * Funksjonen SKAL returnere målet bit-perfekt for å unngå lekkasje. */
-    int32_t final_step = ramp_coeff_fast(536870900, target_coeff, 1);
-    assert(final_step == target_coeff);
-
-    /* Sjekk også boundary-case der remaining er 0 (skal returnere målet) */
-    int32_t boundary_step = ramp_coeff_fast(536870900, target_coeff, 0);
-    assert(boundary_step == target_coeff);
-
-    /* Sjekk at hvis vi allerede er på målet, returneres målet umiddelbart */
-    int32_t steady_state = ramp_coeff_fast(target_coeff, target_coeff, 100);
-    assert(steady_state == target_coeff);
-
-    printf("test_loudness_coefficient_ramping passed\n\n");
+    last_db_spl = 79;
+    assert(loudness_test_should_change_equalizer_step(799) == FALSE);
+    assert(loudness_test_should_change_equalizer_step(800) == TRUE);
+    printf("test_loudness_equalizer_step_hysteresis_79_80 passed\n\n");
 }
 
 int main() {
@@ -556,10 +532,12 @@ int main() {
     test_saturate_24bit_s64_to_s32();
     test_saturate_24bit_s32_to_s32();
     test_saturate_24bit_s32_to_u32();
+    test_saturate_16bit_s32_to_s32();
     test_loudness_get_gain_dbfs();
     test_loudness_get_track_dbfs();
 #ifdef FAST
     test_loudness_16bit_cd_audio_processing();
+    test_loudness_16bit_container_no_int32_overflow();
 #endif
     test_loudness_intersample_peak_saturation();
     test_digital_volume_mute();
@@ -567,9 +545,9 @@ int main() {
     test_loudness_16bit_sign_extension();
     test_loudness_24bit_sign_extension();
     test_loudness_dither_and_noise_shaping();
-    test_loudness_coeff_ramp_convergence();
-    test_loudness_intersample_peak_saturation();
-    test_loudness_coefficient_ramping();
+    test_loudness_get_equalizer_step_14_levels();
+    test_loudness_80_phon_unity_filter();
+    test_loudness_equalizer_step_hysteresis_79_80();
     printf("\nAll tests completed!\n");
     return 0;
 }

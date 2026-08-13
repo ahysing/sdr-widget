@@ -39,9 +39,24 @@ DEVICE_WAIT_TIMEOUT_S = 5.0
 DEVICE_POLL_INTERVAL_S = 0.1
 HID_READ_TIMEOUT_MS = 2000
 
-# Lower bound (phon) for each equalizer step index in loudness_get_equalizer_step().
-EQUALIZER_STEP_PHON = (0, 55, 65, 75)
-EQUALIZER_STEP_PHON_END = (55, 65, 75, None)
+# Match LOUDNESS_NUM_EQUALIZER_STEPS / phon mapping in src/loudness.h.
+LOUDNESS_NUM_EQUALIZER_STEPS = 14
+LOUDNESS_MIN_PHON = 55
+LOUDNESS_PHON_STEP_DB = 2
+LOUDNESS_NEUTRAL_PHON = 80
+
+# Step indices 0-12: 55, 57, ... 79 phon; step 13: 80 phon unity.
+EQUALIZER_STEP_PHON = tuple(
+    range(LOUDNESS_MIN_PHON, LOUDNESS_NEUTRAL_PHON, LOUDNESS_PHON_STEP_DB)
+) + (LOUDNESS_NEUTRAL_PHON,)
+
+# Upper phon bound for each step band; None for the unity step.
+EQUALIZER_STEP_PHON_END = tuple(
+    EQUALIZER_STEP_PHON[i + 1] for i in range(LOUDNESS_NUM_EQUALIZER_STEPS - 1)
+) + (None,)
+
+assert len(EQUALIZER_STEP_PHON) == LOUDNESS_NUM_EQUALIZER_STEPS
+assert len(EQUALIZER_STEP_PHON_END) == LOUDNESS_NUM_EQUALIZER_STEPS
 
 
 def device_label(info):
@@ -142,17 +157,20 @@ def close_device(dev):
 
 
 def equalizer_step_from_db_spl(db_spl):
-    if db_spl < 55:
+    if db_spl >= LOUDNESS_NEUTRAL_PHON:
+        return LOUDNESS_NUM_EQUALIZER_STEPS - 1
+    if db_spl < LOUDNESS_MIN_PHON:
         return 0
-    if db_spl < 65:
-        return 1
-    if db_spl < 75:
-        return 2
-    return 3
+    step = (db_spl - LOUDNESS_MIN_PHON) // LOUDNESS_PHON_STEP_DB
+    max_contour_step = LOUDNESS_NUM_EQUALIZER_STEPS - 2
+    if step > max_contour_step:
+        step = max_contour_step
+    return step
 
 
 def phon_range_for_step(step):
-    step = max(0, min(step, len(EQUALIZER_STEP_PHON) - 1))
+    max_step = min(len(EQUALIZER_STEP_PHON), len(EQUALIZER_STEP_PHON_END)) - 1
+    step = max(0, min(step, max_step))
     return {
         "from_phon": EQUALIZER_STEP_PHON[step],
         "to_phon": EQUALIZER_STEP_PHON_END[step],
@@ -167,7 +185,7 @@ def decode_last_event(tag, arg0, arg1, arg2):
         }
     if tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH:
         prev_step = equalizer_step_from_db_spl(arg0)
-        new_step = arg2
+        new_step = max(0, min(int(arg2), LOUDNESS_NUM_EQUALIZER_STEPS - 1))
         prev_range = phon_range_for_step(prev_step)
         new_range = phon_range_for_step(new_step)
         return {

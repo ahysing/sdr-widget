@@ -34,16 +34,6 @@ static void reset_usb_stats_buffers(void) {
     statistics_test_reset();
 }
 
-static void simulate_ramp_samples(int count) {
-    int i;
-    for (i = 0; i < count; i++) {
-        if (i % 48 == 0) {
-            loudness_coeff_ramp_step();
-        }
-        (void)process_sample((i & 1) ? 1000 : -1000);
-    }
-}
-
 static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
     printf("Running test_equalizer_step_switch_tagged_events_volume_sweep...\n");
     reset_usb_stats_buffers();
@@ -52,7 +42,6 @@ static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
     current_freq.frequency = 44100;
     loudness_init();
     root_mean_square = 1099511627776ULL;
-    root_mean_square_counter = 100;
 
     assert(stats->event_count == 0);
     assert(loudness_get_last_db_spl() == 80);
@@ -68,43 +57,33 @@ static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg0 == 80);
     assert(stats->last_arg1 == 71);
-    assert(stats->last_arg2 == 2);
-
-    simulate_ramp_samples(800);
-    assert(stats->event_count == 2);
-    assert(stats->last_tag == USB_STATS_TAG_RAMP_COMPLETE);
+    assert(stats->last_arg2 == 8);
 
     spk_vol_usb_L = -20 * 256;
     loudness_update_active_equalizer_step();
     assert(loudness_get_last_db_spl() == 62);
-    assert(stats->event_count == 3);
+    assert(stats->event_count == 2);
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg0 == 71);
     assert(stats->last_arg1 == 62);
-
-    simulate_ramp_samples(800);
-    assert(stats->event_count == 4);
-    assert(stats->last_tag == USB_STATS_TAG_RAMP_COMPLETE);
+    assert(stats->last_arg2 == 3);
 
     spk_vol_usb_L = -30 * 256;
     loudness_update_active_equalizer_step();
     assert(loudness_get_last_db_spl() == 53);
-    assert(stats->event_count == 5);
+    assert(stats->event_count == 3);
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg0 == 62);
     assert(stats->last_arg1 == 53);
     assert(stats->last_arg2 == 0);
 
-    simulate_ramp_samples(800);
-    assert(stats->event_count == 6);
-    assert(stats->last_tag == USB_STATS_TAG_RAMP_COMPLETE);
-
     spk_vol_usb_L = 0;
     loudness_update_active_equalizer_step();
     assert(loudness_get_last_db_spl() == 80);
-    assert(stats->event_count == 7);
+    assert(stats->event_count == 4);
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg1 == 80);
+    assert(stats->last_arg2 == 13);
 
     assert(stats->deadline_misses == 0);
     printf("test_equalizer_step_switch_tagged_events_volume_sweep passed\n");
@@ -142,14 +121,14 @@ static void test_equalizer_step_switch_rapid_sweep_no_deadline_misses(void) {
     current_freq.frequency = 48000;
     loudness_init();
     root_mean_square = 1099511627776ULL;
-    root_mean_square_counter = 100;
 
     const int volumes[] = { 0, -10 * 256, -20 * 256, -30 * 256, -10 * 256, 0 };
     int v;
     for (v = 0; v < 6; v++) {
         spk_vol_usb_L = (S16)volumes[v];
         loudness_update_active_equalizer_step();
-        simulate_ramp_samples(400);
+        (void)process_sample(1000);
+        (void)process_sample(-1000);
     }
 
     assert(stats->deadline_misses == 0);

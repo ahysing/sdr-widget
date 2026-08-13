@@ -536,11 +536,6 @@ void uac2_device_audio_task(void *pvParameters)
 					spk_vol_mult_R = usb_volume_format(spk_vol_usb_R);
 #endif
 
-#ifndef LOUDNESS_DISABLE
-					/* Step the coefficient ramp once per packet. */
-					loudness_coeff_ramp_step();
-#endif
-
 					xSemaphoreTake( mutexSpkUSB, portMAX_DELAY );
 					spk_usb_heart_beat++;					// indicates EP_AUDIO_OUT receiving data from host
 					spk_usb_sample_counter += num_samples; 	// track the num of samples received
@@ -715,8 +710,8 @@ void uac2_device_audio_task(void *pvParameters)
 								sample_L = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_L >> 8)) << 8;
 								sample_R = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_R >> 8)) << 8;
 							} else if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {
-								sample_L = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_L >> 16)) << 16;
-								sample_R = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_R >> 16)) << 16;
+								sample_L = LOUDNESS_FILTER_16BIT_CONTAINER(sample_L);
+								sample_R = LOUDNESS_FILTER_16BIT_CONTAINER(sample_R);
 							}
 						}
 #endif

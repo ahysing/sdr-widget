@@ -2,9 +2,9 @@
 
 In the loudness filter a compensates of the ISO226 2003 loudness curves
 
-The `create2biquads.py` uses 2 biquad filters in sequence (low-shelf + high-shelf) to create a filter which makes the loudness contours for the sound mimic the shape and contour of 80 phon in the range below. Only 45 phon to 79 phon is handled.
+The `create2biquads.py` script optimizes a 2-biquad chain (low-shelf + high-shelf) for **13 contour levels** at **2 phon** spacing: **55, 57, 59, …, 79 phon**. Coefficients are stored in `{ a1, a2, b0, b1, b2 }` order (`a0 = 1`, not stored). A hand-written **80 phon** unity row (step 13) is appended in firmware.
 
-45 phon to 79 phon roughly corresponds with 45 dB to 79 dB SPL. This is the sound level most people listen to and need loudness compensation.
+55–79 phon corresponds to the listening range where loudness compensation is most useful; at **≥ 80 phon** the equalizer runs unity biquads.
 
 ## Results
 
