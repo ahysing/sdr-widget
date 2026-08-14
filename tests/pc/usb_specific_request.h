@@ -16,6 +16,7 @@ typedef union {
 
 extern S_freq current_freq;
 extern volatile Bool freq_changed;
+extern volatile U8 usb_alternate_setting_out;
 
 S32 usb_volume_format(S16 spk_vol_usb);
 

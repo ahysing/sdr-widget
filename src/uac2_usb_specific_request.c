@@ -1236,7 +1236,6 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						return TRUE;
 					}
 
-					// this is like audio_get_cur() for volume but on UAC2
 					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_VOLUME)
 							&& (request == AUDIO_CS_REQUEST_CUR)) {
 						Usb_ack_setup_received_free();
@@ -1276,6 +1275,10 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 								Usb_write_endpoint_data(EP_CONTROL, 16, Usb_format_mcu_to_usb_data(16, spk_vol_usb_R));
 							}
 						}
+
+#ifndef LOUDNESS_DISABLE
+						loudness_set_source_has_volume_control();
+#endif
 
 						Usb_ack_control_in_ready_send();
 						while (!Is_usb_control_out_received())
@@ -1586,6 +1589,10 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 
 						Usb_ack_control_out_received_free();
 						usb_fifo_hw_unlock(&usb_lock);
+
+#ifndef LOUDNESS_DISABLE
+						loudness_set_source_has_volume_control();
+#endif
 
 						Usb_ack_control_in_ready_send(); //!< send a ZLP for STATUS phase
 						uac2_wait_control_in_ready();

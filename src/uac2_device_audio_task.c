@@ -739,6 +739,7 @@ void uac2_device_audio_task(void *pvParameters)
 						/* Keep the complete loudness path at base rates.
 						 * Through performance tests we have found higher frequency rates to fail this path. */
 						if (uac2_loudness_filter_enabled()) {
+							loudness_inferred_gain_feed_stereo(sample_L, sample_R);
 							if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX) {
 								if (sample_L != 0) {
 									sample_L = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_L >> 8)) << 8;

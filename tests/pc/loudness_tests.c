@@ -12,6 +12,7 @@ DEFINE_FFF_GLOBALS;
 
 S_freq current_freq = { .frequency = 48000 };
 volatile Bool freq_changed = FALSE;
+volatile U8 usb_alternate_setting_out = 1;
 
 /* Mock volume state normally provided by device_audio_task.c. */
 S16 spk_vol_usb_L = 0, spk_vol_usb_R = 0;
@@ -128,6 +129,7 @@ int64_t loudness_24bit_wrapper(int64_t sample) {
 void test_loudness_24bit_processing() {
     printf("Running test_loudness_24bit_processing...\n");
     loudness_init();
+    loudness_set_source_has_volume_control();
 
     // At high volume (0 dBFS -> 80 phon), it should be passthrough (bypass)
     spk_vol_usb_L = 0;
@@ -157,6 +159,7 @@ void test_loudness_24bit_processing() {
 void test_loudness_update_active_equalizer_step_uncompressed_18dbfs(void) {
     printf("Running test_loudness_update_active_equalizer_step (Uncompressed -18 dBFS RMS)...\n");
     loudness_init();
+    loudness_set_source_has_volume_control();
     root_mean_square = 1099511627776ULL;
 
     spk_vol_usb_L = 0;
@@ -185,6 +188,7 @@ void test_loudness_update_active_equalizer_step_uncompressed_18dbfs(void) {
 void test_loudness_update_active_equalizer_step_compressed_6dbfs(void) {
     printf("Running test_loudness_update_active_equalizer_step (Max Compressed -6 dBFS RMS)...\n");
     loudness_init();
+    loudness_set_source_has_volume_control();
     root_mean_square = 17592186044416ULL;
 
     spk_vol_usb_L = 0;
@@ -270,6 +274,7 @@ void test_saturate_16bit_s32_to_s32(void) {
 
 void test_loudness_get_gain_dbfs() {
     printf("Running test_loudness_get_gain_dbfs...\n");
+    loudness_set_source_has_volume_control();
     spk_vol_usb_L = 0;
     assert(loudness_get_gain_dbfs() == 0);
     
@@ -491,6 +496,7 @@ void test_loudness_get_equalizer_step_14_levels(void) {
 void test_loudness_80_phon_unity_filter(void) {
     printf("Running test_loudness_80_phon_unity_filter...\n");
     loudness_init();
+    loudness_set_source_has_volume_control();
     spk_vol_usb_L = 0;
     loudness_update_active_equalizer_step();
     assert(loudness_test_get_equalizer_step(loudness_get_last_db_spl()) == 13);

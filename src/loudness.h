@@ -120,6 +120,8 @@ int32_t loudness_get_track_dbfs(void);
 /* Return the current host-gain expressed in dBFS. Non-positive. */
 int32_t loudness_get_gain_dbfs(void);
 
+#include "loudness_inferred_gain.h"
+
 /* Blended listening level in dB SPL (same value as used for equalizer step selection). */
 int32_t loudness_get_db_spl(void);
 

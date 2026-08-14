@@ -22,6 +22,7 @@ C_SRCS += \
 ../src/host_audio_task.c \
 ../src/image.c \
 ../src/loudness.c \
+../src/loudness_inferred_gain.c \
 ../src/rotary_encoder.c \
 ../src/taskAK5394A.c \
 ../src/taskEXERCISE.c \
@@ -64,6 +65,7 @@ OBJS += \
 ./src/host_audio_task.o \
 ./src/image.o \
 ./src/loudness.o \
+./src/loudness_inferred_gain.o \
 ./src/rotary_encoder.o \
 ./src/taskAK5394A.o \
 ./src/taskEXERCISE.o \
@@ -107,6 +109,7 @@ C_DEPS += \
 ./src/host_audio_task.d \
 ./src/image.d \
 ./src/loudness.d \
+./src/loudness_inferred_gain.d \
 ./src/rotary_encoder.d \
 ./src/taskAK5394A.d \
 ./src/taskEXERCISE.d \

@@ -13,6 +13,7 @@ DEFINE_FFF_GLOBALS;
 
 S_freq current_freq = { .frequency = 44100 };
 volatile Bool freq_changed = FALSE;
+volatile U8 usb_alternate_setting_out = 1;
 
 S16 spk_vol_usb_L = 0, spk_vol_usb_R = 0;
 volatile U8 spk_bit_resolution = 24;
@@ -41,6 +42,7 @@ static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
 
     current_freq.frequency = 44100;
     loudness_init();
+    loudness_set_source_has_volume_control();
     root_mean_square = 1099511627776ULL;
 
     assert(stats->event_count == 0);
@@ -120,6 +122,7 @@ static void test_equalizer_step_switch_rapid_sweep_no_deadline_misses(void) {
 
     current_freq.frequency = 48000;
     loudness_init();
+    loudness_set_source_has_volume_control();
     root_mean_square = 1099511627776ULL;
 
     const int volumes[] = { 0, -10 * 256, -20 * 256, -30 * 256, -10 * 256, 0 };

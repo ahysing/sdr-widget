@@ -7,6 +7,9 @@ extern S16 spk_vol_usb_L, spk_vol_usb_R;
 #include "device_audio_task.h"
 #include "taskAK5394A.h"
 #endif
+#ifndef LOUDNESS_DISABLE
+#include "loudness_inferred_gain.h"
+#endif
 #ifndef USBSTATISTICS_DISABLE
 #include "usb_statistics.h"
 #include "audio_stats_logic.h"
@@ -619,9 +622,6 @@ static volatile S16 target_db_fs = 0;
 #define ROOT_MEAN_SQUARE_WINDOW_SHIFT 21
 #define ROOT_MEAN_SQUARE_WINDOW_SIZE (1UL << ROOT_MEAN_SQUARE_WINDOW_SHIFT)
 
-
-Bool source_has_volume_control = FALSE;
-
 /* Stereo feeds left then right through loudness_update_track_level_*(), so the
  * leaky window counts 2*fs samples per second. A shift of 21 corresponds to
  * 2,097,152 samples (~22 seconds at 48 kHz stereo, ~5.5 seconds at 192 kHz).
@@ -1189,12 +1189,15 @@ int32_t loudness_get_db_spl(void) {
  * spk_vol_usb_L and VOL_MAX are 16-bit signed values in 1/256 dB units.
  */
 int32_t loudness_get_gain_dbfs(void) {
-    int32_t delta_q8 = (int32_t)spk_vol_usb_L - (int32_t)VOL_MAX;
-    int32_t db_fs = delta_q8 / 256;
-    if (db_fs > 0) {
-        db_fs = 0;
+    if (loudness_inferred_gain_has_source_volume_control()) {
+        int32_t delta_q8 = (int32_t)spk_vol_usb_L - (int32_t)VOL_MAX;
+        int32_t db_fs = delta_q8 / 256;
+        if (db_fs > 0) {
+            db_fs = 0;
+        }
+        return db_fs;
     }
-    return db_fs;
+    return loudness_inferred_gain_dbfs();
 }
 
 int16_t loudness_get_last_db_spl(void) {
@@ -1225,6 +1228,7 @@ void loudness_filter_init(void) {
 #endif
 
     loudness_reset_rms();
+    loudness_inferred_gain_reset();
 
     int i;
     for (i = 0; i < LOUDNESS_FILTERS; i++) {
@@ -1505,6 +1509,7 @@ void loudness_change_frequency_precise(uint32_t frequency) {
     loudness_load_active_quotients_precise(equalizer_step);
     taskEXIT_CRITICAL();
 
+    loudness_inferred_gain_set_rate(frequency);
 }
 #endif
 
@@ -1551,6 +1556,8 @@ void loudness_change_frequency_fast(uint32_t frequency) {
     active_equalizer_step_table = base_table;
     loudness_load_active_quotients_fast(equalizer_step);
     taskEXIT_CRITICAL();
+
+    loudness_inferred_gain_set_rate(frequency);
 }
 #endif
 
