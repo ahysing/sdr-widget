@@ -185,8 +185,6 @@
 // USB Endpoint 1 descriptor - not used
 #define ENDPOINT_NB_1       			( UAC2_EP_AUDIO_IN | MSK_EP_DIR ) // 0x83
 #define EP_ATTRIBUTES_1					0b00100101         // ISOCHROUNOUS ASYNCHRONOUS IMPLICIT FEEDBACK
-//#define EP_IN_LENGTH_1_FS				294				   // 3 bytes * 49 samples * stereo
-//#define EP_IN_LENGTH_1_HS				294
 #define EP_IN_LENGTH_1_FS				392				   // 4 bytes * 49 samples * stereo
 #define EP_IN_LENGTH_1_HS				392
 #define EP_SIZE_1_FS					EP_IN_LENGTH_1_FS
@@ -198,8 +196,6 @@
 // USB Endpoint 2 descriptor
 #define ENDPOINT_NB_2       			( UAC2_EP_AUDIO_OUT )	// 0x02
 #define EP_ATTRIBUTES_2     			0b00000101			// ISOCHRONOUS ASYNC
-//#define EP_OUT_LENGTH_2_HS  			294				// 3 bytes * 49 samples * stereo
-//#define EP_OUT_LENGTH_2_FS			294
 #define EP_OUT_LENGTH_2_HS  			392				   // 4 bytes * 49 samples * stereo
 #define EP_OUT_LENGTH_2_FS				392
 #define EP_SIZE_2_FS					EP_OUT_LENGTH_2_FS
@@ -230,7 +226,7 @@
 #define CSD_ID_1_CONTROL				0b00000111	// freq r/w, validity r
 #define CSD_ID_2						0x05
 #define CSD_ID_2_TYPE					0b00000011	// Was: 01 fixed freq internal clock. Or: 10 var. int. Is: 11 programmable
-#define CSD_ID_2_CONTROL				0b00000111	// Was: 00000111 freq r/w, validity r
+#define CSD_ID_2_CONTROL				0b00000111	// freq r/w, validity r
 
 
 // Clock Selector descriptor - not used
@@ -342,7 +338,7 @@
 
 // Format type for ALT1
 #define FORMAT_TYPE_1					0x01	// Format TypeI
-#define FORMAT_SUBSLOT_SIZE_1			0x04	// Number of bytes per subslot
+#define FORMAT_SUBSLOT_SIZE_1			0x04	// Number of bytes per subslot (24-bit in 32-bit container)
 #define FORMAT_BIT_RESOLUTION_1			0x18	// 24 bits per sample
 
 // Format type for ALT2 // bBitResolution

@@ -19,7 +19,6 @@
 #include "usb_stats_hid_report_descriptor.h"
 #include "usb_drv.h"
 #include "usb_standard_request.h"
-#include "print_funcs.h"
 #include "usb_fifo_hw_lock.h"
 #endif
 #include "stats_telemetry.h"
@@ -30,6 +29,44 @@ static volatile usb_stats_t usb_stats[2] = {
 };
 static volatile int collect_index = 0;
 static U8 statistics_report_seq = 0;
+static volatile Bool statistics_runtime_active = TRUE;
+#ifdef FREERTOS_USED
+static Bool statistics_initialized = FALSE;
+#endif
+
+static const usb_stats_t statistics_heartbeat_stats = {
+    0, 0, 0, 0, 0, 0xFFFF, 0, 0, USB_STATS_TAG_NONE, 0, 0, 0
+};
+
+static void statistics_reset_period_counters(volatile usb_stats_t *s)
+{
+    s->generation = 0;
+    s->underruns = 0;
+    s->overruns = 0;
+    s->fifo_level = 0;
+    s->max_fifo = 0;
+    s->min_fifo = 0xFFFF;
+    s->deadline_misses = 0;
+    s->event_count = 0;
+    s->last_tag = USB_STATS_TAG_NONE;
+    s->last_arg0 = 0;
+    s->last_arg1 = 0;
+    s->last_arg2 = 0;
+}
+
+Bool statistics_runtime_is_active(void)
+{
+    return statistics_runtime_active;
+}
+
+void statistics_runtime_set_active(Bool active)
+{
+    if (active && !statistics_runtime_active) {
+        statistics_reset_period_counters(&usb_stats[0]);
+        statistics_reset_period_counters(&usb_stats[1]);
+    }
+    statistics_runtime_active = active;
+}
 
 static void statistics_write_le16(U8 *dst, U16 value)
 {
@@ -72,7 +109,7 @@ static void statistics_build_wire_packet(U8 *wire, const volatile usb_stats_t *s
     statistics_write_le16(&wire[14], s->max_fifo);
     statistics_write_le16(&wire[16], s->min_fifo);
     statistics_write_le32(&wire[18], s->deadline_misses);
-    statistics_write_le16(&wire[22], telemetry->frequency_hz);
+    statistics_write_le16(&wire[22], telemetry->frequency_100hz);
     wire[24] = (U8)telemetry->track_dbfs;
     wire[25] = (U8)telemetry->track_rms_dbfs;
     wire[26] = (U8)telemetry->gain_dbfs;
@@ -88,11 +125,6 @@ static void statistics_build_wire_packet(U8 *wire, const volatile usb_stats_t *s
 
 #ifndef UNIT_TEST
 static U8 statistics_hid_buffer[USB_STATS_HID_TRANSFER_SIZE];
-#define STATISTICS_HID_SEND_WAIT_MS 50
-#ifdef FREERTOS_USED
-#define STATISTICS_HID_SEND_WAIT_TICKS \
-    ((STATISTICS_HID_SEND_WAIT_MS * configTICK_RATE_HZ) / 1000)
-#endif
 
 static void statistics_prepare_hid_buffer(const U8 *wire_packet)
 {
@@ -130,6 +162,12 @@ static Bool statistics_hid_try_send(void)
 
 void statistics_init()
 {
+#ifdef FREERTOS_USED
+    if (statistics_initialized) {
+        return;
+    }
+    statistics_initialized = TRUE;
+#endif
     stats_telemetry_init();
 #ifdef FREERTOS_USED
     xTaskCreate(statistics_task,
@@ -154,87 +192,72 @@ void statistics_task(void *pvParameters)
 }
 #endif
 
-static void statistics_reset_period_counters(volatile usb_stats_t *s)
+static Bool statistics_try_send_packet(const U8 *wire_packet, U8 report_seq,
+    volatile usb_stats_t *reset_buf)
 {
-    s->generation = 0;
-    s->underruns = 0;
-    s->overruns = 0;
-    s->fifo_level = 0;
-    s->max_fifo = 0;
-    s->min_fifo = 0xFFFF;
-    s->deadline_misses = 0;
-    s->event_count = 0;
-    s->last_tag = USB_STATS_TAG_NONE;
-    s->last_arg0 = 0;
-    s->last_arg1 = 0;
-    s->last_arg2 = 0;
+    if (!Is_device_enumerated()) {
+        return FALSE;
+    }
+
+#ifndef UNIT_TEST
+    statistics_prepare_hid_buffer(wire_packet);
+    {
+        Bool sent = statistics_hid_try_send();
+        if (sent) {
+            statistics_report_seq = report_seq;
+            statistics_clear_hid_buffer();
+            if (reset_buf != NULL) {
+                statistics_reset_period_counters(reset_buf);
+            }
+        }
+        return sent;
+    }
+#else
+    {
+        Bool sent = FALSE;
+        if (Is_usb_in_ready(EP_STATS_HID_TX))
+        {
+            int i;
+            Usb_reset_endpoint_fifo_access(EP_STATS_HID_TX);
+            Usb_write_endpoint_data(EP_STATS_HID_TX, 8, USB_STATS_HID_REPORT_ID);
+            for (i = 0; i < (int)USB_STATS_PACKET_WIRE_SIZE; i++)
+            {
+                Usb_write_endpoint_data(EP_STATS_HID_TX, 8, wire_packet[i]);
+            }
+            statistics_report_seq = report_seq;
+            Usb_send_in(EP_STATS_HID_TX);
+            sent = TRUE;
+        }
+        if (sent && reset_buf != NULL) {
+            statistics_reset_period_counters(reset_buf);
+        }
+        return sent;
+    }
+#endif
 }
 
 void statistics_report_iteration()
 {
     U8 wire_packet[USB_STATS_PACKET_WIRE_SIZE];
-    int report_index;
-    volatile usb_stats_t *s;
     stats_telemetry_snapshot_t telemetry;
     U8 report_seq;
 
-    report_index = collect_index;
-    collect_index = 1 - collect_index;
-
-    s = &usb_stats[report_index];
     telemetry = stats_telemetry_read_best_effort();
     report_seq = (U8)(statistics_report_seq + 1u);
-    statistics_build_wire_packet(wire_packet, s, &telemetry, report_seq);
 
-    if (Is_device_enumerated())
-    {
-#ifndef UNIT_TEST
-        statistics_prepare_hid_buffer(wire_packet);
-        {
-            Bool sent = FALSE;
-#ifdef FREERTOS_USED
-            portTickType waited_ticks = 0;
-            while (!sent && waited_ticks < STATISTICS_HID_SEND_WAIT_TICKS)
-            {
-                sent = statistics_hid_try_send();
-                if (!sent) {
-                    vTaskDelay(1);
-                    waited_ticks++;
-                }
-            }
-            if (!sent) {
-                print_dbg("USB Statistics: timed out waiting for IN endpoint\n");
-            }
-#else
-            sent = statistics_hid_try_send();
-#endif
-            if (sent) {
-                statistics_report_seq = report_seq;
-                statistics_clear_hid_buffer();
-                statistics_reset_period_counters(s);
-            }
-        }
-#else
-        {
-            Bool sent = FALSE;
-            if (Is_usb_in_ready(EP_STATS_HID_TX))
-            {
-                int i;
-                Usb_reset_endpoint_fifo_access(EP_STATS_HID_TX);
-                Usb_write_endpoint_data(EP_STATS_HID_TX, 8, USB_STATS_HID_REPORT_ID);
-                for (i = 0; i < (int)USB_STATS_PACKET_WIRE_SIZE; i++)
-                {
-                    Usb_write_endpoint_data(EP_STATS_HID_TX, 8, wire_packet[i]);
-                }
-                statistics_report_seq = report_seq;
-                Usb_send_in(EP_STATS_HID_TX);
-                sent = TRUE;
-            }
-            if (sent) {
-                statistics_reset_period_counters(s);
-            }
-        }
-#endif
+    if (statistics_runtime_is_active()) {
+        int report_index;
+        volatile usb_stats_t *s;
+
+        report_index = collect_index;
+        collect_index = 1 - collect_index;
+        s = &usb_stats[report_index];
+        statistics_build_wire_packet(wire_packet, s, &telemetry, report_seq);
+        statistics_try_send_packet(wire_packet, report_seq, s);
+    } else {
+        statistics_build_wire_packet(wire_packet, &statistics_heartbeat_stats,
+            &telemetry, report_seq);
+        statistics_try_send_packet(wire_packet, report_seq, NULL);
     }
 }
 
@@ -248,6 +271,7 @@ void statistics_test_reset(void) {
     int i;
     collect_index = 0;
     statistics_report_seq = 0;
+    statistics_runtime_active = TRUE;
     stats_telemetry_test_reset();
     for (i = 0; i < 2; i++) {
         usb_stats[i].generation = 0;
@@ -275,6 +299,10 @@ volatile usb_stats_t* statistics_test_get_buffer(int index) {
 
 int statistics_test_get_collect_index(void) {
     return collect_index;
+}
+
+U8 statistics_test_get_report_seq(void) {
+    return statistics_report_seq;
 }
 
 U8 statistics_test_build_wire_checksum(const U8 *wire)

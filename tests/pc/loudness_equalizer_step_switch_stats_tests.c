@@ -52,29 +52,29 @@ static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
 
     spk_vol_usb_L = -10 * 256;
     loudness_update_active_equalizer_step();
-    assert(loudness_get_last_db_spl() == 71);
+    assert(loudness_get_last_db_spl() == 70);
     assert(stats->event_count == 1);
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg0 == 80);
-    assert(stats->last_arg1 == 71);
-    assert(stats->last_arg2 == 8);
+    assert(stats->last_arg1 == 70);
+    assert(stats->last_arg2 == 7);
 
     spk_vol_usb_L = -20 * 256;
     loudness_update_active_equalizer_step();
-    assert(loudness_get_last_db_spl() == 62);
+    assert(loudness_get_last_db_spl() == 60);
     assert(stats->event_count == 2);
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
-    assert(stats->last_arg0 == 71);
-    assert(stats->last_arg1 == 62);
-    assert(stats->last_arg2 == 3);
+    assert(stats->last_arg0 == 70);
+    assert(stats->last_arg1 == 60);
+    assert(stats->last_arg2 == 2);
 
     spk_vol_usb_L = -30 * 256;
     loudness_update_active_equalizer_step();
-    assert(loudness_get_last_db_spl() == 53);
+    assert(loudness_get_last_db_spl() == 50);
     assert(stats->event_count == 3);
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
-    assert(stats->last_arg0 == 62);
-    assert(stats->last_arg1 == 53);
+    assert(stats->last_arg0 == 60);
+    assert(stats->last_arg1 == 50);
     assert(stats->last_arg2 == 0);
 
     spk_vol_usb_L = 0;

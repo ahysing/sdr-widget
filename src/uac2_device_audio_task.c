@@ -155,6 +155,15 @@ void uac2_device_audio_task_init(U8 ep_in, U8 ep_out, U8 ep_out_fb)
 
 #define UAC2_USB_OUT_MAX_STEREO_SAMPLES  (EP_OUT_LENGTH_2_HS / 8u)
 
+#ifndef LOUDNESS_DISABLE
+static Bool uac2_loudness_filter_enabled(void)
+{
+	return (usb_spk_mute == 0) &&
+		(current_freq.frequency == FREQ_44 ||
+		 current_freq.frequency == FREQ_48);
+}
+#endif
+
 #ifndef USBSTATISTICS_DISABLE
 /* Ignore normal loop overruns from the 1-tick UAC2 wake period; count only large scheduler slips. */
 #define STATISTICS_DEADLINE_SLIP_THRESHOLD_TICKS 100u
@@ -212,7 +221,7 @@ void uac2_device_audio_task(void *pvParameters)
 		vTaskDelayUntil(&xLastWakeTime, UAC2_configTSK_USB_DAUDIO_PERIOD);
 
 #ifndef USBSTATISTICS_DISABLE
-		{
+		if (statistics_runtime_is_active()) {
 			volatile usb_stats_t *stats = get_usb_stats();
 			portTickType now = xTaskGetTickCount();
 			portTickType slip = now - xLastWakeTime;
@@ -432,7 +441,7 @@ void uac2_device_audio_task(void *pvParameters)
 				}
 
 
-				if (playerStarted) {
+				if (playerStarted && FEATURE_LINUX_QUIRK_ON) {
 // 					Original Linux quirk replacement code
 //					if (((current_freq.frequency == FREQ_88) && (FB_rate > ((88 << 14) + (7 << 14)/10))) ||
 //						((current_freq.frequency == FREQ_96) && (FB_rate > ((96 << 14) + (6 << 14)/10))))
@@ -542,6 +551,12 @@ void uac2_device_audio_task(void *pvParameters)
 					xSemaphoreGive(mutexSpkUSB);
 
 					if( (!playerStarted) || (audio_OUT_must_sync) ) {	// BSB 20140917 attempting to help uacX_device_audio_task.c synchronize to DMA
+#ifndef USBSTATISTICS_DISABLE
+						if (statistics_runtime_is_active() && audio_OUT_must_sync) {
+							U8 freq_khz = (U8)(current_freq.frequency / 1000);
+							audio_stats_record_event(get_usb_stats(), USB_STATS_TAG_FORCED_RESYNC, freq_khz, 0, 0);
+						}
+#endif
 						time_to_calculate_gap = 0;			// BSB 20131031 moved gap calculation for DAC use
 						packets_since_feedback = 0;			// BSB 20131031 assuming feedback system may soon kick in
 						FB_error_acc = 0;					// BSB 20131102 reset feedback error
@@ -654,6 +669,22 @@ void uac2_device_audio_task(void *pvParameters)
 
 					} // end if skip_enable
 
+#ifndef USBSTATISTICS_DISABLE
+					if (statistics_runtime_is_active()) {
+						volatile usb_stats_t *stats = get_usb_stats();
+						U8 freq_khz = (U8)(current_freq.frequency / 1000);
+						U8 gap_arg = (U8)(old_gap >> 4);
+						U8 gap_low = (U8)(old_gap & 0x0Fu);
+						if (samples_to_transfer_OUT == 0) {
+							stats->overruns++;
+							audio_stats_record_event(stats, USB_STATS_TAG_SKIP, freq_khz, gap_arg, gap_low);
+						} else if (samples_to_transfer_OUT == 2) {
+							stats->underruns++;
+							audio_stats_record_event(stats, USB_STATS_TAG_INSERT, freq_khz, gap_arg, gap_low);
+						}
+					}
+#endif
+
 					silence_det_L = 0;						// We're looking for non-zero or non-static audio data..
 					silence_det_R = 0;						// We're looking for non-zero or non-static audio data..
 
@@ -705,13 +736,23 @@ void uac2_device_audio_task(void *pvParameters)
 
 
 #ifndef LOUDNESS_DISABLE
-						if (usb_spk_mute == 0) {
+						/* Keep the complete loudness path at base rates.
+						 * Through performance tests we have found higher frequency rates to fail this path. */
+						if (uac2_loudness_filter_enabled()) {
 							if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX) {
-								sample_L = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_L >> 8)) << 8;
-								sample_R = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_R >> 8)) << 8;
+								if (sample_L != 0) {
+									sample_L = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_L >> 8)) << 8;
+								}
+								if (sample_R != 0) {
+									sample_R = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_R >> 8)) << 8;
+								}
 							} else if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {
-								sample_L = LOUDNESS_FILTER_16BIT_CONTAINER(sample_L);
-								sample_R = LOUDNESS_FILTER_16BIT_CONTAINER(sample_R);
+								if (sample_L != 0) {
+									sample_L = LOUDNESS_FILTER_16BIT_CONTAINER(sample_L);
+								}
+								if (sample_R != 0) {
+									sample_R = LOUDNESS_FILTER_16BIT_CONTAINER(sample_R);
+								}
 							}
 						}
 #endif
@@ -861,7 +902,9 @@ void uac2_device_audio_task(void *pvParameters)
 
 							if(playerStarted) {
 #ifndef USBSTATISTICS_DISABLE
-								audio_stats_update(get_usb_stats(), gap, DAC_BUFFER_SIZE);
+								if (statistics_runtime_is_active()) {
+									audio_stats_update(get_usb_stats(), gap, DAC_BUFFER_SIZE);
+								}
 #endif
 
 	#ifndef USB_METALLIC_NOISE_SIM										// Disable skip/insert when demoing metallic noise

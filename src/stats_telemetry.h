@@ -4,7 +4,7 @@
 #include "compiler.h"
 
 typedef struct {
-    U16 frequency_hz;
+    U16 frequency_100hz;
     S8 track_dbfs;
     S8 track_rms_dbfs;
     S8 gain_dbfs;
@@ -13,7 +13,7 @@ typedef struct {
 } stats_telemetry_snapshot_t;
 
 void stats_telemetry_init(void);
-void stats_telemetry_set_frequency_hz(U16 frequency_hz);
+void stats_telemetry_set_frequency_hz(U32 frequency_hz);
 void stats_telemetry_set_gain_dbfs(S8 gain_dbfs);
 void stats_telemetry_set_track_levels(S8 track_dbfs, S8 track_rms_dbfs);
 void stats_telemetry_set_equalizer_state(S8 db_spl, U8 equalizer_step);

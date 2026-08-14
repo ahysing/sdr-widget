@@ -22,7 +22,7 @@ typedef struct {
 } usb_stats_t;
 
 #define USB_STATS_PACKET_HID_ANCHOR  0x53u
-#define USB_STATS_PACKET_VERSION     1u
+#define USB_STATS_PACKET_VERSION     2u
 #define USB_STATS_PACKET_WIRE_SIZE   37u
 #define USB_STATS_PACKET_CHECKSUM_OFFSET 3u
 
@@ -30,6 +30,9 @@ typedef struct {
 #define USB_STATS_TAG_EQUALIZER_STEP_SWITCH  1u
 #define USB_STATS_TAG_RAMP_COMPLETE 2u
 #define USB_STATS_TAG_FREQ_CHANGE  3u
+#define USB_STATS_TAG_SKIP         4u
+#define USB_STATS_TAG_INSERT       5u
+#define USB_STATS_TAG_FORCED_RESYNC 6u
 
 PACK(struct usb_stats_packet {
     U8 hid_anchor;
@@ -42,7 +45,7 @@ PACK(struct usb_stats_packet {
     U16 max_fifo;
     U16 min_fifo;
     U32 deadline_misses;
-    U16 frequency_hz;
+    U16 frequency_100hz;
     S8 track_dbfs;
     S8 track_rms_dbfs;
     S8 gain_dbfs;
@@ -61,12 +64,15 @@ extern void statistics_init();
 extern void statistics_task(void *pvParameters);
 extern void statistics_report_iteration();
 volatile usb_stats_t* get_usb_stats();
+Bool statistics_runtime_is_active(void);
+void statistics_runtime_set_active(Bool active);
 
 #ifdef UNIT_TEST
 void statistics_test_reset(void);
 void statistics_test_set_collect_index(int index);
 volatile usb_stats_t* statistics_test_get_buffer(int index);
 int statistics_test_get_collect_index(void);
+U8 statistics_test_get_report_seq(void);
 U8 statistics_test_build_wire_checksum(const U8 *wire);
 void statistics_test_build_wire_packet(U8 *wire, const volatile usb_stats_t *s, U8 report_seq);
 #endif

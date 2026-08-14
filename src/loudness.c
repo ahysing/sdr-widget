@@ -5,6 +5,7 @@ extern S16 spk_vol_usb_L, spk_vol_usb_R;
 #else
 #include "usb_specific_request.h"
 #include "device_audio_task.h"
+#include "taskAK5394A.h"
 #endif
 #ifndef USBSTATISTICS_DISABLE
 #include "usb_statistics.h"
@@ -41,6 +42,7 @@ extern S16 spk_vol_usb_L, spk_vol_usb_R;
  * must sum to 100. */
 #define LOUDNESS_GAIN_WEIGHT_PCT   90
 #define LOUDNESS_TRACK_WEIGHT_PCT  10
+
 /* Leaky integrator for the running mean-square of the input signal. */
 U64 root_mean_square = 0;
 static volatile U32 root_mean_square_seq = 0;
@@ -617,6 +619,9 @@ static volatile S16 target_db_fs = 0;
 #define ROOT_MEAN_SQUARE_WINDOW_SHIFT 21
 #define ROOT_MEAN_SQUARE_WINDOW_SIZE (1UL << ROOT_MEAN_SQUARE_WINDOW_SHIFT)
 
+
+Bool source_has_volume_control = FALSE;
+
 /* Stereo feeds left then right through loudness_update_track_level_*(), so the
  * leaky window counts 2*fs samples per second. A shift of 21 corresponds to
  * 2,097,152 samples (~22 seconds at 48 kHz stereo, ~5.5 seconds at 192 kHz).
@@ -688,6 +693,7 @@ static int32_t calculate_dB_24bit(uint32_t rms) {
 
 
 #ifdef PRECISE
+/* dead code: per-sample RMS integrator (not used in gain-only equalizer path) */
 void loudness_update_track_level_precise(int64_t sample) {
     uint32_t fs = current_freq.frequency;
     if (fs == 0) {
@@ -712,6 +718,7 @@ void loudness_update_track_level_precise(int64_t sample) {
 #endif
 
 #ifdef FAST
+/* dead code: per-sample RMS integrator (not used in gain-only equalizer path) */
 void loudness_update_track_level_fast(int32_t sample) {
     uint32_t fs = current_freq.frequency;
     if (fs == 0) {
@@ -1047,16 +1054,19 @@ static void loudness_update_filter_by_volume_or_frequency(void *pvParameters)
 
     while (TRUE)
     {
-        if (xLoudnessFreqQueue != NULL) {
-            if (xQueueReceive(xLoudnessFreqQueue, &target_frequency, xDelay20ms) == pdPASS) {
-                loudness_change_frequency(target_frequency);
-            }
-        } else {
+        if (xLoudnessFreqQueue == NULL) {
             vTaskDelay(xDelay20ms);
             continue;
         }
 
-        loudness_update_active_equalizer_step();
+        if (current_freq.frequency == FREQ_44 || current_freq.frequency == FREQ_48) {
+            if (xQueueReceive(xLoudnessFreqQueue, &target_frequency, xDelay20ms) == pdPASS) {
+                loudness_change_frequency(target_frequency);
+            }
+            loudness_update_active_equalizer_step();
+        } else {
+            (void)xQueueReceive(xLoudnessFreqQueue, &target_frequency, portMAX_DELAY);
+        }
     }
 }
 
@@ -1100,7 +1110,8 @@ void loudness_request_frequency_change(uint32_t frequency)
 }
 #endif
 
-static int32_t loudness_calculate_db_spl_x10(void) {
+#if 0 /* dead code: blended track RMS + host gain SPL estimate */
+static int32_t loudness_calculate_db_spl_x10_blended(void) {
     int32_t track_dbfs = loudness_get_track_dbfs();
     int32_t track_normalized = track_dbfs - LOUDNESS_TRACK_DBFS_MIN;
     int32_t host_gain_dbfs = loudness_get_gain_dbfs();
@@ -1112,6 +1123,12 @@ static int32_t loudness_calculate_db_spl_x10(void) {
 
     int32_t blended_dbfs_x10 = (blended_scaled_x100 - 50) / 100;
     return blended_dbfs_x10 + (LOUDNESS_REF_DB_SPL * 10);
+}
+#endif
+
+static int32_t loudness_calculate_db_spl_x10(void) {
+    int32_t host_gain_dbfs = loudness_get_gain_dbfs();
+    return (host_gain_dbfs * 10) + (LOUDNESS_REF_DB_SPL * 10);
 }
 
 static int32_t loudness_calculate_db_spl(void) {
@@ -1138,16 +1155,8 @@ void loudness_update_active_equalizer_step(void) {
         loudness_select_equalizer_step(db_spl);
     }
 #if !defined(USBSTATISTICS_DISABLE)
-    {
-        int32_t track_rms_dbfs = loudness_get_track_rms_dbfs();
-        int32_t track_dbfs = loudness_get_track_dbfs();
-
-        stats_telemetry_set_track_levels(
-            loudness_clamp_s8(track_dbfs),
-            loudness_clamp_s8(track_rms_dbfs));
-        stats_telemetry_set_gain_dbfs(
-            loudness_clamp_s8(loudness_get_gain_dbfs()));
-    }
+    stats_telemetry_set_gain_dbfs(
+        loudness_clamp_s8(loudness_get_gain_dbfs()));
 #endif
 }
 
@@ -1239,8 +1248,8 @@ void loudness_filter_init(void) {
 #ifdef PRECISE
 int64_t loudness_precise_24bit(int64_t sample)
 {
-    loudness_update_track_level_precise(sample);
-    for (int i = 0; i < LOUDNESS_FILTERS; i++) {
+    int i;
+    for (i = 0; i < LOUDNESS_FILTERS; i++) {
         sample = biquad_step_precise_24bit(sample, &loudness_states[i]);
     }
     return sample;
@@ -1250,7 +1259,6 @@ int64_t loudness_precise_24bit(int64_t sample)
 #ifdef FAST
 int64_t loudness_fast_24bit(int32_t sample)
 {
-    loudness_update_track_level_fast(sample);
     int i;
     for (i = 0; i < LOUDNESS_FILTERS; i++) {
         sample = biquad_step_fast_32bit(sample, &loudness_states[i]);

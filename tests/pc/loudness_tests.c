@@ -167,17 +167,17 @@ void test_loudness_update_active_equalizer_step_uncompressed_18dbfs(void) {
     spk_vol_usb_L = -10 * 256;
     loudness_update_active_equalizer_step();
     printf("  [-10 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 71);
+    assert(loudness_get_last_db_spl() == 70);
 
     spk_vol_usb_L = -20 * 256;
     loudness_update_active_equalizer_step();
     printf("  [-20 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 62);
+    assert(loudness_get_last_db_spl() == 60);
 
     spk_vol_usb_L = -30 * 256;
     loudness_update_active_equalizer_step();
     printf("  [-30 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 53);
+    assert(loudness_get_last_db_spl() == 50);
 
     printf("test_loudness_update_active_equalizer_step_uncompressed_18dbfs passed\n\n");
 }
@@ -187,29 +187,25 @@ void test_loudness_update_active_equalizer_step_compressed_6dbfs(void) {
     loudness_init();
     root_mean_square = 17592186044416ULL;
 
-    // 0 dBFS dempning -> Forventer 81 dB SPL (+1 dB på grunn av komprimert energi)
     spk_vol_usb_L = 0;
     loudness_update_active_equalizer_step();
     printf("  [0 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 81);
+    assert(loudness_get_last_db_spl() == 80);
 
-    // -10 dBFS dempning -> Forventer 71 dB SPL
     spk_vol_usb_L = -10 * 256;
     loudness_update_active_equalizer_step();
     printf("  [-10 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 72);
+    assert(loudness_get_last_db_spl() == 70);
 
-    // -20 dBFS dempning -> Forventer 61 dB SPL
     spk_vol_usb_L = -20 * 256;
     loudness_update_active_equalizer_step();
     printf("  [-20 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 63);
+    assert(loudness_get_last_db_spl() == 60);
 
-    // -30 dBFS dempning -> Forventer 51 dB SPL
     spk_vol_usb_L = -30 * 256;
     loudness_update_active_equalizer_step();
     printf("  [-30 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 54);
+    assert(loudness_get_last_db_spl() == 50);
 
     printf("test_loudness_update_active_equalizer_step_compressed_6dbfs passed\n\n");
 }

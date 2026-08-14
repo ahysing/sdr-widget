@@ -130,7 +130,7 @@ void test_statistics_wire_packet_is_little_endian() {
     buf->deadline_misses = 11;
     buf->event_count = 3;
 
-    stats_telemetry_set_frequency_hz(48000);
+    stats_telemetry_set_frequency_hz(192000);
     stats_telemetry_set_track_levels((S8)-12, (S8)-24);
     stats_telemetry_set_gain_dbfs((S8)-10);
     stats_telemetry_set_equalizer_state((S8)80, 2);
@@ -151,7 +151,7 @@ void test_statistics_wire_packet_is_little_endian() {
     assert(wire[20] == 0x00);
     assert(wire[21] == 0x00);
     assert(wire[22] == 0x80);
-    assert(wire[23] == 0xbb);
+    assert(wire[23] == 0x07);
     assert((int8_t)wire[24] == -12);
     assert((int8_t)wire[25] == -24);
     assert((int8_t)wire[26] == -10);
@@ -165,6 +165,88 @@ void test_statistics_wire_packet_is_little_endian() {
     printf("test_statistics_wire_packet_is_little_endian passed\n");
 }
 
+void test_statistics_heartbeat_mode_no_buffer_swap() {
+    printf("Running test_statistics_heartbeat_mode_no_buffer_swap...\n");
+    setup();
+
+    Is_device_enumerated_fake.return_val = TRUE;
+    Is_usb_in_ready_fake.return_val = TRUE;
+
+    statistics_runtime_set_active(FALSE);
+    assert(statistics_test_get_collect_index() == 0);
+
+    volatile usb_stats_t *buf0 = statistics_test_get_buffer(0);
+    buf0->overruns = 42;
+    buf0->deadline_misses = 99;
+
+    statistics_report_iteration();
+
+    assert(statistics_test_get_collect_index() == 0);
+    assert(buf0->overruns == 42);
+    assert(buf0->deadline_misses == 99);
+    assert(statistics_test_get_report_seq() == 1);
+    assert(Usb_send_in_fake.call_count == 1);
+    printf("test_statistics_heartbeat_mode_no_buffer_swap passed\n");
+}
+
+void test_statistics_heartbeat_mode_zero_transport_counters() {
+    printf("Running test_statistics_heartbeat_mode_zero_transport_counters...\n");
+    setup();
+
+    stats_telemetry_set_frequency_hz(96000);
+
+    volatile usb_stats_t heartbeat = {
+        0, 0, 0, 0, 0, 0xFFFF, 0, 0, USB_STATS_TAG_NONE, 0, 0, 0
+    };
+    U8 wire[USB_STATS_PACKET_WIRE_SIZE];
+
+    statistics_test_build_wire_packet(wire, &heartbeat, 1);
+
+    assert(wire[4] == 0);
+    assert(wire[5] == 0);
+    assert(wire[6] == 0);
+    assert(wire[7] == 0);
+    assert(wire[8] == 0);
+    assert(wire[9] == 0);
+    assert(wire[10] == 0);
+    assert(wire[11] == 0);
+    assert(wire[12] == 0);
+    assert(wire[13] == 0);
+    assert(wire[14] == 0);
+    assert(wire[15] == 0);
+    assert(wire[16] == 0xFF);
+    assert(wire[17] == 0xFF);
+    assert(wire[18] == 0);
+    assert(wire[19] == 0);
+    assert(wire[20] == 0);
+    assert(wire[21] == 0);
+    assert(wire[22] == 0xC0);
+    assert(wire[23] == 0x03);
+    assert(wire[32] == USB_STATS_TAG_NONE);
+    assert(wire[3] == statistics_test_build_wire_checksum(wire));
+    printf("test_statistics_heartbeat_mode_zero_transport_counters passed\n");
+}
+
+void test_statistics_full_mode_restores_buffer_swap() {
+    printf("Running test_statistics_full_mode_restores_buffer_swap...\n");
+    setup();
+
+    Is_device_enumerated_fake.return_val = TRUE;
+    Is_usb_in_ready_fake.return_val = TRUE;
+
+    statistics_runtime_set_active(FALSE);
+    statistics_report_iteration();
+    assert(statistics_test_get_collect_index() == 0);
+
+    statistics_runtime_set_active(TRUE);
+    statistics_report_iteration();
+    assert(statistics_test_get_collect_index() == 1);
+
+    statistics_report_iteration();
+    assert(statistics_test_get_collect_index() == 0);
+    printf("test_statistics_full_mode_restores_buffer_swap passed\n");
+}
+
 int main() {
     test_get_usb_stats();
     test_statistics_report_iteration_swaps_buffers();
@@ -173,6 +255,9 @@ int main() {
     test_statistics_report_iteration_reports_deadline_misses();
     test_statistics_report_iteration_preserves_counters_on_send_failure();
     test_statistics_wire_packet_is_little_endian();
+    test_statistics_heartbeat_mode_no_buffer_swap();
+    test_statistics_heartbeat_mode_zero_transport_counters();
+    test_statistics_full_mode_restores_buffer_swap();
     printf("\nAll USB statistics tests completed!\n");
     return 0;
 }

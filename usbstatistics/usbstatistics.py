@@ -15,16 +15,21 @@ else:
 VENDOR_ID = 0x16D0
 PRODUCT_IDS = (
     0x075D,  # AB-1.x UAC2 (Henry Audio USB DAC 128 Mk2)
+    0x075F,  # AB-1.x UAC2 current Windows profile
     0x0762,  # SDR-WIDGET UAC2
     0x075C,  # AB-1.x UAC1
     0x0761,  # SDR-WIDGET UAC1
 )
 
+# Above 48 kHz the firmware still sends HID reports every ~1 s (heartbeat mode):
+# transport counters are zero/null, frequency_hz is live, and skip/insert/deadline_misses
+# are not collected. That is not a disconnected HID endpoint.
+
 USB_STATS_HID_REPORT_ID = 1
 USB_STATS_HID_TRANSFER_SIZE = 64
 USB_STATS_PACKET_HID_ANCHOR = 0x53
 USB_STATS_PACKET_MAGIC = USB_STATS_PACKET_HID_ANCHOR  # backward-compatible alias
-USB_STATS_PACKET_VERSION = 1
+USB_STATS_PACKET_VERSION = 2
 USB_STATS_PACKET_FORMAT = "<BBBBIIHHHIHbbbbIBBBBB"
 USB_STATS_PACKET_SIZE = struct.calcsize(USB_STATS_PACKET_FORMAT)
 USB_STATS_PACKET_CHECKSUM_INDEX = 3
@@ -33,6 +38,9 @@ USB_STATS_TAG_NONE = 0
 USB_STATS_TAG_EQUALIZER_STEP_SWITCH = 1
 USB_STATS_TAG_RAMP_COMPLETE = 2
 USB_STATS_TAG_FREQ_CHANGE = 3
+USB_STATS_TAG_SKIP = 4
+USB_STATS_TAG_INSERT = 5
+USB_STATS_TAG_FORCED_RESYNC = 6
 USB_STATS_MIN_FIFO_IDLE = 0xFFFF
 USB_STATS_FIFO_SANITY_MAX = 6144
 DEVICE_WAIT_TIMEOUT_S = 5.0
@@ -198,6 +206,23 @@ def decode_last_event(tag, arg0, arg1, arg2):
         }
     if tag == USB_STATS_TAG_RAMP_COMPLETE:
         return {"ramp_complete": True}
+    if tag == USB_STATS_TAG_SKIP:
+        return {
+            "skip": True,
+            "freq_khz": arg0,
+            "gap": (arg1 << 4) | (arg2 & 0x0F),
+        }
+    if tag == USB_STATS_TAG_INSERT:
+        return {
+            "insert": True,
+            "freq_khz": arg0,
+            "gap": (arg1 << 4) | (arg2 & 0x0F),
+        }
+    if tag == USB_STATS_TAG_FORCED_RESYNC:
+        return {
+            "forced_resync": True,
+            "freq_khz": arg0,
+        }
     if tag == USB_STATS_TAG_NONE:
         return None
     return {
@@ -316,7 +341,7 @@ def parse_stats_payload(payload):
         max_fifo,
         min_fifo,
         deadline_misses,
-        frequency_hz,
+        frequency_100hz,
         track_dbfs,
         track_rms_dbfs,
         gain_dbfs,
@@ -341,7 +366,7 @@ def parse_stats_payload(payload):
         "max_fifo": max_fifo,
         "min_fifo": min_fifo,
         "deadline_misses": deadline_misses,
-        "frequency_hz": frequency_hz,
+        "frequency_hz": frequency_100hz * 100,
         "track_dbfs": track_dbfs,
         "track_rms_dbfs": track_rms_dbfs,
         "gain_dbfs": gain_dbfs,

@@ -197,7 +197,7 @@ to exclude the API function. */
 /* USB device Audio Statistics task definitions. */
 #define configTSK_USB_DAUDIOSTATS_NAME				((const signed portCHAR *)"USB Device Audio Statistics")
 #define configTSK_USB_DAUDIOSTATS_STACK_SIZE		128
-#define configTSK_USB_DAUDIOSTATS_PRIORITY		(tskIDLE_PRIORITY + 3)
+#define configTSK_USB_DAUDIOSTATS_PRIORITY		(tskIDLE_PRIORITY + 1)
 #define configTSK_USB_DAUDIOSTATS_PERIOD_MS	   1000
 
 /* taskMoboCtrl definitions. */

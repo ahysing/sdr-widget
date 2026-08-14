@@ -163,8 +163,8 @@
     #define AUDIO_PRODUCT_ID_8    0x0768	//!  USB8741	UAC2 PID
   #elif (defined(FEATURE_PRODUCT_AB1x))
     #define AUDIO_VENDOR_ID       0x16d0	//!  AB-1.x	VID
-    #define AUDIO_PRODUCT_ID_9    0x075c	//!  AB-1.x	UAC1 PID
-    #define AUDIO_PRODUCT_ID_10   0x075d	//!  AB-1.x	UAC2 PID
+    #define AUDIO_PRODUCT_ID_9    0x075e	//!  AB-1.x	UAC1 PID
+    #define AUDIO_PRODUCT_ID_10   0x075f	//!  AB-1.x	UAC2 PID
   #elif (defined(FEATURE_PRODUCT_QNKTC_FUTURE))
     #define AUDIO_VENDOR_ID       0x16d0	//!  AB-1.x	VID
     #define AUDIO_PRODUCT_ID_11   0x075e	//!  QNKTC future use UAC1 PID

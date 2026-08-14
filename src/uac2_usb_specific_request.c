@@ -186,6 +186,7 @@ void send_descriptor(U16 wLength, Bool zlp) {
 // This will cause the ASIO driver to not see the 196ksps definition.
 // To fix -that- search for "triplets" in the ASIO driver code and change the array size from 64 to 128.
 //const U8 Speedx[38] = { // 74
+#ifndef HW_GEN_FMADC
 const U8 Speedx_hs[74] = {
 	0x06, 0x00, // Number of sample rate triplets with UAC2 over USB 2.0
 
@@ -215,7 +216,7 @@ const U8 Speedx_hs[74] = {
 };
 
 const U8 Speedx_fs[26] = {
-	0x02, 0x00, // Number of sample rate triplets with UAC2 over USB 1.1 (not tested!)
+	0x02, 0x00, // Number of sample rate triplets with UAC2 over USB 1.1
 
 	0x44,0xac,0x00,0x00,	//44.1k Min
 	0x44,0xac,0x00,0x00,	//44.1k Max
@@ -225,6 +226,39 @@ const U8 Speedx_fs[26] = {
 	0x80,0xbb,0x00,0x00,	//48k Max
 	0x00,0x00,0x00,0x00,	// 0 Res
 };
+#else
+const U8 Speedx_hs[14] = {
+	0x01, 0x00,
+
+	0x00,0x77,0x01,0x00,	//96k Min
+	0x00,0x77,0x01,0x00,	//96k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
+};
+
+const U8 Speedx_fs[14] = {
+	0x01, 0x00,
+
+	0x00,0x77,0x01,0x00,	//96k Min
+	0x00,0x77,0x01,0x00,	//96k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
+};
+#endif
+
+static Bool uac2_sample_rate_is_supported(U32 frequency)
+{
+	return (frequency == FREQ_44) || (frequency == FREQ_48) ||
+	       (frequency == FREQ_88) || (frequency == FREQ_96) ||
+	       (frequency == FREQ_176) || (frequency == FREQ_192);
+}
+
+static void uac2_reject_unsupported_sample_rate(void)
+{
+	current_freq.frequency = FREQ_48;
+	current_freq.freq_bytes[3] = 0x00;
+	current_freq.freq_bytes[2] = 0xbb;
+	current_freq.freq_bytes[1] = 0x80;
+	current_freq.freq_bytes[0] = 0x00;
+}
 
 
 
@@ -311,7 +345,11 @@ void uac2_freq_change_handler() {
 			 */
 
 			//				FB_rate = (96) << 14; // Generic OS, supported by linux OS patch...
-			FB_rate = (99) << 14; // Needed by Linux, linux-quirk replacement, in initial, not in nominal
+			if (FEATURE_LINUX_QUIRK_ON) {
+				FB_rate = (99) << 14; // Linux quirk: initial overshoot before nominal
+			} else {
+				FB_rate = (96) << 14;
+			}
 			FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
 			FB_rate_nominal = ((96) << 14) + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system
 		}
@@ -340,7 +378,11 @@ void uac2_freq_change_handler() {
 			 */
 
 			//				FB_rate = (88 << 14) + (1<<14)/5; // Generic code, supported by linux OS patch
-			FB_rate = (99 << 14); // Needed by Linux, Linux-quirk replacement, in initial, not in nominal
+			if (FEATURE_LINUX_QUIRK_ON) {
+				FB_rate = (99) << 14; // Linux quirk: initial overshoot before nominal
+			} else {
+				FB_rate = (88 << 14) + (1 << 14) / 5;
+			}
 			FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
 			FB_rate_nominal = ((88 << 14) + (1 << 14) / 5) + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system
 		}
@@ -464,9 +506,12 @@ void uac2_freq_change_handler() {
 			static uint32_t stats_last_sample_rate_khz;
 			uint32_t new_hz = current_freq.frequency;
 			uint32_t new_khz = new_hz / 1000U;
+			Bool stats_full_mode = (new_hz == FREQ_44 || new_hz == FREQ_48);
 
-			stats_telemetry_set_frequency_hz((U16)new_hz);
-			if (stats_last_sample_rate_khz != 0U && stats_last_sample_rate_khz != new_khz) {
+			stats_telemetry_set_frequency_hz(new_hz);
+			statistics_runtime_set_active(stats_full_mode);
+			if (stats_full_mode && stats_last_sample_rate_khz != 0U &&
+				stats_last_sample_rate_khz != new_khz) {
 				audio_stats_record_event(get_usb_stats(), USB_STATS_TAG_FREQ_CHANGE,
 					(U8)stats_last_sample_rate_khz, (U8)new_khz, 0);
 			}
@@ -545,18 +590,11 @@ void uac2_user_set_interface(U8 wIndex, U8 wValue) {
 // BSB 20120720 copy from uac1_usb_specific_request.c insert
 
 #ifndef USBSTATISTICS_DISABLE
-static Bool uac2_user_get_stats_hid_descriptor(void) {
-	Bool zlp;
-	U16 wLength;
-	U16 wIndex;
-	U8 descriptor_type;
-	U16 wInterface;
+static Bool uac2_user_get_stats_hid_descriptor(U8 string_type, U8 descriptor_type, U16 wInterface, U16 wLength)
+{
+	Bool zlp = FALSE;
 
-	zlp = FALSE;
-	(void)Usb_read_endpoint_data(EP_CONTROL, 8); /* LSB of wValue (descriptor index) */
-	descriptor_type = Usb_read_endpoint_data(EP_CONTROL, 8); /* MSB of wValue (descriptor type) */
-	wInterface = usb_format_usb_to_mcu_data(16, Usb_read_endpoint_data(EP_CONTROL, 16));
-
+	(void)string_type;
 	if (wInterface != DSC_INTERFACE_STATISTICS) {
 		return FALSE;
 	}
@@ -584,10 +622,6 @@ static Bool uac2_user_get_stats_hid_descriptor(void) {
 		return FALSE;
 	}
 
-	wIndex = Usb_read_endpoint_data(EP_CONTROL, 16);
-	wIndex = usb_format_usb_to_mcu_data(16, wIndex);
-	wLength = Usb_read_endpoint_data(EP_CONTROL, 16);
-	wLength = usb_format_usb_to_mcu_data(16, wLength);
 	Usb_ack_setup_received_free();
 	send_descriptor(wLength, zlp);
 	return TRUE;
@@ -595,23 +629,13 @@ static Bool uac2_user_get_stats_hid_descriptor(void) {
 #endif
 
 #ifdef FEATURE_HID
-static Bool uac2_user_get_interface_descriptor(void) __attribute__((unused));
-static Bool uac2_user_get_interface_descriptor(void) {
-	Bool zlp;
-	U16 wLength;
-	U16 wIndex;
-	U8 descriptor_type;
-	U8 string_type;
-	U16 wInterface;
+static Bool uac2_user_get_interface_descriptor(U8 string_type, U8 descriptor_type, U16 wInterface, U16 wLength)
+{
+	Bool zlp = FALSE;
 
 #ifdef USB_STATE_MACHINE_DEBUG
 	print_dbg_char('a'); // xperia
 #endif
-
-	zlp = FALSE; /* no zero length packet */
-	string_type = Usb_read_endpoint_data(EP_CONTROL, 8); /* read LSB of wValue    */
-	descriptor_type = Usb_read_endpoint_data(EP_CONTROL, 8); /* read MSB of wValue    */
-	wInterface = usb_format_usb_to_mcu_data(16,Usb_read_endpoint_data(EP_CONTROL, 16));
 
 	switch (descriptor_type) {
 	case HID_DESCRIPTOR:
@@ -653,7 +677,8 @@ static Bool uac2_user_get_interface_descriptor(void) {
 		print_dbg_char('e'); // xperia
 #endif
 
-		//? Why doesn't this test for wInterface == DSC_INTERFACE_HID ?
+		(void)wInterface;
+		(void)string_type;
 		data_to_transfer = sizeof(usb_hid_report_descriptor);
 		pbuffer = usb_hid_report_descriptor;
 		break;
@@ -662,7 +687,9 @@ static Bool uac2_user_get_interface_descriptor(void) {
 #ifdef USB_STATE_MACHINE_DEBUG
 		print_dbg_char('f'); // xperia
 #endif
-		// TODO
+		(void)string_type;
+		(void)wInterface;
+		(void)wLength;
 		return FALSE;
 	default:
 
@@ -673,12 +700,8 @@ static Bool uac2_user_get_interface_descriptor(void) {
 		return FALSE;
 	}
 
-	wIndex = Usb_read_endpoint_data(EP_CONTROL, 16);
-	wIndex = usb_format_usb_to_mcu_data(16, wIndex);
-	wLength = Usb_read_endpoint_data(EP_CONTROL, 16);
-	wLength = usb_format_usb_to_mcu_data(16, wLength);
-	Usb_ack_setup_received_free(); //!< clear the setup received flag
-	send_descriptor(wLength, zlp); // Send the descriptor. pbuffer and data_to_transfer are global variables which must be set up by code
+	Usb_ack_setup_received_free();
+	send_descriptor(wLength, zlp);
 
 #ifdef USB_STATE_MACHINE_DEBUG
 	print_dbg_char('h'); // xperia
@@ -746,23 +769,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 	print_dbg_char_hex(request); // xperia
 #endif
 
-	// BSB 20120720 added
-	// this should vector to specified interface handler
-	if (type == IN_INTERFACE && request == GET_DESCRIPTOR) {
-#ifndef USBSTATISTICS_DISABLE
-		if (uac2_user_get_stats_hid_descriptor()) {
-			return TRUE;
-		}
-#endif
-#ifdef FEATURE_HID
-		return uac2_user_get_interface_descriptor();
-#else
-		return FALSE;
-#endif
-	}
-
-	// Read wValue
-	// why are these file statics?
+	// Read the setup packet once; all handlers share these fields.
 	wValue_lsb = Usb_read_endpoint_data(EP_CONTROL, 8);
 	wValue_msb = Usb_read_endpoint_data(EP_CONTROL, 8);
 	wIndex
@@ -781,6 +788,22 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 	print_dbg_char('\n'); // xperia
 #endif
 
+	if (type == IN_INTERFACE && request == GET_DESCRIPTOR) {
+#ifndef USBSTATISTICS_DISABLE
+		if (uac2_user_get_stats_hid_descriptor(wValue_lsb, wValue_msb, wIndex, wLength)) {
+			return TRUE;
+		}
+#endif
+#ifdef FEATURE_HID
+		if (uac2_user_get_interface_descriptor(wValue_lsb, wValue_msb, wIndex, wLength)) {
+			return TRUE;
+		}
+#endif
+		return FALSE;
+	}
+
+	// BSB 20120720 added
+	// this should vector to specified interface handler
 
 	// Mute button push
 	// R2101.0114 type=OUT_CL_INTERFACE request=1 wIndex = 0x1401
@@ -967,7 +990,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 
 					Usb_reset_endpoint_fifo_access(EP_CONTROL);
 					Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
-					Usb_write_endpoint_data(EP_CONTROL, 8, 0b00000011); // alt 0 and 1 valid
+					Usb_write_endpoint_data(EP_CONTROL, 8, 0b00000111); // alt 0, 1, and 2 valid
 					Usb_ack_control_in_ready_send();
 
 					while (!Is_usb_control_out_received())
@@ -1069,6 +1092,8 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 							send_descriptor(wLength, FALSE); // Send the descriptor. pbuffer and data_to_transfer are global variables which must be set up by code
 						}
 
+						/* send_descriptor() already acks IN and waits for the STATUS
+						 * phase (see send_descriptor()); kept for historical parity. */
 						Usb_ack_control_in_ready_send();
 
 						while (!Is_usb_control_out_received())
@@ -1142,6 +1167,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 					} else
 						return FALSE;
 
+#ifdef FEATURE_CLOCK_SELECTOR
 				case CSX_ID:
 					if (wValue_msb == AUDIO_CX_CLOCK_SELECTOR //&& wValue_lsb == 0
 							&& request == AUDIO_CS_REQUEST_CUR) {
@@ -1158,6 +1184,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						return TRUE;
 					} else
 						return FALSE;
+#endif
 
 				case MIC_FEATURE_UNIT_ID:
 					if ((wValue_msb == AUDIO_FU_CONTROL_CS_MUTE) && (request
@@ -1394,6 +1421,9 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 								=Usb_read_endpoint_data(EP_CONTROL, 8);
 						current_freq.freq_bytes[0]
 								=Usb_read_endpoint_data(EP_CONTROL, 8);
+						if (!uac2_sample_rate_is_supported(current_freq.frequency)) {
+							uac2_reject_unsupported_sample_rate();
+						}
 						Mic_freq.freq_bytes[3] = current_freq.freq_bytes[3];
 						Mic_freq.freq_bytes[2] = current_freq.freq_bytes[2];
 						Mic_freq.freq_bytes[1] = current_freq.freq_bytes[1];
@@ -1429,6 +1459,9 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 								=Usb_read_endpoint_data(EP_CONTROL, 8);
 						current_freq.freq_bytes[0]
 								=Usb_read_endpoint_data(EP_CONTROL, 8);
+						if (!uac2_sample_rate_is_supported(current_freq.frequency)) {
+							uac2_reject_unsupported_sample_rate();
+						}
 						uac2_freq_change_handler();
 
 						// some freq only applies to playback
@@ -1446,6 +1479,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 					} else
 						return FALSE;
 
+#ifdef FEATURE_CLOCK_SELECTOR
 				case CSX_ID:
 					if ((wValue_msb == AUDIO_CX_CLOCK_SELECTOR) && (wValue_lsb
 							== 0) && (request == AUDIO_CS_REQUEST_CUR)) {
@@ -1464,6 +1498,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						return TRUE;
 					} else
 						return FALSE;
+#endif
 
 				case MIC_FEATURE_UNIT_ID:
 					if ((wValue_msb == AUDIO_FU_CONTROL_CS_MUTE) && (request
