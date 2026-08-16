@@ -9,6 +9,7 @@ static volatile S8 stats_telemetry_track_rms_dbfs;
 static volatile S8 stats_telemetry_gain_dbfs;
 static volatile S8 stats_telemetry_db_spl;
 static volatile U8 stats_telemetry_equalizer_step;
+static volatile U8 stats_telemetry_source_volume_control;
 
 void stats_telemetry_init(void)
 {
@@ -19,6 +20,7 @@ void stats_telemetry_init(void)
     stats_telemetry_gain_dbfs = 0;
     stats_telemetry_db_spl = 0;
     stats_telemetry_equalizer_step = 0;
+    stats_telemetry_source_volume_control = 0;
 }
 
 void stats_telemetry_set_frequency_hz(U32 frequency_hz)
@@ -51,6 +53,13 @@ void stats_telemetry_set_equalizer_state(S8 db_spl, U8 equalizer_step)
     stats_telemetry_generation++;
 }
 
+void stats_telemetry_set_source_volume_control(U8 source_volume_control)
+{
+    stats_telemetry_generation++;
+    stats_telemetry_source_volume_control = source_volume_control ? 1u : 0u;
+    stats_telemetry_generation++;
+}
+
 stats_telemetry_snapshot_t stats_telemetry_read_best_effort(void)
 {
     stats_telemetry_snapshot_t snap;
@@ -65,6 +74,7 @@ stats_telemetry_snapshot_t stats_telemetry_read_best_effort(void)
         snap.gain_dbfs = stats_telemetry_gain_dbfs;
         snap.db_spl = stats_telemetry_db_spl;
         snap.equalizer_step = stats_telemetry_equalizer_step;
+        snap.source_volume_control = stats_telemetry_source_volume_control;
         g2 = stats_telemetry_generation;
     } while (g1 != g2 || (g1 & 1u));
 
@@ -81,6 +91,7 @@ void stats_telemetry_test_reset(void)
     stats_telemetry_gain_dbfs = 0;
     stats_telemetry_db_spl = 0;
     stats_telemetry_equalizer_step = 0;
+    stats_telemetry_source_volume_control = 0;
 }
 #endif
 

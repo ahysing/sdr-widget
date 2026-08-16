@@ -162,13 +162,40 @@ def plot(args, optimized_params_per_phon, f_eval, sample_rate_hz):
     from matplotlib.ticker import ScalarFormatter, LogLocator
     fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
     vline = ax.axvline(color='k', linestyle='--', linewidth=0.5, visible=False)
-    text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
+    text = ax.text(0.5, 0.98, '', transform=ax.transAxes, ha='center', va='top', fontsize='small',
+                   family='monospace', bbox=dict(boxstyle='round', facecolor='white', alpha=0.85))
+    hover_data = {}
+
+    def format_gap_tooltip(freq, gaps):
+        lines = [f"freq: {freq:.1f} Hz"]
+        split = (len(PHON_LEVELS) + 1) // 2
+        col_a, col_b = PHON_LEVELS[:split], PHON_LEVELS[split:]
+        col_width = 20
+        for i in range(max(len(col_a), len(col_b))):
+            row = []
+            if i < len(col_a):
+                p = col_a[i]
+                row.append(f"{p:2d}ph  {gaps[p]:+.2f} dB".ljust(col_width))
+            if i < len(col_b):
+                p = col_b[i]
+                row.append(f"{p:2d}ph  {gaps[p]:+.2f} dB")
+            lines.append(''.join(row))
+        return '\n'.join(lines)
 
     def on_mouse_move(event):
         if event.inaxes and event.xdata and event.xdata > 0:
-            vline.set_xdata([event.xdata])
+            freq = float(np.clip(event.xdata, f_eval[0], f_eval[-1]))
+            vline.set_xdata([freq])
             vline.set_visible(True)
-            text.set_text(f"freq: {event.xdata:.1f} Hz")
+            if args.graph_type == "loudnesscontours":
+                gaps = {}
+                for phon in PHON_LEVELS:
+                    y_iso = hover_data[phon]['iso'](freq)
+                    y_filter = hover_data[phon]['filter'](freq)
+                    gaps[phon] = y_iso - y_filter
+                text.set_text(format_gap_tooltip(freq, gaps))
+            else:
+                text.set_text(f"freq: {freq:.1f} Hz")
             fig.canvas.draw_idle()
         else:
             vline.set_visible(False)
@@ -203,6 +230,11 @@ def plot(args, optimized_params_per_phon, f_eval, sample_rate_hz):
             f_iso_x, spl_iso_x = iso226_spl_contour(phon, hfe=True)
             spl_x = CubicSpline(f_iso_x, spl_iso_x)(f_eval)
             ax.semilogx(f_eval, spl_x, ':', label=f"ISO226 {phon}ph", color=color, alpha=0.9)
+
+            hover_data[phon] = {
+                'iso': CubicSpline(f_eval, spl_x),
+                'filter': CubicSpline(f_eval, y),
+            }
 
     if args.graph_type == "loudnesscontours":
         f_iso_ref, spl_iso_ref = iso226_spl_contour(80, hfe=True)

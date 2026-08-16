@@ -18,8 +18,6 @@ In the digital age we can measure the volume of the playback and find the exact 
 
 ## Formula
 
-The firmware uses a fixed reference: **0 dBFS digital full scale = 80 dB SPL** (`LOUDNESS_REF_DB_SPL` / `LOUDNESS_REF_PHON` = 80).
-
 When the estimated listening level is **at or above 80 phon**, step **13** loads **unity biquads** (transparent IIR pass-through). Below 80 phon, two IIR biquad sections apply frequency-dependent gain to restore tonal balance:
 
 | Filter | Type | Approx. frequency | Role |
@@ -120,9 +118,11 @@ Round-half-up is applied for negative blends. Typical result range: **~53–81 d
 
 ## Transitioning between loudness levels
 
-Coefficients commit **immediately** when the background task selects a new step. Filter **state** (`loudness_states[]`) is preserved across step changes — adjacent 2 phon steps are close enough that no coefficient ramp or crossfade is required.
+The biquad runs as **Direct Form II** with `w1`/`w2` delay state per shelf section (low + high). Coefficients commit **immediately** when the background task selects a new step. On step change, `w1`/`w2` are **scaled** (not zeroed) by Q15 midpoint factors `(65/63)` per step up and `(63/65)` per step down — combined into a single factor for multi-step jumps (e.g. step 7→2 applies five down-scales worth of gain in one multiply per state).
 
-1. **Step change:** when hysteresis boundaries are crossed, [`loudness_select_equalizer_step()`](../src/loudness.c) loads new biquad coefficients for the selected step.
+Coefficient assembly and Q15 scale-factor math run **outside** `taskENTER_CRITICAL()`; the critical section only scales `w1`/`w2` (up to four multiplies), copies staged coefficients into `active_quotients`, and updates `last_db_spl`.
+
+1. **Step change:** when hysteresis boundaries are crossed, [`loudness_select_equalizer_step()`](../src/loudness.c) stages new coefficients, scales both shelf `w1`/`w2`, then commits coefficients.
 2. **Events:** firmware records `USB_STATS_TAG_EQUALIZER_STEP_SWITCH` (prev dB SPL, new dB SPL, step index 0–13).
 3. **Step 13:** at ≥ 80 phon the unity biquad row runs through the normal filter chain (not a separate hot-path skip).
 

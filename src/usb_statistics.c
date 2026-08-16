@@ -120,11 +120,17 @@ static void statistics_build_wire_packet(U8 *wire, const volatile usb_stats_t *s
     wire[34] = s->last_arg1;
     wire[35] = s->last_arg2;
     wire[36] = telemetry->equalizer_step;
+    wire[37] = telemetry->source_volume_control ? 1u : 0u;
     wire[3] = statistics_wire_checksum(wire);
 }
 
 #ifndef UNIT_TEST
 static U8 statistics_hid_buffer[USB_STATS_HID_TRANSFER_SIZE];
+#define STATISTICS_HID_SEND_WAIT_MS 50
+#ifdef FREERTOS_USED
+#define STATISTICS_HID_SEND_WAIT_TICKS \
+    ((STATISTICS_HID_SEND_WAIT_MS * configTICK_RATE_HZ) / 1000)
+#endif
 
 static void statistics_prepare_hid_buffer(const U8 *wire_packet)
 {
@@ -202,7 +208,19 @@ static Bool statistics_try_send_packet(const U8 *wire_packet, U8 report_seq,
 #ifndef UNIT_TEST
     statistics_prepare_hid_buffer(wire_packet);
     {
-        Bool sent = statistics_hid_try_send();
+        Bool sent = FALSE;
+#ifdef FREERTOS_USED
+        portTickType waited_ticks = 0;
+        while (!sent && waited_ticks < STATISTICS_HID_SEND_WAIT_TICKS) {
+            sent = statistics_hid_try_send();
+            if (!sent) {
+                vTaskDelay(1);
+                waited_ticks++;
+            }
+        }
+#else
+        sent = statistics_hid_try_send();
+#endif
         if (sent) {
             statistics_report_seq = report_seq;
             statistics_clear_hid_buffer();

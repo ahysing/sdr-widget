@@ -5,8 +5,10 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdint.h>
+#define _USE_MATH_DEFINES // Enable math constants like M_PI
 #include <math.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 DEFINE_FFF_GLOBALS;
 
@@ -111,7 +113,7 @@ void test_loudness_rms_stereo_window_duration(void) {
 void test_loudness_init() {
     printf("Running test_loudness_init...\n");
     loudness_init();
-    assert(loudness_get_last_db_spl() == LOUDNESS_REF_PHON);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX);
     printf("test_loudness_init passed\n");
 }
 
@@ -132,8 +134,7 @@ void test_loudness_24bit_processing() {
     loudness_set_source_has_volume_control();
 
     // At high volume (0 dBFS -> 80 phon), it should be passthrough (bypass)
-    spk_vol_usb_L = 0;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(0);
     
     int64_t sample = 1000;
     int64_t result = loudness_24bit_wrapper(sample);
@@ -144,8 +145,7 @@ void test_loudness_24bit_processing() {
     assert(result == sample);
 
     // Switching to the 55 phon equalizer step must boost low frequencies
-    spk_vol_usb_L = -25 * 256;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(-25 * 256);
     int differs = 0;
     for (int i = 0; i < 200; i++) {
         int64_t in = (i & 1) ? 100000 : -100000;
@@ -162,25 +162,21 @@ void test_loudness_update_active_equalizer_step_uncompressed_18dbfs(void) {
     loudness_set_source_has_volume_control();
     root_mean_square = 1099511627776ULL;
 
-    spk_vol_usb_L = 0;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(0);
     printf("  [0 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 80);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX);
 
-    spk_vol_usb_L = -10 * 256;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(-10 * 256);
     printf("  [-10 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 70);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 10);
 
-    spk_vol_usb_L = -20 * 256;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(-20 * 256);
     printf("  [-20 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 60);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 20);
 
-    spk_vol_usb_L = -30 * 256;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(-30 * 256);
     printf("  [-30 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 50);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 30);
 
     printf("test_loudness_update_active_equalizer_step_uncompressed_18dbfs passed\n\n");
 }
@@ -191,25 +187,21 @@ void test_loudness_update_active_equalizer_step_compressed_6dbfs(void) {
     loudness_set_source_has_volume_control();
     root_mean_square = 17592186044416ULL;
 
-    spk_vol_usb_L = 0;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(0);
     printf("  [0 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 80);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX);
 
-    spk_vol_usb_L = -10 * 256;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(-10 * 256);
     printf("  [-10 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 70);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 10);
 
-    spk_vol_usb_L = -20 * 256;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(-20 * 256);
     printf("  [-20 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 60);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 20);
 
-    spk_vol_usb_L = -30 * 256;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(-30 * 256);
     printf("  [-30 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == 50);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 30);
 
     printf("test_loudness_update_active_equalizer_step_compressed_6dbfs passed\n\n");
 }
@@ -220,6 +212,8 @@ void test_usb_volume_format(void) {
 
     S32 mult = usb_volume_format(-6 * 256);
     assert(mult == (VOL_MULT_UNITY >> 1));
+    assert(VOL_MIN == (S16)(-60 * 256));
+    assert(usb_volume_format(VOL_MIN) > 0);
     printf("test_usb_volume_format passed\n");
 }
 
@@ -275,11 +269,17 @@ void test_saturate_16bit_s32_to_s32(void) {
 void test_loudness_get_gain_dbfs() {
     printf("Running test_loudness_get_gain_dbfs...\n");
     loudness_set_source_has_volume_control();
-    spk_vol_usb_L = 0;
+    loudness_usb_volume_changed(0);
     assert(loudness_get_gain_dbfs() == 0);
-    
-    spk_vol_usb_L = -256 * 10; // -10 dB
+
+    loudness_usb_volume_changed(-256 * 10);
     assert(loudness_get_gain_dbfs() == -10);
+
+    loudness_usb_volume_changed(VOL_MIN);
+    assert(loudness_get_gain_dbfs() == -60);
+
+    loudness_usb_volume_changed(VOL_MAX);
+    assert(loudness_get_gain_dbfs() == 0);
     printf("test_loudness_get_gain_dbfs passed\n");
 }
 
@@ -315,8 +315,7 @@ void test_loudness_16bit_cd_audio_processing(void) {
     printf("Running test_loudness_16bit_cd_audio_processing...\n");
     loudness_init();
 
-    spk_vol_usb_L = -20 * 256;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(-20 * 256);
 
     int32_t usb_container = ((int32_t)(int16_t)-4000) << 16;
 
@@ -349,12 +348,9 @@ void test_loudness_16bit_container_no_int32_overflow(void) {
     assert(filtered_container == (amp << 16));
     assert(amp >= INT16_MIN && amp <= INT16_MAX);
 
-    {
-        int32_t filter_domain = UPSAMPLE_16BIT_TO_FILTER_32(usb_container);
-        int32_t filter_out = (int32_t)loudness_fast_24bit(filter_domain);
-        int32_t expected = DOWNSAMPLE_FILTER_TO_16BIT_CONTAINER(filter_out);
-        assert(filtered_container == expected);
-    }
+    /* Do not compare this with a second direct loudness_fast_24bit() call:
+     * the DF2 filter is stateful, so the next sample intentionally observes
+     * different w1/w2 state. The assertions above verify container safety. */
 
     printf("test_loudness_16bit_container_no_int32_overflow passed\n");
 }
@@ -422,6 +418,239 @@ void test_loudness_24bit_sign_extension(void) {
 
     printf("test_loudness_24bit_sign_extension passed\n\n");
 }
+
+#ifdef FAST
+/**
+ * TEST 1: Verifiser at fortegnshåndteringen (Sign Extension) er intakt.
+ * Et negativt 24-bits tall plassert i bits 31:8 må ikke vris om til et
+ * gigantisk positivt tall etter at det har passert container-skiftingen.
+ */
+void test_container_sign_preservation(void) {
+    printf("Running test_container_sign_preservation...\n");
+    printf("Sign preservation for negative samples\n");
+    loudness_fast_reset_states();
+    
+    // Setter filteret til 80 phon (Unity gain / flatt filter)
+    loudness_test_load_active_quotients_fast(13); 
+
+    // Et typisk negativt signal i en 32-bit container (bits 31:8)
+    // Eksempel: -1000 i 24-bit er 0xFFFF18. Skiftet opp: 0xFFF18000
+    S32 input_negative = (S32)0xFFF18000; 
+    
+    S32 output = loudness_filter_24bit_container(input_negative);
+
+    // Siden filteret er flatt (unity), må utgangen være nøyaktig lik inngangen
+    if (output != input_negative) {
+        printf("Fortegn ødelagt! Input: 0x%08X, Output: 0x%08X (Skulle vært like)", 
+                  (unsigned int)input_negative, (unsigned int)output);
+        assert(false);
+    }
+
+    // Sjekk spesifikt at bit 31 fortsatt er høy (negativt tall)
+    if (output >= 0) {
+        printf("Negativt tall ble positivt! Output: %d", output);
+        assert(false);
+    }
+    printf("test_container_sign_preservation passed\n\n");
+}
+
+/**
+ * TEST 2: Verifiser at ulineær bit-wrapping ikke skjer ved full-skala (0 dBFS).
+ * Tester maksimalt positive og negative verdier for 24-bit lyd i en 32-bit container.
+ */
+void test_full_scale_boundaries(void) {
+    printf("Running test_full_scal_boundaries...\n\n");
+    printf("Full scale bounary values (0 dBFS)\n");
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(13); // Unity gain
+
+    // Maks positiv 24-bit i 32-bit container: 0x7FFFFF00
+    S32 max_pos = (S32)0x7FFFFF00;
+    // Maks negativ 24-bit i 32-bit container: 0x80000000
+    S32 max_neg = (S32)0x80000000;
+
+    S32 out_pos = loudness_filter_24bit_container(max_pos);
+    S32 out_neg = loudness_filter_24bit_container(max_neg);
+
+    if (out_pos != max_pos) {
+        printf("Maks positiv klippet eller endret! Forventet: 0x%08X, Fikk: 0x%08X", 
+                  (unsigned int)max_pos, (unsigned int)out_pos);
+        assert(false);
+    }
+
+    if (out_neg != max_neg) {
+        printf("Maks negativ klippet eller endret! Forventet: 0x%08X, Fikk: 0x%08X", 
+                  (unsigned int)max_neg, (unsigned int)out_neg);
+        assert(false);
+    }
+
+    printf("test_full_scal_boundaries passed\n\n");
+}
+
+/**
+ * TEST 3: Null-respons og DC-offset sjekk.
+ * Sørger for at filteret ikke genererer en egen DC-spenning eller "spraker"
+ * når inngangen er fullstendig stille (digital null).
+ */
+void test_dc_silence_response(void) {
+    printf("Running test_dc_slience response..\n\n");
+    printf("Digital null/silence\n");
+    loudness_fast_reset_states();
+    
+    // Sett et trinn med kraftig bassboost (f.eks 55 phon)
+    loudness_test_load_active_quotients_fast(0); 
+
+    // Kjør 1000 sampler med ren stillhet gjennom filteret
+    for (int i = 0; i < 1000; i++) {
+        S32 out = loudness_filter_24bit_container(0);
+        if (out != 0) {
+            printf("Filteret lekker energi ved stillhet! Sample %d ga: %d", i, out);
+            assert(false);
+        }
+    }
+}
+
+/**
+ * TEST 4: Teknisk sinus-test ved 48 kHz (55 Phon).
+ * Genererer en 50 Hz sinustone, sender den igjennom containeren, 
+ * og måler RMS for å bekrefte den eksakte ISO 226 forsterkningen på +10.387 dB.
+ */
+void test_50hz_bass_boost_magnitude(void) {
+    printf("Running test_50hz_bass_boost_magnitude...\n");
+    printf("Akustisk forsterkning (50 Hz ved 55 Phon)\n");
+    loudness_fast_reset_states();
+    
+    // Last inn 55 phon-koeffisientene for 48 kHz
+    loudness_test_load_active_quotients_fast(0); 
+
+    const double sample_rate = 48000.0;
+    const double frequency = 50.0;
+    const int num_samples = 48000; // 1 sekund med lyd
+    
+    // Vi bruker et signal på -12 dBFS for å ha god margin til metning
+    // En amplitude på 2097152 i 24-bit domenet
+    const double amplitude = 2097152.0; 
+    
+    double rms_in_sum = 0;
+    double rms_out_sum = 0;
+
+    // Vi lar filteret stabilisere seg (settle) i 2000 sampler først for å fjerne oppstartstransienter
+    for (int i = 0; i < num_samples; i++) {
+        double t = (double)i / sample_rate;
+        S32 raw_24bit_sample = (S32)(amplitude * sin(2.0 * M_PI * frequency * t));
+        
+        // Pakk inn i 32-bit USB container-justering (bits 31:8)
+        S32 container_input = raw_24bit_sample << 8;
+        
+        S32 container_output = loudness_filter_24bit_container(container_input);
+        
+        // Pakk ut igjen til ren PCM-skala for RMS-analyse
+        S32 raw_output_sample = container_output >> 8;
+
+        // Akkumuler RMS-verdier etter de første 2000 samplene (for stabilitet)
+        if (i >= 2000) {
+            rms_in_sum += (double)raw_24bit_sample * (double)raw_24bit_sample;
+            rms_out_sum += (double)raw_output_sample * (double)raw_output_sample;
+        }
+    }
+
+    double rms_in = sqrt(rms_in_sum / (num_samples - 2000));
+    double rms_out = sqrt(rms_out_sum / (num_samples - 2000));
+    
+    // Beregn målt forsterkning i desibel
+    double measured_gain_db = 20.0 * log10(rms_out / rms_in);
+    const double expected_gain_db = 10.387;
+    const double tolerance = 0.05; // Tillater +/- 0.05 dB avvik
+
+    if (fabs(measured_gain_db - expected_gain_db) > tolerance) {
+        printf("Wrong amplification at 50 Hz! Expected: %0.3f dB, Measured: %0.3f dB\n", 
+                  expected_gain_db, measured_gain_db);
+        assert(false);
+    }
+
+    printf("Measured: %0.3f dB (Expected: %0.3f dB) -> ", measured_gain_db, expected_gain_db);
+}
+
+
+void test_loudness_24bit_container_round_trip(void) {
+    printf("Running test_loudness_24bit_container_round_trip...\n");
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    loudness_usb_volume_changed(0);
+
+    /* Unity filter at 80 phon: container round-trip must preserve sample words. */
+    assert(loudness_filter_24bit_container(0) == 0);
+    assert(loudness_filter_24bit_container(123456 << 8) == (123456 << 8));
+    assert(loudness_filter_24bit_container((int32_t)((int64_t)INT24_MIN << 8)) == (int32_t)((int64_t)INT24_MIN << 8));
+    assert(loudness_filter_24bit_container((int32_t)((int64_t)INT24_MAX << 8)) == (int32_t)((int64_t)INT24_MAX << 8));
+
+    printf("test_loudness_24bit_container_round_trip passed\n\n");
+}
+
+void test_loudness_24bit_container_zero_crossing(void) {
+    printf("Running test_loudness_24bit_container_zero_crossing...\n");
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    loudness_usb_volume_changed(0);
+
+    int32_t prev = loudness_filter_24bit_container(100 << 8);
+    int32_t at_zero = loudness_filter_24bit_container(0);
+    int32_t next = loudness_filter_24bit_container(-100 << 8);
+
+    /* Zero crossings must stay continuous; bypassing the filter at exact zero
+     * used to leave stale IIR state and produce single-sample spikes. */
+    assert(at_zero == 0);
+    assert(prev == (100 << 8));
+    assert(next == (-100 << 8));
+
+    printf("test_loudness_24bit_container_zero_crossing passed\n\n");
+}
+
+void test_loudness_df2_step_q15_scale_round_trip(void) {
+    printf("Running test_loudness_df2_step_q15_scale_round_trip...\n");
+    int32_t w = 1000000;
+    int32_t scaled_up = (int32_t)((int64_t)w * 33808 >> 15);
+    int32_t round_trip = (int32_t)((int64_t)scaled_up * 31760 >> 15);
+
+    assert(scaled_up > w);
+    assert(round_trip > w - 2000);
+    assert(round_trip < w + 2000);
+    printf("test_loudness_df2_step_q15_scale_round_trip passed\n\n");
+}
+
+void test_loudness_df2_step_transition_no_reset(void) {
+    printf("Running test_loudness_df2_step_transition_no_reset...\n");
+    int i;
+    int32_t sample = 200000;
+    int32_t out_before;
+    int32_t out_after;
+    int32_t spike;
+
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    root_mean_square = 1099511627776ULL;
+
+    loudness_usb_volume_changed(-10 * 256);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 10);
+
+    for (i = 0; i < 256; i++) {
+        loudness_fast_24bit(sample);
+    }
+    out_before = (int32_t)loudness_fast_24bit(sample);
+
+    loudness_usb_volume_changed(-20 * 256);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 20);
+
+    out_after = (int32_t)loudness_fast_24bit(sample);
+    spike = out_after - out_before;
+    if (spike < 0) {
+        spike = -spike;
+    }
+    assert(spike < (sample >> 2));
+
+    printf("test_loudness_df2_step_transition_no_reset passed\n\n");
+}
+#endif
 
 
 /**
@@ -497,8 +726,7 @@ void test_loudness_80_phon_unity_filter(void) {
     printf("Running test_loudness_80_phon_unity_filter...\n");
     loudness_init();
     loudness_set_source_has_volume_control();
-    spk_vol_usb_L = 0;
-    loudness_update_active_equalizer_step();
+    loudness_usb_volume_changed(0);
     assert(loudness_test_get_equalizer_step(loudness_get_last_db_spl()) == 13);
 
     int64_t sample = 123456;
@@ -510,15 +738,118 @@ void test_loudness_80_phon_unity_filter(void) {
 void test_loudness_equalizer_step_hysteresis_79_80(void) {
     printf("Running test_loudness_equalizer_step_hysteresis_79_80...\n");
     loudness_init();
-    last_db_spl = 80;
-    assert(loudness_test_should_change_equalizer_step(796) == FALSE);
-    assert(loudness_test_should_change_equalizer_step(794) == TRUE);
+    last_db_spl = LOUDNESS_REF_PHON;
+    assert(loudness_test_should_change_equalizer_step(LOUDNESS_REF_PHON * 10 + 6) == FALSE);
+    assert(loudness_test_should_change_equalizer_step(LOUDNESS_REF_PHON * 10 - 6) == TRUE);
 
-    last_db_spl = 79;
-    assert(loudness_test_should_change_equalizer_step(799) == FALSE);
-    assert(loudness_test_should_change_equalizer_step(800) == TRUE);
+    last_db_spl = LOUDNESS_REF_PHON - 1;
+    assert(loudness_test_should_change_equalizer_step(LOUDNESS_REF_PHON * 10 - 1) == FALSE);
+    assert(loudness_test_should_change_equalizer_step(LOUDNESS_REF_PHON * 10) == TRUE);
     printf("test_loudness_equalizer_step_hysteresis_79_80 passed\n\n");
 }
+
+#ifdef FAST
+#define SINE_TEST_SAMPLE_RATE_HZ 48000
+#define SINE_TEST_SAMPLE_COUNT   48000
+#define SINE_TEST_AMPLITUDE      200000
+#define SINE_TEST_PI             3.14159265358979323846
+
+typedef struct {
+    double rms;
+    int positive_crossings;
+} sine_test_result_t;
+
+typedef struct {
+    int frequency_hz;
+    double spl_55;
+    double spl_80;
+    double tolerance_db;
+} loudness_iso_test_case_t;
+
+static sine_test_result_t measure_fast_sine_at_db_spl(
+    int frequency_hz, int db_spl)
+{
+    sine_test_result_t result = { 0.0, 0 };
+    double sum_squares = 0.0;
+    int32_t previous = 0;
+    int i;
+
+    current_freq.frequency = SINE_TEST_SAMPLE_RATE_HZ;
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    loudness_usb_volume_changed(
+        (S16)((db_spl - LOUDNESS_DB_SPL_MAX) * 256));
+    assert(loudness_get_last_db_spl() == db_spl);
+
+    for (i = 0; i < SINE_TEST_SAMPLE_COUNT; i++) {
+        double phase = 2.0 * SINE_TEST_PI * (double)frequency_hz *
+            (double)i / (double)SINE_TEST_SAMPLE_RATE_HZ;
+        int32_t input_24 = (int32_t)lrint(
+            (double)SINE_TEST_AMPLITUDE * sin(phase));
+        int32_t input_container = (int32_t)((uint32_t)input_24 << 8);
+        int32_t output_container =
+            loudness_filter_24bit_container(input_container);
+        int32_t output_24 = output_container >> 8;
+
+        sum_squares += (double)output_24 * (double)output_24;
+        if (previous <= 0 && output_24 > 0) {
+            result.positive_crossings++;
+        }
+        previous = output_24;
+    }
+
+    result.rms = sqrt(sum_squares / (double)SINE_TEST_SAMPLE_COUNT);
+    return result;
+}
+
+void test_loudness_fast_48khz_55_phon_bass_boost_rms(void)
+{
+    /*
+     * ISO 226 SPL values are the values used by create2biquads.py.  For a
+     * positive filter gain G, its target relationship is:
+     *
+     *     SPL_55(f) - G(f) = SPL_80(f) - (80 - 55)
+     *
+     * The minus sign is intentional: positive electrical gain lowers the
+     * acoustic threshold required to produce equal perceived loudness.
+     */
+    static const loudness_iso_test_case_t cases[] = {
+        {   50, 86.9790338570, 101.7213697471, 0.75 },
+        {  100, 75.1492672665,  92.4797225205, 0.75 },
+        { 1000, 55.0113502229,  80.0120754829, 0.75 },
+    };
+    size_t i;
+
+    printf("Running test_loudness_fast_48khz_55_phon_bass_boost_rms...\n");
+    for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        const loudness_iso_test_case_t *test_case = &cases[i];
+        sine_test_result_t unity = measure_fast_sine_at_db_spl(
+            test_case->frequency_hz, LOUDNESS_REF_PHON);
+        sine_test_result_t filtered = measure_fast_sine_at_db_spl(
+            test_case->frequency_hz, 55);
+        double measured_gain_db = 20.0 * log10(filtered.rms / unity.rms);
+        double compensated_55_spl = test_case->spl_55 - measured_gain_db;
+        double shifted_80_spl = test_case->spl_80 -
+            (LOUDNESS_REF_PHON - 55);
+
+        printf("  %d Hz: unity RMS=%.3f, 55-phon RMS=%.3f, gain=%.3f dB\n",
+            test_case->frequency_hz, unity.rms, filtered.rms,
+            measured_gain_db);
+        fflush(stdout);
+        assert(fabs(compensated_55_spl - shifted_80_spl) <
+            test_case->tolerance_db);
+        assert(abs(filtered.positive_crossings -
+            unity.positive_crossings) <= 1);
+        assert(abs(filtered.positive_crossings -
+            test_case->frequency_hz) <= 1);
+
+        if (test_case->frequency_hz <= 100) {
+            assert(filtered.rms > unity.rms * 2.0);
+        }
+    }
+    printf("test_loudness_fast_48khz_55_phon_bass_boost_rms passed\n\n");
+}
+#endif
 
 int main() {
     test_loudness_reset_rms();
@@ -546,6 +877,18 @@ int main() {
 
     test_loudness_16bit_sign_extension();
     test_loudness_24bit_sign_extension();
+#ifdef FAST
+    test_loudness_24bit_container_round_trip();
+    test_loudness_24bit_container_zero_crossing();
+    test_loudness_df2_step_q15_scale_round_trip();
+    test_loudness_df2_step_transition_no_reset();
+    test_loudness_fast_48khz_55_phon_bass_boost_rms();
+
+    test_container_sign_preservation();
+    test_full_scale_boundaries();
+    test_dc_silence_response();
+    test_50hz_bass_boost_magnitude();
+#endif
     test_loudness_dither_and_noise_shaping();
     test_loudness_get_equalizer_step_14_levels();
     test_loudness_80_phon_unity_filter();

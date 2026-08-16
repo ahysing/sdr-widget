@@ -144,13 +144,40 @@ def plot(args, optimized_params_per_phon, f_eval, sample_rate_hz):
     from matplotlib.ticker import ScalarFormatter, LogLocator
     fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
     vline = ax.axvline(color='k', linestyle='--', linewidth=0.5, visible=False)
-    text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
+    text = ax.text(0.5, 0.98, '', transform=ax.transAxes, ha='center', va='top', fontsize='small',
+                   family='monospace', bbox=dict(boxstyle='round', facecolor='white', alpha=0.85))
+    hover_data = {}
+
+    def format_gap_tooltip(freq, gaps):
+        lines = [f"freq: {freq:.1f} Hz"]
+        split = (len(PHON_LEVELS) + 1) // 2
+        col_a, col_b = PHON_LEVELS[:split], PHON_LEVELS[split:]
+        col_width = 20
+        for i in range(max(len(col_a), len(col_b))):
+            row = []
+            if i < len(col_a):
+                p = col_a[i]
+                row.append(f"{p:2d}ph  {gaps[p]:+.2f} dB".ljust(col_width))
+            if i < len(col_b):
+                p = col_b[i]
+                row.append(f"{p:2d}ph  {gaps[p]:+.2f} dB")
+            lines.append(''.join(row))
+        return '\n'.join(lines)
 
     def on_mouse_move(event):
         if event.inaxes and event.xdata and event.xdata > 0:
-            vline.set_xdata([event.xdata])
+            freq = float(np.clip(event.xdata, f_eval[0], f_eval[-1]))
+            vline.set_xdata([freq])
             vline.set_visible(True)
-            text.set_text(f"freq: {event.xdata:.1f} Hz")
+            if args.graph_type == "loudnesscontours":
+                gaps = {}
+                for phon in PHON_LEVELS:
+                    y_iso = hover_data[phon]['iso'](freq)
+                    y_filter = hover_data[phon]['filter'](freq)
+                    gaps[phon] = y_iso - y_filter
+                text.set_text(format_gap_tooltip(freq, gaps))
+            else:
+                text.set_text(f"freq: {freq:.1f} Hz")
             fig.canvas.draw_idle()
         else:
             vline.set_visible(False)
@@ -176,7 +203,9 @@ def plot(args, optimized_params_per_phon, f_eval, sample_rate_hz):
             ax.semilogx(f_eval, resp, label=f"filter {phon}ph", color=color)
         elif args.graph_type == "loudnesscontours":
             # Combined effect: perceived loudness by the ear
-            # Target: spl_interp + resp = spl_ref - (80 - phon)
+            # resp is positive filter gain, so the compensated hearing
+            # threshold is lowered by that gain:
+            # Target: spl_interp - resp = spl_ref - (80 - phon)
             y = spl_interp - resp
             ax.semilogx(f_eval, y, label=f"ISO226 {phon}ph * filter", color=color)
 
@@ -184,6 +213,11 @@ def plot(args, optimized_params_per_phon, f_eval, sample_rate_hz):
             f_iso_x, spl_iso_x = iso226_spl_contour(phon, hfe=True)
             spl_x = CubicSpline(f_iso_x, spl_iso_x)(f_eval)
             ax.semilogx(f_eval, spl_x, ':', label=f"ISO226 {phon}ph", color=color, alpha=0.9)
+
+            hover_data[phon] = {
+                'iso': CubicSpline(f_eval, spl_x),
+                'filter': CubicSpline(f_eval, y),
+            }
 
     if args.graph_type == "loudnesscontours":
         f_iso_ref, spl_iso_ref = iso226_spl_contour(80, hfe=True)
@@ -204,16 +238,19 @@ def plot(args, optimized_params_per_phon, f_eval, sample_rate_hz):
     plt.show()
 
 def print_headers(args, sample_rate_hz, phon, section_names, params_opt):
-    print(f"Optimized biquad chain, fs = {sample_rate_hz} Hz, phons = {phon} phon")
-    for i, name in enumerate(section_names):
-        fc, Q, g = params_opt[3*i:3*i+3]
-        print(f"  {name:10s}  fc = {fc:12.8f} Hz   Q = {Q:12.8f}   gain = {g:12.8f} dB")
-    print()
-
-    header = f"Biquad coefficients (a0 = 1), fs = {sample_rate_hz} Hz, phons = {phon} phon"
-    print(header)
-
-    if not args.bit_width:
+    binary = args.bit_width in [32, 64]
+    if not binary:
+        print(f"Optimized biquad chain, fs = {sample_rate_hz} Hz, phons = {phon} phon")
+        for i, name in enumerate(section_names):
+            fc, Q, g = params_opt[3*i:3*i+3]
+            print(f"  {name:10s}  fc = {fc:12.8f} Hz   Q = {Q:12.8f}   gain = {g:12.8f} dB")
+        print()
+    if binary:
+        print(f"    /* {phon} phon */")
+    else:
+        header = f"Biquad coefficients (a0 = 1), fs = {sample_rate_hz} Hz, phons = {phon} phon"
+        print(header)
+    if not binary:
         print(f"  {'name':10s}  {'b0':>18s} {'b1':>18s} {'b2':>18s} {'a0':>18s} {'a1':>18s} {'a2':>18s}")
 
 def print_stdout(args, name, b0, b1, b2, a0, a1, a2):
@@ -223,16 +260,14 @@ def print_stdout(args, name, b0, b1, b2, a0, a1, a2):
         qb0 = float_to_q3_29(b0)
         qb1 = float_to_q3_29(b1)
         qb2 = float_to_q3_29(b2)
-        print(f"  {{ {qa1:11d}, {qa2:11d}, {qb0:11d}, {qb1:11d}, {qb2:11d} }},  /* a0={a0:.6g} */")
-        print()
+        print(f"        {{ {qa1:11d}, {qa2:11d}, {qb0:11d}, {qb1:11d}, {qb2:11d} }},  /* a0={a0:.6g} */")
     elif args.bit_width == 64:
         qa1 = float_to_q61(a1)
         qa2 = float_to_q61(a2)
         qb0 = float_to_q61(b0)
         qb1 = float_to_q61(b1)
         qb2 = float_to_q61(b2)
-        print(f"  {{ {qa1:20d}LL, {qa2:20d}LL, {qb0:20d}LL, {qb1:20d}LL, {qb2:20d}LL }},  /* a0={a0:.6g} */")
-        print()
+        print(f"        {{ {qa1:20d}LL, {qa2:20d}LL, {qb0:20d}LL, {qb1:20d}LL, {qb2:20d}LL }},  /* a0={a0:.6g} */")
     else:
         print(f"  {name:10s}  {b0:18.12f} {b1:18.12f} {b2:18.12f} {a0:18.12f} {a1:18.12f} {a2:18.12f}")
         print()
@@ -300,6 +335,9 @@ def main():
         for phon in PHON_LEVELS:
             params_opt = optimized_params_per_phon[phon]
             print_headers(args, sample_rate_hz=sample_rate_hz, phon=phon, section_names=section_names, params_opt=params_opt)
+            binary = args.bit_width in [32, 64]
+            if binary:
+                print("    {")
             for i, name in enumerate(section_names):
                 fc, Q, g = params_opt[3*i:3*i+3]
 
@@ -311,8 +349,9 @@ def main():
 
                 b0, b1, b2, a1, a2 = coeffs
                 a0 = 1.0
-
                 print_stdout(args, name, b0, b1, b2, a0, a1, a2)
+            if binary:
+                print("    },")
 
         if args.graph:
             plot(args, optimized_params_per_phon, f_eval=f_eval, sample_rate_hz=sample_rate_hz)

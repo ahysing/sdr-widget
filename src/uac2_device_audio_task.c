@@ -165,7 +165,8 @@ static Bool uac2_loudness_filter_enabled(void)
 #endif
 
 #ifndef USBSTATISTICS_DISABLE
-/* Ignore normal loop overruns from the 1-tick UAC2 wake period; count only large scheduler slips. */
+/* Ignore normal loop overruns from the 1-tick UAC2 wake period; count only large scheduler slips.
+ * Lateness is measured before vTaskDelayUntil against the scheduled wake time. */
 #define STATISTICS_DEADLINE_SLIP_THRESHOLD_TICKS 100u
 #endif
 
@@ -218,21 +219,21 @@ void uac2_device_audio_task(void *pvParameters)
 	xLastWakeTime = xTaskGetTickCount();
 
 	while (TRUE) {
-		vTaskDelayUntil(&xLastWakeTime, UAC2_configTSK_USB_DAUDIO_PERIOD);
-
 #ifndef USBSTATISTICS_DISABLE
 		if (statistics_runtime_is_active()) {
 			volatile usb_stats_t *stats = get_usb_stats();
 			portTickType now = xTaskGetTickCount();
-			portTickType slip = now - xLastWakeTime;
+			portTickType lateness = now - xLastWakeTime;
 
-			if (slip > STATISTICS_DEADLINE_SLIP_THRESHOLD_TICKS) {
+			if (lateness > STATISTICS_DEADLINE_SLIP_THRESHOLD_TICKS) {
 				stats->generation++;
 				stats->deadline_misses++;
 				stats->generation++;
 			}
 		}
 #endif
+
+		vTaskDelayUntil(&xLastWakeTime, UAC2_configTSK_USB_DAUDIO_PERIOD);
 
 		// Introduced into UAC2 code with mobodebug
 		// Must we clear the DAC buffer contents?
@@ -741,19 +742,11 @@ void uac2_device_audio_task(void *pvParameters)
 						if (uac2_loudness_filter_enabled()) {
 							loudness_inferred_gain_feed_stereo(sample_L, sample_R);
 							if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX) {
-								if (sample_L != 0) {
-									sample_L = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_L >> 8)) << 8;
-								}
-								if (sample_R != 0) {
-									sample_R = (S32)LOUDNESS_FILTER_FAST_32((S32)(sample_R >> 8)) << 8;
-								}
+								sample_L = LOUDNESS_FILTER_24BIT_CONTAINER(sample_L);
+								sample_R = LOUDNESS_FILTER_24BIT_CONTAINER(sample_R);
 							} else if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {
-								if (sample_L != 0) {
-									sample_L = LOUDNESS_FILTER_16BIT_CONTAINER(sample_L);
-								}
-								if (sample_R != 0) {
-									sample_R = LOUDNESS_FILTER_16BIT_CONTAINER(sample_R);
-								}
+								sample_L = LOUDNESS_FILTER_16BIT_CONTAINER(sample_L);
+								sample_R = LOUDNESS_FILTER_16BIT_CONTAINER(sample_R);
 							}
 						}
 #endif

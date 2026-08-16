@@ -18,7 +18,7 @@ static inline S64 apply_volume_q61(S64 coeff)
 }
 
 static int loudness_get_equalizer_step(int32_t db_spl) {
-    if (db_spl >= LOUDNESS_REF_DB_SPL) {
+    if (db_spl >= LOUDNESS_DB_SPL_MAX) {
         return LOUDNESS_NEUTRAL_STEP;
     }
     if (db_spl < LOUDNESS_MIN_PHON) {
@@ -141,7 +141,7 @@ UPDATE_ACTIVE = r'''static int32_t loudness_calculate_db_spl_x10(void) {
                                   (track_scaled * LOUDNESS_TRACK_WEIGHT_PCT);
 
     int32_t blended_dbfs_x10 = (blended_scaled_x100 - 50) / 100;
-    return blended_dbfs_x10 + (LOUDNESS_REF_DB_SPL * 10);
+    return blended_dbfs_x10 + (LOUDNESS_DB_SPL_MAX * 10);
 }
 
 static int32_t loudness_calculate_db_spl(void) {

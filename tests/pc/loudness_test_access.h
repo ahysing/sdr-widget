@@ -4,8 +4,7 @@
 #include <stdint.h>
 #include "loudness_inferred_gain.h"
 
-/* PC unit tests link loudness.c directly and seed the RMS integrator. */
-extern uint64_t root_mean_square;
+#include "track_dbfs.h"
 
 #ifdef FAST
 void loudness_update_track_level_fast(int32_t sample);

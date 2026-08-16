@@ -1591,7 +1591,11 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						usb_fifo_hw_unlock(&usb_lock);
 
 #ifndef LOUDNESS_DISABLE
-						loudness_set_source_has_volume_control();
+						if (wLength == 2 && wValue_lsb == CH_LEFT) {
+							loudness_usb_volume_changed(spk_vol_usb_L);
+						} else {
+							loudness_set_source_has_volume_control();
+						}
 #endif
 
 						Usb_ack_control_in_ready_send(); //!< send a ZLP for STATUS phase

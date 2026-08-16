@@ -13,37 +13,10 @@
 #include "compiler.h"
 
 #ifdef PRECISE
-typedef struct {
-    int64_t xn_1;
-    int64_t xn_2;
-    int64_t yn_1;
-    int64_t yn_2;
-} biquad_state_precise_t;
-
-typedef struct {
-    int64_t a1;
-    int64_t a2;
-    int64_t b0;
-    int64_t b1;
-    int64_t b2;
-} biquad_quotients_precise_t;
+#include "loudness_precise.h"
 #endif
-
 #ifdef FAST
-typedef struct {
-    int32_t xn_1;
-    int32_t xn_2;
-    int32_t yn_1;
-    int32_t yn_2;
-} biquad_state_fast_t;
-
-typedef struct {
-    int32_t a1;
-    int32_t a2;
-    int32_t b0;
-    int32_t b1;
-    int32_t b2;
-} biquad_quotients_fast_t;
+#include "loudness_fast.h"
 #endif
 
 typedef enum {
@@ -51,7 +24,7 @@ typedef enum {
     LOUDNESS_FILTER_HIGH_SHELF = 1
 } biquad_type_t;
 
-/* Equal-loudness equalizer steps (assumes 0 dBFS == 80 dB SPL):
+/* Equal-loudness equalizer steps (contour reference 80 phon at 0 dBFS gain):
  *   index  0 -> 55 phon, index 1 -> 57 phon, ... index 12 -> 79 phon
  *   index 13 -> 80 phon (neutral unity biquads)
  */
@@ -60,8 +33,20 @@ typedef enum {
 #define LOUDNESS_PHON_STEP_DB           2
 #define LOUDNESS_NEUTRAL_STEP           (LOUDNESS_NUM_EQUALIZER_STEPS - 1)
 #define LOUDNESS_CONTOUR_STEPS          (LOUDNESS_NEUTRAL_STEP)
-#define LOUDNESS_REF_DB_SPL   80   /* 100% (0 dBFS) corresponds to 80 dB SPL */
-#define LOUDNESS_REF_PHON     80
+#define LOUDNESS_REF_PHON     80   /* ISO contour reference at 0 dBFS host gain */
+#ifndef LOUDNESS_DB_SPL_MAX
+/* A dB SPL max decides where on the volume know the loudness filters starts.
+ * 95 db SPL max is common for sonos and other consumer devices.
+ * 105 dB SPL max is the default peak level in THX and
+ * film industry reference level for standard home theaters and small mixing spaces. */
+#define LOUDNESS_DB_SPL_MAX   95
+#endif
+#if LOUDNESS_DB_SPL_MAX <= LOUDNESS_REF_PHON
+#error LOUDNESS_DB_SPL_MAX must be greater than LOUDNESS_REF_PHON (80)
+#endif
+#define LOUDNESS_GAIN_DBFS_MIN  (-60) /* AK5394A / USB volume floor (dBFS) */
+#define LOUDNESS_GAIN_DBFS_MAX  0     /* Windows volume 100; matches VOL_MAX */
+/* Reported dB SPL equals phon for equalizer contour selection in [LOUDNESS_MIN_PHON, LOUDNESS_REF_PHON]. */
 #define LOUDNESS_EQUALIZER_STEP_DB LOUDNESS_PHON_STEP_DB
 
 /* --- Public API --- */
@@ -84,38 +69,33 @@ void loudness_change_frequency_precise(uint32_t frequency);
 void loudness_change_frequency_fast(uint32_t frequency);
 #define loudness_change_frequency loudness_change_frequency_fast
 #endif
-void loudness_reset_rms(void);
 
 #ifdef PRECISE
-int64_t loudness_precise_24bit(int64_t sample);
-int64_t biquad_step_precise_24bit(int64_t sample, biquad_state_precise_t* biquad_states);
 #define LOUDNESS_FILTER_PRECISE_24(sample_64) loudness_precise_24bit(sample_64)
 #else
 #define LOUDNESS_FILTER_PRECISE_24(sample_64) (sample_64)
 #endif
 
 #ifdef FAST
-int64_t loudness_fast_24bit(int32_t sample);
-int32_t biquad_step_fast_32bit(int32_t sample, biquad_state_fast_t* biquad_states);
-S32 loudness_filter_16bit_container(S32 sample);
 #define LOUDNESS_FILTER_FAST_32(sample_32) ((S32)loudness_fast_24bit(sample_32))
 #define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) loudness_filter_16bit_container(sample_32)
+#define LOUDNESS_FILTER_24BIT_CONTAINER(sample_32) loudness_filter_24bit_container(sample_32)
 #else
 #define LOUDNESS_FILTER_FAST_32(sample_32) (sample_32)
 #define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) (sample_32)
+#define LOUDNESS_FILTER_24BIT_CONTAINER(sample_32) (sample_32)
 #endif
 
 /* Force the active loudness band from an external dBFS estimate (<= 0). */
 void loudness_set_level_dbfs(int32_t db_fs);
 
-/* Update the active equalizer step based on current track and host gain levels. */
+/* Publish a host USB volume change (signed Q8.8 dB) to loudness and telemetry. */
+void loudness_usb_volume_changed(S16 volume_q8);
+
+/* Update the active equalizer step based on current host gain level. */
 void loudness_update_active_equalizer_step(void);
 
-/* Return the current dBFS estimate derived from the running RMS. Non-positive. */
-int32_t loudness_get_track_rms_dbfs(void);
-
-/* Return track dBFS clamped to [LOUDNESS_TRACK_DBFS_MIN, LOUDNESS_TRACK_DBFS_MAX]. */
-int32_t loudness_get_track_dbfs(void);
+#include "track_dbfs.h"
 
 /* Return the current host-gain expressed in dBFS. Non-positive. */
 int32_t loudness_get_gain_dbfs(void);
@@ -125,13 +105,15 @@ int32_t loudness_get_gain_dbfs(void);
 /* Blended listening level in dB SPL (same value as used for equalizer step selection). */
 int32_t loudness_get_db_spl(void);
 
-/* Current blended phon estimate (dB SPL) used for bypass and equalizer step selection. */
+/* Current blended level (dB SPL / phon) used for bypass and equalizer step selection. */
 int16_t loudness_get_last_db_spl(void);
 
 #else /* LOUDNESS_DISABLE */
 #define LOUDNESS_FILTER_PRECISE_24(sample_64) (sample_64)
 #define LOUDNESS_FILTER_FAST_32(sample_32) (sample_32)
 #define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) (sample_32)
+#define LOUDNESS_FILTER_24BIT_CONTAINER(sample_32) (sample_32)
+#include "track_dbfs.h"
 #endif /* LOUDNESS_DISABLE */
 
 int32_t loudness_apply_noise_shaper_to_output(int32_t sample_32bit, int32_t* noise_shaper_error);
@@ -173,7 +155,8 @@ S32 saturate_16bit_s32_to_s32(S32 acc);
 #define UPSAMPLE_16BIT_32(sample) (((int32_t)(int16_t)(sample)) << 16)
 #define UPSAMPLE_24BIT_32(sample) ((((int32_t)(sample) << 8) >> 8) << 8)
 #define UPSAMPLE_16BIT_TO_FILTER_32(sample) (((int32_t)(int16_t)((sample) >> 16)) << 8)
-#define DOWNSAMPLE_FILTER_TO_16BIT_CONTAINER(sample) (((int32_t)saturate_16bit_s32_to_s32((sample) >> 8)) << 16)
+#define DOWNSAMPLE_FILTER_TO_16BIT_CONTAINER(sample) \
+    ((int32_t)(((int64_t)saturate_16bit_s32_to_s32((sample) >> 8) << 16)))
 #define DOWNSAMPLE_24BIT(sample) ((int32_t)((sample) >> 8))
 #define DOWNSAMPLE_16BIT(sample) ((int16_t)((sample) >> 16))
 

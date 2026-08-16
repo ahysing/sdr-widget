@@ -71,6 +71,9 @@ AUDIO_WIDGET_DEFAULTS=-DFEATURE_BOARD_DEFAULT=feature_board_usbi2s \
 LOUDNESS_TYPE ?= FAST
 LOUDNESS_DISABLE ?= 0
 USBSTATISTICS_DISABLE ?= 0
+# Peak reported dB SPL at 0 dBFS host gain; must be > LOUDNESS_REF_PHON (80).
+LOUDNESS_DB_SPL_MAX ?= 95
+CFLAGS_LOUDNESS_DB_SPL_MAX = -DLOUDNESS_DB_SPL_MAX=$(LOUDNESS_DB_SPL_MAX)
 
 ifeq ($(LOUDNESS_TYPE),PRECISE)
   CFLAGS_LOUDNESS = -DPRECISE
@@ -88,7 +91,7 @@ else
   CFLAGS_LOUDNESS_USB_STATS_EVENTS =
 endif
 
-WIDGET_LOUDNESS_FLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS)
+WIDGET_LOUDNESS_FLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS) $(CFLAGS_LOUDNESS_DB_SPL_MAX)
 AUDIO_WIDGET_CFLAGS = $(AUDIO_WIDGET_DEFAULTS) $(WIDGET_LOUDNESS_FLAGS)
 
 # Choose wisely:
@@ -154,7 +157,7 @@ else
   TEST_PREAMBLE = -include tests/pc/compiler.h
 endif
 
-TEST_CFLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS)
+TEST_CFLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS) $(CFLAGS_LOUDNESS_DB_SPL_MAX)
 
 ifdef MSYSTEM
   IS_MSYS = 1
@@ -236,14 +239,14 @@ endif
 $(TEST_BUILD_DIR):
 	$(TEST_MKDIR)
 
-$(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT): tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUNIT_TEST $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c
+$(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT): tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUNIT_TEST $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c
 
-$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c src/loudness.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c src/loudness.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
+$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
 
-$(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT): tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
+$(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT): tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
 
 $(TEST_BUILD_DIR)/usb_statistics_tests$(EXE_EXT): tests/pc/usb_statistics_tests.c src/usb_statistics.c src/stats_telemetry.c | $(TEST_BUILD_DIR)
 	$(CC) $(TEST_PREAMBLE) $(CFLAGS_COMMON) $(CFLAGS_TEST) -I tests/pc -DUNIT_TEST $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/usb_statistics_tests.c src/usb_statistics.c src/stats_telemetry.c
@@ -311,12 +314,14 @@ help:
 	@echo ""
 	@echo "Loudness / statistics options (default: FAST, all features enabled):"
 	@echo "  LOUDNESS_TYPE=FAST|PRECISE   Biquad path (default: FAST)"
+	@echo "  LOUDNESS_DB_SPL_MAX=N        Peak dB SPL at 0 dBFS gain (default: 105, must be > 80)"
 	@echo "  LOUDNESS_DISABLE=1           Omit loudness filter from firmware"
 	@echo "  USBSTATISTICS_DISABLE=1"
 	@echo "                               Omit loudness equalizer-step USB events"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make audio-widget LOUDNESS_TYPE=PRECISE"
+	@echo "  make audio-widget LOUDNESS_DB_SPL_MAX=106"
 	@echo "  make audio-widget LOUDNESS_DISABLE=1"
 	@echo "  make audio-widget USBSTATISTICS_DISABLE=1"
 	@echo "  make test LOUDNESS_DISABLE=1"

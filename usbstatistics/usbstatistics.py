@@ -13,12 +13,26 @@ else:
     _hid_import_error = None
 
 VENDOR_ID = 0x16D0
+# Keep in sync with AUDIO_VENDOR_ID / AUDIO_PRODUCT_ID_* in src/usb_descriptors.h
 PRODUCT_IDS = (
-    0x075D,  # AB-1.x UAC2 (Henry Audio USB DAC 128 Mk2)
-    0x075F,  # AB-1.x UAC2 current Windows profile
-    0x0762,  # SDR-WIDGET UAC2
-    0x075C,  # AB-1.x UAC1
-    0x0761,  # SDR-WIDGET UAC1
+    # AB-1.x (FEATURE_PRODUCT_AB1x) — current firmware
+    0x075E,  # UAC1
+    0x075F,  # UAC2
+    # Legacy AB-1.x / Henry Audio Mk2/Mk3 Windows profiles
+    0x075C,  # UAC1 legacy
+    0x075D,  # UAC2 legacy
+    # SDR-WIDGET (FEATURE_PRODUCT_SDR_WIDGET)
+    0x0761,  # UAC1
+    0x0762,  # UAC2
+    # USB9023
+    0x0763,  # UAC1
+    0x0764,  # UAC2
+    # USB5102
+    0x0765,  # UAC1
+    0x0766,  # UAC2
+    # USB8741
+    0x0767,  # UAC1
+    0x0768,  # UAC2
 )
 
 # Above 48 kHz the firmware still sends HID reports every ~1 s (heartbeat mode):
@@ -29,9 +43,12 @@ USB_STATS_HID_REPORT_ID = 1
 USB_STATS_HID_TRANSFER_SIZE = 64
 USB_STATS_PACKET_HID_ANCHOR = 0x53
 USB_STATS_PACKET_MAGIC = USB_STATS_PACKET_HID_ANCHOR  # backward-compatible alias
-USB_STATS_PACKET_VERSION = 2
-USB_STATS_PACKET_FORMAT = "<BBBBIIHHHIHbbbbIBBBBB"
-USB_STATS_PACKET_SIZE = struct.calcsize(USB_STATS_PACKET_FORMAT)
+USB_STATS_PACKET_VERSION = 3
+USB_STATS_PACKET_FORMAT_V2 = "<BBBBIIHHHIHbbbbIBBBBB"
+USB_STATS_PACKET_FORMAT_V3 = "<BBBBIIHHHIHbbbbIBBBBBB"
+USB_STATS_PACKET_SIZE_V2 = struct.calcsize(USB_STATS_PACKET_FORMAT_V2)
+USB_STATS_PACKET_SIZE_V3 = struct.calcsize(USB_STATS_PACKET_FORMAT_V3)
+USB_STATS_PACKET_SIZE = USB_STATS_PACKET_SIZE_V3
 USB_STATS_PACKET_CHECKSUM_INDEX = 3
 USB_STATS_HID_REPORT_SIZE = 63
 USB_STATS_TAG_NONE = 0
@@ -46,6 +63,11 @@ USB_STATS_FIFO_SANITY_MAX = 6144
 DEVICE_WAIT_TIMEOUT_S = 5.0
 DEVICE_POLL_INTERVAL_S = 0.1
 HID_READ_TIMEOUT_MS = 2000
+HID_READ_SIZES = (
+    USB_STATS_HID_TRANSFER_SIZE,
+    USB_STATS_HID_REPORT_SIZE + 1,
+    USB_STATS_HID_REPORT_SIZE,
+)
 
 # Match LOUDNESS_NUM_EQUALIZER_STEPS / phon mapping in src/loudness.h.
 LOUDNESS_NUM_EQUALIZER_STEPS = 14
@@ -115,6 +137,11 @@ def list_devices(verbose=False):
         print("No statistics HID interfaces found.")
         if not verbose:
             print("Try: python usbstatistics.py --list --verbose")
+            for info in hid.enumerate(VENDOR_ID, 0):
+                print(
+                    f"  seen {info['vendor_id']:04x}:{info['product_id']:04x}"
+                    f" if={info.get('interface_number')} usage_page={info.get('usage_page')}"
+                )
         return
 
     heading = "Henry Audio USB devices:" if verbose else "Statistics HID interfaces:"
@@ -136,10 +163,23 @@ def try_open_stats_device():
         dev = hid.device()
         try:
             dev.open_path(info["path"])
+            try:
+                dev.set_nonblocking(0)
+            except (AttributeError, OSError):
+                pass
         except OSError:
             continue
         return dev, info
     return None, None
+
+
+def read_hid_stats_report(dev, timeout_ms=HID_READ_TIMEOUT_MS):
+    """Read one HID input report; try common Windows buffer sizes."""
+    for size in HID_READ_SIZES:
+        data = dev.read(size, timeout_ms=timeout_ms)
+        if data:
+            return data
+    return []
 
 
 def wait_for_stats_device(timeout_s=DEVICE_WAIT_TIMEOUT_S, verbose=False):
@@ -197,8 +237,10 @@ def decode_last_event(tag, arg0, arg1, arg2):
         prev_range = phon_range_for_step(prev_step)
         new_range = phon_range_for_step(new_step)
         return {
-            "from_phon": prev_range["from_phon"],
-            "to_phon": new_range["from_phon"],
+            "from_phon": arg0,
+            "to_phon": arg1,
+            "from_db_spl": arg0,
+            "to_db_spl": arg1,
             "from_phon_range": prev_range,
             "to_phon_range": new_range,
             "equalizer_step": new_step,
@@ -244,8 +286,13 @@ def packet_checksum(packet_bytes):
 def validate_packet_checksum(chunk):
     stored = chunk[USB_STATS_PACKET_CHECKSUM_INDEX]
     expected = packet_checksum(chunk)
-    if stored != expected:
-        raise ValueError("stats packet checksum mismatch")
+    if stored == expected:
+        return
+    if stored == 0:
+        # Older firmware builds leave checksum unset (zero). Magic, version,
+        # zero padding, and plausibility checks still filter stray HID traffic.
+        return
+    raise ValueError("stats packet checksum mismatch")
 
 
 def normalize_hid_payload(data):
@@ -271,13 +318,14 @@ def normalize_hid_payload(data):
 def find_hid_anchor_offset(payload):
     limit = min(8, len(payload) - USB_STATS_PACKET_SIZE + 1)
     for offset in range(max(0, limit)):
-        if (
-            payload[offset] == USB_STATS_PACKET_HID_ANCHOR
-            and payload[offset + 1] == USB_STATS_PACKET_VERSION
-        ):
-            if offset > 0 and any(payload[i] != 0 for i in range(offset)):
-                continue
-            return offset
+        if payload[offset] != USB_STATS_PACKET_HID_ANCHOR:
+            continue
+        version = payload[offset + 1]
+        if version not in (1, 2, USB_STATS_PACKET_VERSION):
+            continue
+        if offset > 0 and any(payload[i] != 0 for i in range(offset)):
+            continue
+        return offset
     return None
 
 
@@ -319,17 +367,31 @@ def parse_stats_payload(payload):
     if offset is None:
         raise ValueError("stats packet hid_anchor/version not found")
 
-    chunk = payload[offset : offset + USB_STATS_PACKET_SIZE]
-    if len(chunk) < USB_STATS_PACKET_SIZE:
+    version = payload[offset + 1]
+    if version == 1:
+        packet_size = USB_STATS_PACKET_SIZE_V2
+        packet_format = USB_STATS_PACKET_FORMAT_V2
+    elif version == 2:
+        packet_size = USB_STATS_PACKET_SIZE_V2
+        packet_format = USB_STATS_PACKET_FORMAT_V2
+    elif version == USB_STATS_PACKET_VERSION:
+        packet_size = USB_STATS_PACKET_SIZE_V3
+        packet_format = USB_STATS_PACKET_FORMAT_V3
+    else:
+        raise ValueError("stats packet version mismatch")
+
+    chunk = payload[offset : offset + packet_size]
+    if len(chunk) < packet_size:
         raise ValueError(
-            f"stats payload too short: got {len(chunk)} bytes, need {USB_STATS_PACKET_SIZE}"
+            f"stats payload too short: got {len(chunk)} bytes, need {packet_size}"
         )
 
-    if any(payload[offset + USB_STATS_PACKET_SIZE : USB_STATS_HID_REPORT_SIZE]):
+    if any(payload[offset + packet_size : USB_STATS_HID_REPORT_SIZE]):
         raise ValueError("stats packet padding is not zero")
 
     validate_packet_checksum(chunk)
 
+    fields = struct.unpack(packet_format, chunk)
     (
         hid_anchor,
         version,
@@ -352,10 +414,16 @@ def parse_stats_payload(payload):
         last_arg1,
         last_arg2,
         equalizer_step,
-    ) = struct.unpack(USB_STATS_PACKET_FORMAT, chunk)
+    ) = fields[:21]
+    source_volume_control = fields[21] if len(fields) > 21 else 0
 
-    if hid_anchor != USB_STATS_PACKET_HID_ANCHOR or version != USB_STATS_PACKET_VERSION:
+    if hid_anchor != USB_STATS_PACKET_HID_ANCHOR:
         raise ValueError("stats packet header mismatch")
+
+    if version == 1:
+        frequency_hz = frequency_100hz
+    else:
+        frequency_hz = frequency_100hz * 100
 
     stats = {
         "version": version,
@@ -366,7 +434,7 @@ def parse_stats_payload(payload):
         "max_fifo": max_fifo,
         "min_fifo": min_fifo,
         "deadline_misses": deadline_misses,
-        "frequency_hz": frequency_100hz * 100,
+        "frequency_hz": frequency_hz,
         "track_dbfs": track_dbfs,
         "track_rms_dbfs": track_rms_dbfs,
         "gain_dbfs": gain_dbfs,
@@ -374,6 +442,7 @@ def parse_stats_payload(payload):
         "event_count": event_count,
         "last_tag": last_tag,
         "equalizer_step": equalizer_step,
+        "source_volume_control": 1 if source_volume_control else 0,
         "last_event": decode_last_event(last_tag, last_arg0, last_arg1, last_arg2),
     }
 
@@ -424,15 +493,12 @@ def process_hid_report(data, last_report_seq, args):
                 file=sys.stderr,
             )
     stats_output = format_stats_output(stats)
-    if not is_empty_packet(stats_output):
-        print(json.dumps(stats_output))
-        sys.stdout.flush()
+    print(json.dumps(stats_output))
+    sys.stdout.flush()
     return stats["report_seq"], True
 
 
 def is_empty_packet(data: dict) -> bool:
-    if "frequency_hz" in data and data["frequency_hz"] == 0: 
-        return True
     return False
 
 
@@ -459,18 +525,33 @@ def main():
 
     last_report_seq = None
     accepted = 0
+    empty_reads = 0
     while True:
         try:
-            data = dev.read(USB_STATS_HID_TRANSFER_SIZE, timeout_ms=HID_READ_TIMEOUT_MS)
+            data = read_hid_stats_report(dev)
             if not data:
+                empty_reads += 1
                 if args.verbose:
                     print("waiting for HID report...", file=sys.stderr)
+                    if empty_reads == 3:
+                        print(
+                            "hint: no bytes from firmware yet — start playback at "
+                            "44.1/48 kHz, or reflash if stats HID send was broken; "
+                            "use --debug to inspect rejected packets",
+                            file=sys.stderr,
+                        )
                 continue
+            empty_reads = 0
             last_report_seq, accepted_now = process_hid_report(data, last_report_seq, args)
             if accepted_now:
                 accepted += 1
                 if args.verbose:
                     print(f"accepted report_seq={last_report_seq} (#{accepted})", file=sys.stderr)
+            elif args.verbose:
+                print(
+                    f"ignored HID packet ({len(data)} bytes); use --debug for details",
+                    file=sys.stderr,
+                )
 
         except OSError as exc:
             if args.verbose:

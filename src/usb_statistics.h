@@ -22,8 +22,8 @@ typedef struct {
 } usb_stats_t;
 
 #define USB_STATS_PACKET_HID_ANCHOR  0x53u
-#define USB_STATS_PACKET_VERSION     2u
-#define USB_STATS_PACKET_WIRE_SIZE   37u
+#define USB_STATS_PACKET_VERSION     3u
+#define USB_STATS_PACKET_WIRE_SIZE   38u
 #define USB_STATS_PACKET_CHECKSUM_OFFSET 3u
 
 #define USB_STATS_TAG_NONE         0u
@@ -56,6 +56,7 @@ PACK(struct usb_stats_packet {
     U8 last_arg1;
     U8 last_arg2;
     U8 equalizer_step;
+    U8 source_volume_control;
 });
 typedef struct usb_stats_packet usb_stats_packet_t;
 
