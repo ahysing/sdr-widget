@@ -34,8 +34,6 @@ S64 macs_d(S64 d, S32 a, S32 b) {
 #define LOUDNESS_Q29_ONE  ((int32_t)1 << 29)
 #define TO_Q29(X)         (((int64_t)(X)) << 29)
 #define FROM_Q29(X)       (((X) + (1LL << 28)) >> 29)
-#define LOUDNESS_SCALE_Q15_SHIFT       15
-#define LOUDNESS_SCALE_Q15_UNITY       (1 << LOUDNESS_SCALE_Q15_SHIFT)
 
 static const biquad_quotients_fast_t
 loudness_quotients_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS][LOUDNESS_FILTERS] = {
@@ -190,6 +188,10 @@ static const biquad_quotients_fast_t (*active_equalizer_step_table)[LOUDNESS_FIL
 static biquad_quotients_fast_t active_quotients[LOUDNESS_FILTERS];
 static biquad_quotients_fast_t staging_quotients[LOUDNESS_FILTERS];
 static biquad_state_fast_t     loudness_states[LOUDNESS_FILTERS];
+static biquad_state_fast_t     staging_states[LOUDNESS_FILTERS];
+static int32_t loudness_input_history[LOUDNESS_FILTERS][2];
+static int32_t loudness_output_history[LOUDNESS_FILTERS][2];
+static uint32_t loudness_history_samples;
 
 static biquad_quotients_fast_t loudness_scale_quotients_fast(biquad_quotients_fast_t base, uint32_t n, biquad_type_t filter_type);
 
@@ -204,42 +206,34 @@ static int32_t loudness_saturate_s64_to_s32(int64_t value)
     return (int32_t)value;
 }
 
-static int32_t loudness_scale_w_q15_s32(int32_t w, int32_t factor_q15)
-{
-    int64_t scaled = (int64_t)w * (int64_t)factor_q15;
-    return loudness_saturate_s64_to_s32(
-        scaled >> LOUDNESS_SCALE_Q15_SHIFT);
-}
-
-static void loudness_apply_df2_state_scale_fast(int32_t factor_q15)
-{
-    int i;
-    if (factor_q15 == LOUDNESS_SCALE_Q15_UNITY) {
-        return;
-    }
-    for (i = 0; i < LOUDNESS_FILTERS; i++) {
-        loudness_states[i].w1 = loudness_scale_w_q15_s32(loudness_states[i].w1, factor_q15);
-        loudness_states[i].w2 = loudness_scale_w_q15_s32(loudness_states[i].w2, factor_q15);
-    }
-}
-
 int32_t biquad_step_fast_24bit(int32_t x_n, biquad_state_fast_t* biquad_states, const biquad_quotients_fast_t* q)
 {
-    int64_t w_n;
-    int64_t y_n_scaled;
-    S32 y_n_safe;
-    int64_t acc = TO_Q29((int64_t)x_n);
-    acc = FMS_24BIT(acc, q->a1, biquad_states->w1);
-    acc = FMS_24BIT(acc, q->a2, biquad_states->w2);
-    w_n = FROM_Q29(acc);
-    acc = (int64_t)q->b0 * w_n;
-    acc = FMA_24BIT(acc, q->b1, biquad_states->w1);
-    acc = FMA_24BIT(acc, q->b2, biquad_states->w2);
-    y_n_scaled = FROM_Q29(acc);
-    y_n_safe = saturate_24bit_s64_to_s32(y_n_scaled);
-    biquad_states->w2 = biquad_states->w1;
-    biquad_states->w1 = loudness_saturate_s64_to_s32(w_n);
-    return y_n_safe;
+    int64_t acc;
+    int32_t y_n;
+    int32_t next_w1;
+    int32_t next_w2;
+    /*
+     * Transposed direct form II keeps its two delay states near the signal
+     * level.  Canonical DF2 amplified the 50 Hz state by more than 5000x,
+     * overflowing int32_t even though input and output were both in range.
+     */
+    // acc = (int64_t)q->b0 * x_n;
+    // acc += TO_Q29((int64_t)biquad_states->w1);
+    acc = FMA_24BIT(TO_Q29((int64_t)biquad_states->w1), q->b0, x_n);
+    y_n = saturate_24bit_s64_to_s32(FROM_Q29(acc));
+
+    acc = (int64_t)q->b1 * x_n;
+    acc = FMS_24BIT(acc, q->a1, y_n);
+    acc += TO_Q29((int64_t)biquad_states->w2);
+    next_w1 = loudness_saturate_s64_to_s32(FROM_Q29(acc));
+
+    acc = (int64_t)q->b2 * x_n;
+    acc = FMS_24BIT(acc, q->a2, y_n);
+    next_w2 = loudness_saturate_s64_to_s32(FROM_Q29(acc));
+
+    biquad_states->w1 = next_w1;
+    biquad_states->w2 = next_w2;
+    return y_n;
 }
 
 int32_t biquad_step_fast_32bit(int32_t x_n, biquad_state_fast_t* biquad_states,
@@ -248,20 +242,14 @@ int32_t biquad_step_fast_32bit(int32_t x_n, biquad_state_fast_t* biquad_states,
     return biquad_step_fast_24bit(x_n, biquad_states, q);
 }
 
-/* Unity gain on b* taps; host volume is applied per-sample in the audio task. */
-static inline int64_t apply_volume_q29(int64_t coeff)
-{
-    return coeff;
-}
-
 static void loudness_fill_staging_quotients_fast(int equalizer_step)
 {
     int i;
     for (i = 0; i < LOUDNESS_FILTERS; i++) {
         const biquad_quotients_fast_t* src = &active_equalizer_step_table[equalizer_step][i];
-        int64_t b0 = apply_volume_q29(src->b0);
-        int64_t b1 = apply_volume_q29(src->b1);
-        int64_t b2 = apply_volume_q29(src->b2);
+        int64_t b0 = src->b0;
+        int64_t b1 = src->b1;
+        int64_t b2 = src->b2;
         staging_quotients[i].b0 = (int32_t)b0;
         staging_quotients[i].b1 = (int32_t)b1;
         staging_quotients[i].b2 = (int32_t)b2;
@@ -270,34 +258,108 @@ static void loudness_fill_staging_quotients_fast(int equalizer_step)
     }
 }
 
-static void loudness_commit_staging_quotients_fast(void)
+static int32_t loudness_reconstruct_w2_fast(
+    const biquad_quotients_fast_t *q, int32_t x_n, int32_t y_n)
 {
-    memcpy(active_quotients, staging_quotients, sizeof(staging_quotients));
+    int64_t acc = (int64_t)q->b2 * x_n;
+    acc = FMS_24BIT(acc, q->a2, y_n);
+    return loudness_saturate_s64_to_s32(FROM_Q29(acc)); // TODO: figure out why acc is Q29
 }
 
-static void loudness_load_active_quotients_fast(int equalizer_step)
+static void loudness_reconstruct_staging_states_fast(void)
 {
-    loudness_fill_staging_quotients_fast(equalizer_step);
-    loudness_commit_staging_quotients_fast();
+    /*
+    * For transposed DF-II, after processing sample k:
+    *
+    *   w2[k] = R((b2*x[k] - a2*y[k]) / Q)
+    *   w1[k] = R((b1*x[k] - a1*y[k] + Q*w2[k-1]) / Q)
+    *
+    * where Q = 2^29 and R is the same fixed-point rounding used by
+    * biquad_step_fast_24bit().  Expanding the older state gives:
+    *
+    *   w1[k] = R((b1*x[k] - a1*y[k]
+    *              + Q*R((b2*x[k-1] - a2*y[k-1]) / Q)) / Q)
+    *
+    * Re-evaluating these equations with the new coefficients makes the
+    * next sample continue from the saved signal trajectory.  Each
+    * cascaded section has separate x/y history because section 1's
+    * output is section 2's input.  Keeping the nested R also reproduces
+    * the runtime state's intermediate Q29 quantization exactly.
+    */
+    int i;    
+    switch (loudness_history_samples) {
+        case 0:
+            for (i = 0; i < LOUDNESS_FILTERS; i++) {
+                staging_states[i].w1 = 0;
+                staging_states[i].w2 = 0;
+            }
+            return;
+        case 1:
+            for (i = 0; i < LOUDNESS_FILTERS; i++) {
+                const biquad_quotients_fast_t *q = &staging_quotients[i];
+                int32_t x_n = loudness_input_history[i][0];
+                int32_t y_n = loudness_output_history[i][0];
+            
+                int64_t acc_w1 = (int64_t)q->b1 * x_n;
+                acc_w1 = FMS_24BIT(acc_w1, q->a1, y_n);
+                staging_states[i].w1 = loudness_saturate_s64_to_s32(FROM_Q29(acc_w1));
+                
+                staging_states[i].w2 = loudness_reconstruct_w2_fast(q, x_n, y_n);
+            }
+            return;
+        default:
+            for (i = 0; i < LOUDNESS_FILTERS; i++) {
+                const biquad_quotients_fast_t *q = &staging_quotients[i];
+                int64_t acc = 0;
+                int32_t previous_w2 = 0;
+                int32_t x_n = loudness_input_history[i][0];
+                int32_t y_n = loudness_output_history[i][0];
+    
+                int32_t x_nm1 = loudness_input_history[i][1];
+                int32_t y_nm1 = loudness_output_history[i][1];
+
+                previous_w2 = loudness_reconstruct_w2_fast(q, x_nm1, y_nm1);
+
+                acc = (int64_t)q->b1 * x_n;
+                acc = FMS_24BIT(acc, q->a1, y_n);
+                acc += TO_Q29((int64_t)previous_w2);
+                staging_states[i].w1 = loudness_saturate_s64_to_s32(FROM_Q29(acc));
+                staging_states[i].w2 = loudness_reconstruct_w2_fast(q, x_n, y_n);
+        }
+    }
+}
+
+static void loudness_commit_staging_filter_fast(void)
+{
+    loudness_reconstruct_staging_states_fast();
+    memcpy(active_quotients, staging_quotients, sizeof(staging_quotients));
+    memcpy(loudness_states, staging_states, sizeof(staging_states));
 }
 
 #ifdef BUILD_TESTING
-void loudness_test_load_active_quotients_fast(int equalizer_step)
+void loudness_test_get_fast_section(int section,
+    biquad_state_fast_t *state, biquad_quotients_fast_t *quotients,
+    int32_t input_history[2], int32_t output_history[2])
 {
-    loudness_load_active_quotients_fast(equalizer_step);
+    taskENTER_CRITICAL();
+    *state = loudness_states[section];
+    *quotients = active_quotients[section];
+    memcpy(input_history, loudness_input_history[section],
+        sizeof(loudness_input_history[section]));
+    memcpy(output_history, loudness_output_history[section],
+        sizeof(loudness_output_history[section]));
+    taskEXIT_CRITICAL();
 }
+
 #endif
 
 void loudness_fast_select_equalizer_step(int32_t db_spl, int equalizer_step) {
     int32_t prev_db_spl = (int32_t)last_db_spl;
     int prev_step = loudness_get_equalizer_step(prev_db_spl);
-    int32_t factor_q15;
     target_gain_dbfs_q8 = (S16)loudness_clamp_gain_dbfs_q8((int32_t)target_gain_dbfs_q8);
     loudness_fill_staging_quotients_fast(equalizer_step);
-    factor_q15 = loudness_combined_step_scale_q15(prev_step, equalizer_step);
     taskENTER_CRITICAL();
-    loudness_apply_df2_state_scale_fast(factor_q15);
-    loudness_commit_staging_quotients_fast();
+    loudness_commit_staging_filter_fast();
     loudness_publish_equalizer_step(db_spl);
     taskEXIT_CRITICAL();
     loudness_report_equalizer_step_switch(prev_db_spl, db_spl, prev_step, equalizer_step);
@@ -305,26 +367,37 @@ void loudness_fast_select_equalizer_step(int32_t db_spl, int equalizer_step) {
 
 void loudness_fast_reset_states(void)
 {
-    int i;
-    for (i = 0; i < LOUDNESS_FILTERS; i++) {
-        loudness_states[i].w1 = 0;
-        loudness_states[i].w2 = 0;
-    }
+    taskENTER_CRITICAL();
+    memset(loudness_states, 0, sizeof(loudness_states));
+    memset(staging_states, 0, sizeof(staging_states));
+    memset(loudness_input_history, 0, sizeof(loudness_input_history));
+    memset(loudness_output_history, 0, sizeof(loudness_output_history));
+    loudness_history_samples = 0;
+    taskEXIT_CRITICAL();
 }
 
-int64_t loudness_fast_24bit(int32_t sample)
+int32_t loudness_fast_24bit(int32_t sample)
 {
     int i;
     for (i = 0; i < LOUDNESS_FILTERS; i++) {
-        sample = biquad_step_fast_24bit(sample, &loudness_states[i], &active_quotients[i]);
+        int32_t section_input = sample;
+        sample = biquad_step_fast_24bit(section_input, &loudness_states[i],
+            &active_quotients[i]);
+        loudness_input_history[i][1] = loudness_input_history[i][0];
+        loudness_input_history[i][0] = section_input;
+        loudness_output_history[i][1] = loudness_output_history[i][0];
+        loudness_output_history[i][0] = sample;
     }
-    return (S64)saturate_24bit_s32_to_s32(sample);
+    if (loudness_history_samples < 2) {
+        loudness_history_samples++;
+    }
+    return saturate_24bit_s32_to_s32(sample);
 }
 
 S32 loudness_filter_16bit_container(S32 sample)
 {
     S32 x = UPSAMPLE_16BIT_TO_FILTER_32(sample);
-    S32 y = (S32)loudness_fast_24bit(x);
+    S32 y = loudness_fast_24bit(x);
     return DOWNSAMPLE_FILTER_TO_16BIT_CONTAINER(y);
 }
 
@@ -336,10 +409,8 @@ S32 loudness_filter_24bit_container(S32 sample)
      * filtering and restore the container alignment afterwards.
      */
     S32 x = sample >> 8;
-    S32 y = (S32)loudness_fast_24bit(x);
-    // TODO: condider using
-    //  return (S32)(y << 8); // Fjernet (U32) bit-casting for å bevare aritmetisk fortegn!
-    return (S32)((U32)y << 8);
+    S32 y = loudness_fast_24bit(x);
+    return y << 8;
 }
 
 static biquad_quotients_fast_t loudness_scale_quotients_fast(biquad_quotients_fast_t base, uint32_t n, biquad_type_t filter_type) {
@@ -418,10 +489,10 @@ void loudness_change_frequency_fast(uint32_t frequency) {
         base_table = (const biquad_quotients_fast_t (*)[LOUDNESS_FILTERS])(void*)loudness_quotients_scaled;
     }
     int equalizer_step = loudness_get_equalizer_step(loudness_internal_current_db_spl());
+    taskENTER_CRITICAL();
     active_equalizer_step_table = base_table;
     loudness_fill_staging_quotients_fast(equalizer_step);
-    taskENTER_CRITICAL();
-    loudness_commit_staging_quotients_fast();
+    loudness_commit_staging_filter_fast();
     taskEXIT_CRITICAL();
     loudness_inferred_gain_set_rate(frequency);
 }

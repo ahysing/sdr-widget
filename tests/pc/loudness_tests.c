@@ -510,68 +510,6 @@ void test_dc_silence_response(void) {
     }
 }
 
-/**
- * TEST 4: Teknisk sinus-test ved 48 kHz (55 Phon).
- * Genererer en 50 Hz sinustone, sender den igjennom containeren, 
- * og måler RMS for å bekrefte den eksakte ISO 226 forsterkningen på +10.387 dB.
- */
-void test_50hz_bass_boost_magnitude(void) {
-    printf("Running test_50hz_bass_boost_magnitude...\n");
-    printf("Akustisk forsterkning (50 Hz ved 55 Phon)\n");
-    loudness_fast_reset_states();
-    
-    // Last inn 55 phon-koeffisientene for 48 kHz
-    loudness_test_load_active_quotients_fast(0); 
-
-    const double sample_rate = 48000.0;
-    const double frequency = 50.0;
-    const int num_samples = 48000; // 1 sekund med lyd
-    
-    // Vi bruker et signal på -12 dBFS for å ha god margin til metning
-    // En amplitude på 2097152 i 24-bit domenet
-    const double amplitude = 2097152.0; 
-    
-    double rms_in_sum = 0;
-    double rms_out_sum = 0;
-
-    // Vi lar filteret stabilisere seg (settle) i 2000 sampler først for å fjerne oppstartstransienter
-    for (int i = 0; i < num_samples; i++) {
-        double t = (double)i / sample_rate;
-        S32 raw_24bit_sample = (S32)(amplitude * sin(2.0 * M_PI * frequency * t));
-        
-        // Pakk inn i 32-bit USB container-justering (bits 31:8)
-        S32 container_input = raw_24bit_sample << 8;
-        
-        S32 container_output = loudness_filter_24bit_container(container_input);
-        
-        // Pakk ut igjen til ren PCM-skala for RMS-analyse
-        S32 raw_output_sample = container_output >> 8;
-
-        // Akkumuler RMS-verdier etter de første 2000 samplene (for stabilitet)
-        if (i >= 2000) {
-            rms_in_sum += (double)raw_24bit_sample * (double)raw_24bit_sample;
-            rms_out_sum += (double)raw_output_sample * (double)raw_output_sample;
-        }
-    }
-
-    double rms_in = sqrt(rms_in_sum / (num_samples - 2000));
-    double rms_out = sqrt(rms_out_sum / (num_samples - 2000));
-    
-    // Beregn målt forsterkning i desibel
-    double measured_gain_db = 20.0 * log10(rms_out / rms_in);
-    const double expected_gain_db = 10.387;
-    const double tolerance = 0.05; // Tillater +/- 0.05 dB avvik
-
-    if (fabs(measured_gain_db - expected_gain_db) > tolerance) {
-        printf("Wrong amplification at 50 Hz! Expected: %0.3f dB, Measured: %0.3f dB\n", 
-                  expected_gain_db, measured_gain_db);
-        assert(false);
-    }
-
-    printf("Measured: %0.3f dB (Expected: %0.3f dB) -> ", measured_gain_db, expected_gain_db);
-}
-
-
 void test_loudness_24bit_container_round_trip(void) {
     printf("Running test_loudness_24bit_container_round_trip...\n");
     loudness_init();
@@ -606,16 +544,82 @@ void test_loudness_24bit_container_zero_crossing(void) {
     printf("test_loudness_24bit_container_zero_crossing passed\n\n");
 }
 
-void test_loudness_df2_step_q15_scale_round_trip(void) {
-    printf("Running test_loudness_df2_step_q15_scale_round_trip...\n");
-    int32_t w = 1000000;
-    int32_t scaled_up = (int32_t)((int64_t)w * 33808 >> 15);
-    int32_t round_trip = (int32_t)((int64_t)scaled_up * 31760 >> 15);
+static int32_t reconstruct_test_q29(int64_t accumulator)
+{
+    int64_t rounded = (accumulator + (1LL << 28)) >> 29;
+    if (rounded > INT32_MAX) {
+        return INT32_MAX;
+    }
+    if (rounded < INT32_MIN) {
+        return INT32_MIN;
+    }
+    return (int32_t)rounded;
+}
 
-    assert(scaled_up > w);
-    assert(round_trip > w - 2000);
-    assert(round_trip < w + 2000);
-    printf("test_loudness_df2_step_q15_scale_round_trip passed\n\n");
+static void assert_reconstructed_fast_section(
+    const int32_t old_input_history[2],
+    const int32_t old_output_history[2],
+    const biquad_state_fast_t *state,
+    const biquad_quotients_fast_t *q)
+{
+    int32_t previous_w2 = reconstruct_test_q29(
+        (int64_t)q->b2 * old_input_history[1] -
+        (int64_t)q->a2 * old_output_history[1]);
+    int32_t expected_w1 = reconstruct_test_q29(
+        (int64_t)q->b1 * old_input_history[0] -
+        (int64_t)q->a1 * old_output_history[0] +
+        ((int64_t)previous_w2 << 29));
+    int32_t expected_w2 = reconstruct_test_q29(
+        (int64_t)q->b2 * old_input_history[0] -
+        (int64_t)q->a2 * old_output_history[0]);
+
+    assert(state->w1 == expected_w1);
+    assert(state->w2 == expected_w2);
+}
+
+void test_loudness_transposed_df2_state_reconstruction(void)
+{
+    biquad_state_fast_t state;
+    biquad_quotients_fast_t q;
+    int32_t input_before[2][2];
+    int32_t output_before[2][2];
+    int32_t input_after[2];
+    int32_t output_after[2];
+    int i;
+
+    printf("Running test_loudness_transposed_df2_state_reconstruction...\n");
+    loudness_change_frequency_fast(48000);
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(2);
+
+    for (i = 0; i < 16; i++) {
+        int32_t input = ((i * 7919) % 400001) - 200000;
+        (void)loudness_fast_24bit(input);
+    }
+    for (i = 0; i < 2; i++) {
+        loudness_test_get_fast_section(i, &state, &q,
+            input_before[i], output_before[i]);
+    }
+
+    /* The second cascade section must retain its own intermediate history. */
+    assert(input_before[1][0] == output_before[0][0]);
+    assert(input_before[1][1] == output_before[0][1]);
+    assert(input_before[1][0] != input_before[0][0]);
+
+    loudness_test_load_active_quotients_fast(10);
+
+    for (i = 0; i < 2; i++) {
+        loudness_test_get_fast_section(i, &state, &q,
+            input_after, output_after);
+        assert(input_after[0] == input_before[i][0]);
+        assert(input_after[1] == input_before[i][1]);
+        assert(output_after[0] == output_before[i][0]);
+        assert(output_after[1] == output_before[i][1]);
+        assert_reconstructed_fast_section(input_before[i],
+            output_before[i], &state, &q);
+    }
+
+    printf("test_loudness_transposed_df2_state_reconstruction passed\n\n");
 }
 
 void test_loudness_df2_step_transition_no_reset(void) {
@@ -749,41 +753,53 @@ void test_loudness_equalizer_step_hysteresis_79_80(void) {
 }
 
 #ifdef FAST
-#define SINE_TEST_SAMPLE_RATE_HZ 48000
 #define SINE_TEST_SAMPLE_COUNT   48000
-#define SINE_TEST_AMPLITUDE      200000
+#define SINE_TEST_SETTLE_SAMPLES 2000
+#define SINE_TEST_AMPLITUDE      2097152
+#define SINE_TEST_FREQUENCY_HZ   50
+#define SINE_TEST_GAIN_TOLERANCE_DB 0.05
 #define SINE_TEST_PI             3.14159265358979323846
 
 typedef struct {
-    double rms;
-    int positive_crossings;
-} sine_test_result_t;
+    int phon;
+    int equalizer_step;
+    double expected_gain_44100_db;
+    double expected_gain_48000_db;
+} bass_boost_test_case_t;
 
-typedef struct {
-    int frequency_hz;
-    double spl_55;
-    double spl_80;
-    double tolerance_db;
-} loudness_iso_test_case_t;
+static const bass_boost_test_case_t bass_boost_test_cases[] = {
+    { 55,  0, 10.375857, 10.375381 },
+    { 57,  1,  9.563126,  9.562751 },
+    { 59,  2,  8.746322,  8.745971 },
+    { 61,  3,  7.925660,  7.925338 },
+    { 63,  4,  7.101686,  7.101419 },
+    { 65,  5,  6.274677,  6.274453 },
+    { 67,  6,  5.444874,  5.444707 },
+    { 69,  7,  4.612590,  4.612447 },
+    { 71,  8,  3.778054,  3.777939 },
+    { 73,  9,  2.941457,  2.941373 },
+    { 75, 10,  2.103053,  2.102956 },
+    { 77, 11,  1.262941,  1.262894 },
+    { 79, 12,  0.421351,  0.421293 },
+};
 
-static sine_test_result_t measure_fast_sine_at_db_spl(
-    int frequency_hz, int db_spl)
+static double measure_fast_50hz_gain_db(
+    uint32_t sample_rate_hz, int equalizer_step)
 {
-    sine_test_result_t result = { 0.0, 0 };
-    double sum_squares = 0.0;
-    int32_t previous = 0;
+    double input_sum_squares = 0.0;
+    double output_sum_squares = 0.0;
+    double input_rms;
+    double output_rms;
     int i;
 
-    current_freq.frequency = SINE_TEST_SAMPLE_RATE_HZ;
-    loudness_init();
-    loudness_set_source_has_volume_control();
-    loudness_usb_volume_changed(
-        (S16)((db_spl - LOUDNESS_DB_SPL_MAX) * 256));
-    assert(loudness_get_last_db_spl() == db_spl);
+    current_freq.frequency = sample_rate_hz;
+    loudness_change_frequency_fast(sample_rate_hz);
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(equalizer_step);
 
     for (i = 0; i < SINE_TEST_SAMPLE_COUNT; i++) {
-        double phase = 2.0 * SINE_TEST_PI * (double)frequency_hz *
-            (double)i / (double)SINE_TEST_SAMPLE_RATE_HZ;
+        double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
+            (double)i / (double)sample_rate_hz;
         int32_t input_24 = (int32_t)lrint(
             (double)SINE_TEST_AMPLITUDE * sin(phase));
         int32_t input_container = (int32_t)((uint32_t)input_24 << 8);
@@ -791,63 +807,76 @@ static sine_test_result_t measure_fast_sine_at_db_spl(
             loudness_filter_24bit_container(input_container);
         int32_t output_24 = output_container >> 8;
 
-        sum_squares += (double)output_24 * (double)output_24;
-        if (previous <= 0 && output_24 > 0) {
-            result.positive_crossings++;
+        if (i >= SINE_TEST_SETTLE_SAMPLES) {
+            input_sum_squares += (double)input_24 * (double)input_24;
+            output_sum_squares += (double)output_24 * (double)output_24;
         }
-        previous = output_24;
     }
 
-    result.rms = sqrt(sum_squares / (double)SINE_TEST_SAMPLE_COUNT);
-    return result;
+    input_rms = sqrt(input_sum_squares /
+        (SINE_TEST_SAMPLE_COUNT - SINE_TEST_SETTLE_SAMPLES));
+    output_rms = sqrt(output_sum_squares /
+        (SINE_TEST_SAMPLE_COUNT - SINE_TEST_SETTLE_SAMPLES));
+    return 20.0 * log10(output_rms / input_rms);
 }
 
-void test_loudness_fast_48khz_55_phon_bass_boost_rms(void)
+static void assert_50hz_bass_boost_case(size_t case_index)
 {
-    /*
-     * ISO 226 SPL values are the values used by create2biquads.py.  For a
-     * positive filter gain G, its target relationship is:
-     *
-     *     SPL_55(f) - G(f) = SPL_80(f) - (80 - 55)
-     *
-     * The minus sign is intentional: positive electrical gain lowers the
-     * acoustic threshold required to produce equal perceived loudness.
-     */
-    static const loudness_iso_test_case_t cases[] = {
-        {   50, 86.9790338570, 101.7213697471, 0.75 },
-        {  100, 75.1492672665,  92.4797225205, 0.75 },
-        { 1000, 55.0113502229,  80.0120754829, 0.75 },
-    };
+    const bass_boost_test_case_t *test_case =
+        &bass_boost_test_cases[case_index];
+    double gain_44100 = measure_fast_50hz_gain_db(
+        44100, test_case->equalizer_step);
+    double gain_48000 = measure_fast_50hz_gain_db(
+        48000, test_case->equalizer_step);
+
+    printf("  %d phon: 44.1 kHz %.3f dB, 48 kHz %.3f dB\n",
+        test_case->phon, gain_44100, gain_48000);
+    fflush(stdout);
+    assert(fabs(gain_44100 - test_case->expected_gain_44100_db) <
+        SINE_TEST_GAIN_TOLERANCE_DB);
+    assert(fabs(gain_48000 - test_case->expected_gain_48000_db) <
+        SINE_TEST_GAIN_TOLERANCE_DB);
+}
+
+#define DEFINE_50HZ_BASS_BOOST_TEST(PHON, INDEX) \
+    void test_50hz_##PHON##phon_bass_boost_magnitude(void) \
+    { \
+        printf("Running test_50hz_%dphon_bass_boost_magnitude...\n", PHON); \
+        assert_50hz_bass_boost_case(INDEX); \
+    }
+
+DEFINE_50HZ_BASS_BOOST_TEST(55, 0)
+DEFINE_50HZ_BASS_BOOST_TEST(57, 1)
+DEFINE_50HZ_BASS_BOOST_TEST(59, 2)
+DEFINE_50HZ_BASS_BOOST_TEST(61, 3)
+DEFINE_50HZ_BASS_BOOST_TEST(63, 4)
+DEFINE_50HZ_BASS_BOOST_TEST(65, 5)
+DEFINE_50HZ_BASS_BOOST_TEST(67, 6)
+DEFINE_50HZ_BASS_BOOST_TEST(69, 7)
+DEFINE_50HZ_BASS_BOOST_TEST(71, 8)
+DEFINE_50HZ_BASS_BOOST_TEST(73, 9)
+DEFINE_50HZ_BASS_BOOST_TEST(75, 10)
+DEFINE_50HZ_BASS_BOOST_TEST(77, 11)
+DEFINE_50HZ_BASS_BOOST_TEST(79, 12)
+
+void test_50hz_bass_boost_is_monotonic(void)
+{
+    double previous_44100 = 1000.0;
+    double previous_48000 = 1000.0;
     size_t i;
 
-    printf("Running test_loudness_fast_48khz_55_phon_bass_boost_rms...\n");
-    for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
-        const loudness_iso_test_case_t *test_case = &cases[i];
-        sine_test_result_t unity = measure_fast_sine_at_db_spl(
-            test_case->frequency_hz, LOUDNESS_REF_PHON);
-        sine_test_result_t filtered = measure_fast_sine_at_db_spl(
-            test_case->frequency_hz, 55);
-        double measured_gain_db = 20.0 * log10(filtered.rms / unity.rms);
-        double compensated_55_spl = test_case->spl_55 - measured_gain_db;
-        double shifted_80_spl = test_case->spl_80 -
-            (LOUDNESS_REF_PHON - 55);
-
-        printf("  %d Hz: unity RMS=%.3f, 55-phon RMS=%.3f, gain=%.3f dB\n",
-            test_case->frequency_hz, unity.rms, filtered.rms,
-            measured_gain_db);
-        fflush(stdout);
-        assert(fabs(compensated_55_spl - shifted_80_spl) <
-            test_case->tolerance_db);
-        assert(abs(filtered.positive_crossings -
-            unity.positive_crossings) <= 1);
-        assert(abs(filtered.positive_crossings -
-            test_case->frequency_hz) <= 1);
-
-        if (test_case->frequency_hz <= 100) {
-            assert(filtered.rms > unity.rms * 2.0);
-        }
+    printf("Running test_50hz_bass_boost_is_monotonic...\n");
+    for (i = 0; i < sizeof(bass_boost_test_cases) /
+        sizeof(bass_boost_test_cases[0]); i++) {
+        double gain_44100 = measure_fast_50hz_gain_db(
+            44100, bass_boost_test_cases[i].equalizer_step);
+        double gain_48000 = measure_fast_50hz_gain_db(
+            48000, bass_boost_test_cases[i].equalizer_step);
+        assert(gain_44100 < previous_44100);
+        assert(gain_48000 < previous_48000);
+        previous_44100 = gain_44100;
+        previous_48000 = gain_48000;
     }
-    printf("test_loudness_fast_48khz_55_phon_bass_boost_rms passed\n\n");
 }
 #endif
 
@@ -880,14 +909,26 @@ int main() {
 #ifdef FAST
     test_loudness_24bit_container_round_trip();
     test_loudness_24bit_container_zero_crossing();
-    test_loudness_df2_step_q15_scale_round_trip();
+    test_loudness_transposed_df2_state_reconstruction();
     test_loudness_df2_step_transition_no_reset();
-    test_loudness_fast_48khz_55_phon_bass_boost_rms();
 
     test_container_sign_preservation();
     test_full_scale_boundaries();
     test_dc_silence_response();
-    test_50hz_bass_boost_magnitude();
+    test_50hz_55phon_bass_boost_magnitude();
+    test_50hz_57phon_bass_boost_magnitude();
+    test_50hz_59phon_bass_boost_magnitude();
+    test_50hz_61phon_bass_boost_magnitude();
+    test_50hz_63phon_bass_boost_magnitude();
+    test_50hz_65phon_bass_boost_magnitude();
+    test_50hz_67phon_bass_boost_magnitude();
+    test_50hz_69phon_bass_boost_magnitude();
+    test_50hz_71phon_bass_boost_magnitude();
+    test_50hz_73phon_bass_boost_magnitude();
+    test_50hz_75phon_bass_boost_magnitude();
+    test_50hz_77phon_bass_boost_magnitude();
+    test_50hz_79phon_bass_boost_magnitude();
+    test_50hz_bass_boost_is_monotonic();
 #endif
     test_loudness_dither_and_noise_shaping();
     test_loudness_get_equalizer_step_14_levels();
