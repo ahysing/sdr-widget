@@ -118,15 +118,17 @@ Round-half-up is applied for negative blends. Typical result range: **~53–81 d
 
 ## Transitioning between loudness levels
 
-The biquad runs as **Direct Form II** with `w1`/`w2` delay state per shelf section (low + high). Coefficients commit **immediately** when the background task selects a new step. On step change, `w1`/`w2` are **scaled** (not zeroed) by Q15 midpoint factors `(65/63)` per step up and `(63/65)` per step down — combined into a single factor for multi-step jumps (e.g. step 7→2 applies five down-scales worth of gain in one multiply per state).
+The biquad runs as **canonical Direct Form II** with `w1`/`w2` delay state per shelf section (low + high). FAST stores states with **M-bit headroom** (scaled canonical DF-II) so internal pole buildup at low frequencies does not overflow `int32_t` states.
 
-Coefficient assembly and Q15 scale-factor math run **outside** `taskENTER_CRITICAL()`; the critical section only scales `w1`/`w2` (up to four multiplies), copies staged coefficients into `active_quotients`, and updates `last_db_spl`.
+Coefficients commit **immediately** when the background task selects a new step. **`w1`/`w2` are not scaled, reconstructed, or reset** on step change — only `active_quotients` are updated via `memcpy`. Canonical DF-II states represent the signal path through the poles and continue uninterrupted when contour coefficients change.
 
-1. **Step change:** when hysteresis boundaries are crossed, [`loudness_select_equalizer_step()`](../src/loudness.c) stages new coefficients, scales both shelf `w1`/`w2`, then commits coefficients.
+1. **Step change:** when hysteresis boundaries are crossed, [`loudness_select_equalizer_step()`](../src/loudness.c) stages new coefficients and copies them into `active_quotients` inside a short critical section.
 2. **Events:** firmware records `USB_STATS_TAG_EQUALIZER_STEP_SWITCH` (prev dB SPL, new dB SPL, step index 0–13).
 3. **Step 13:** at ≥ 80 phon the unity biquad row runs through the normal filter chain (not a separate hot-path skip).
 
 Sample-rate changes re-scale coefficient tables via [`loudness_change_frequency()`](../src/loudness.c) (queued from the USB sample-rate handler).
+
+PC tests include a **State Transition Equivalence** check: mid-stream coefficient swaps must be bit-exact vs running the target curve from a clean start.
 
 ## Signal chain summary
 

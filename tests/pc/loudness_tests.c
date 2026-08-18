@@ -544,84 +544,6 @@ void test_loudness_24bit_container_zero_crossing(void) {
     printf("test_loudness_24bit_container_zero_crossing passed\n\n");
 }
 
-static int32_t reconstruct_test_q29(int64_t accumulator)
-{
-    int64_t rounded = (accumulator + (1LL << 28)) >> 29;
-    if (rounded > INT32_MAX) {
-        return INT32_MAX;
-    }
-    if (rounded < INT32_MIN) {
-        return INT32_MIN;
-    }
-    return (int32_t)rounded;
-}
-
-static void assert_reconstructed_fast_section(
-    const int32_t old_input_history[2],
-    const int32_t old_output_history[2],
-    const biquad_state_fast_t *state,
-    const biquad_quotients_fast_t *q)
-{
-    int32_t previous_w2 = reconstruct_test_q29(
-        (int64_t)q->b2 * old_input_history[1] -
-        (int64_t)q->a2 * old_output_history[1]);
-    int32_t expected_w1 = reconstruct_test_q29(
-        (int64_t)q->b1 * old_input_history[0] -
-        (int64_t)q->a1 * old_output_history[0] +
-        ((int64_t)previous_w2 << 29));
-    int32_t expected_w2 = reconstruct_test_q29(
-        (int64_t)q->b2 * old_input_history[0] -
-        (int64_t)q->a2 * old_output_history[0]);
-
-    assert(state->w1 == expected_w1);
-    assert(state->w2 == expected_w2);
-}
-
-void test_loudness_transposed_df2_state_reconstruction(void)
-{
-    biquad_state_fast_t state;
-    biquad_quotients_fast_t q;
-    int32_t input_before[2][2];
-    int32_t output_before[2][2];
-    int32_t input_after[2];
-    int32_t output_after[2];
-    int i;
-
-    printf("Running test_loudness_transposed_df2_state_reconstruction...\n");
-    loudness_change_frequency_fast(48000);
-    loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(2);
-
-    for (i = 0; i < 16; i++) {
-        int32_t input = ((i * 7919) % 400001) - 200000;
-        (void)loudness_fast_24bit(input);
-    }
-    for (i = 0; i < 2; i++) {
-        loudness_test_get_fast_section(i, &state, &q,
-            input_before[i], output_before[i]);
-    }
-
-    /* The second cascade section must retain its own intermediate history. */
-    assert(input_before[1][0] == output_before[0][0]);
-    assert(input_before[1][1] == output_before[0][1]);
-    assert(input_before[1][0] != input_before[0][0]);
-
-    loudness_test_load_active_quotients_fast(10);
-
-    for (i = 0; i < 2; i++) {
-        loudness_test_get_fast_section(i, &state, &q,
-            input_after, output_after);
-        assert(input_after[0] == input_before[i][0]);
-        assert(input_after[1] == input_before[i][1]);
-        assert(output_after[0] == output_before[i][0]);
-        assert(output_after[1] == output_before[i][1]);
-        assert_reconstructed_fast_section(input_before[i],
-            output_before[i], &state, &q);
-    }
-
-    printf("test_loudness_transposed_df2_state_reconstruction passed\n\n");
-}
-
 void test_loudness_df2_step_transition_no_reset(void) {
     printf("Running test_loudness_df2_step_transition_no_reset...\n");
     int i;
@@ -759,6 +681,8 @@ void test_loudness_equalizer_step_hysteresis_79_80(void) {
 #define SINE_TEST_FREQUENCY_HZ   50
 #define SINE_TEST_GAIN_TOLERANCE_DB 0.05
 #define SINE_TEST_PI             3.14159265358979323846
+#define LOUDNESS_TRANSITION_TEST_SAMPLES 1000
+#define LOUDNESS_TRANSITION_SWITCH_SAMPLE 500
 
 typedef struct {
     int phon;
@@ -878,6 +802,114 @@ void test_50hz_bass_boost_is_monotonic(void)
         previous_48000 = gain_48000;
     }
 }
+
+static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
+    int step_from, int step_to)
+{
+    int i;
+    int section;
+
+    int32_t reference_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
+    int32_t transition_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
+    biquad_state_fast_t states_at_switch[LOUDNESS_FAST_FILTERS];
+    biquad_state_fast_t ref_final_states[LOUDNESS_FAST_FILTERS];
+    biquad_state_fast_t trans_final_states[LOUDNESS_FAST_FILTERS];
+
+    current_freq.frequency = sample_rate_hz;
+    loudness_change_frequency_fast(sample_rate_hz);
+
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(step_from);
+
+    for (i = 0; i < LOUDNESS_TRANSITION_SWITCH_SAMPLE; i++) {
+        double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
+            (double)i / (double)sample_rate_hz;
+        int32_t input_24 = (int32_t)lrint(
+            (double)SINE_TEST_AMPLITUDE * sin(phase));
+        int32_t input_container = (int32_t)((uint32_t)input_24 << 8);
+        loudness_filter_24bit_container(input_container);
+    }
+
+    for (section = 0; section < LOUDNESS_FAST_FILTERS; section++) {
+        loudness_test_get_fast_section(section, &states_at_switch[section], NULL);
+    }
+
+    loudness_fast_select_equalizer_step(60, step_to);
+
+    for (i = LOUDNESS_TRANSITION_SWITCH_SAMPLE;
+        i < LOUDNESS_TRANSITION_TEST_SAMPLES; i++) {
+        double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
+            (double)i / (double)sample_rate_hz;
+        int32_t input_24 = (int32_t)lrint(
+            (double)SINE_TEST_AMPLITUDE * sin(phase));
+        int32_t input_container = (int32_t)((uint32_t)input_24 << 8);
+        int32_t output_container =
+            loudness_filter_24bit_container(input_container);
+        transition_outputs[i] = output_container >> 8;
+    }
+
+    for (section = 0; section < LOUDNESS_FAST_FILTERS; section++) {
+        loudness_test_get_fast_section(section, &trans_final_states[section], NULL);
+    }
+
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(step_to);
+    for (section = 0; section < LOUDNESS_FAST_FILTERS; section++) {
+        loudness_test_set_fast_section(section, &states_at_switch[section]);
+    }
+
+    for (i = LOUDNESS_TRANSITION_SWITCH_SAMPLE;
+        i < LOUDNESS_TRANSITION_TEST_SAMPLES; i++) {
+        double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
+            (double)i / (double)sample_rate_hz;
+        int32_t input_24 = (int32_t)lrint(
+            (double)SINE_TEST_AMPLITUDE * sin(phase));
+        int32_t input_container = (int32_t)((uint32_t)input_24 << 8);
+        int32_t output_container =
+            loudness_filter_24bit_container(input_container);
+        reference_outputs[i] = output_container >> 8;
+    }
+
+    for (section = 0; section < LOUDNESS_FAST_FILTERS; section++) {
+        loudness_test_get_fast_section(section, &ref_final_states[section], NULL);
+    }
+
+    for (i = LOUDNESS_TRANSITION_SWITCH_SAMPLE + 1;
+        i < LOUDNESS_TRANSITION_TEST_SAMPLES; i++) {
+        assert(transition_outputs[i] == reference_outputs[i]);
+    }
+
+    for (section = 0; section < LOUDNESS_FAST_FILTERS; section++) {
+        assert(trans_final_states[section].w1 == ref_final_states[section].w1);
+        assert(trans_final_states[section].w2 == ref_final_states[section].w2);
+    }
+}
+
+void test_loudness_all_curve_transitions_glitchfree(void)
+{
+    size_t num_cases = sizeof(bass_boost_test_cases) /
+        sizeof(bass_boost_test_cases[0]);
+    size_t c;
+
+    printf("Running test_loudness_all_curve_transitions_glitchfree...\n");
+    fflush(stdout);
+
+    for (c = 0; c < num_cases - 1; c++) {
+        int step_current = bass_boost_test_cases[c].equalizer_step;
+        int step_next = bass_boost_test_cases[c + 1].equalizer_step;
+
+        printf("  Testing transition from step %d to %d...\n",
+            step_current, step_next);
+        fflush(stdout);
+
+        assert_filter_transition_equivalence(44100, step_current, step_next);
+        assert_filter_transition_equivalence(48000, step_current, step_next);
+    }
+
+    printf("  All curve transitions verified bit-exact!\n");
+    fflush(stdout);
+    printf("test_loudness_all_curve_transitions_glitchfree passed\n\n");
+}
 #endif
 
 int main() {
@@ -909,7 +941,6 @@ int main() {
 #ifdef FAST
     test_loudness_24bit_container_round_trip();
     test_loudness_24bit_container_zero_crossing();
-    test_loudness_transposed_df2_state_reconstruction();
     test_loudness_df2_step_transition_no_reset();
 
     test_container_sign_preservation();
@@ -929,6 +960,7 @@ int main() {
     test_50hz_77phon_bass_boost_magnitude();
     test_50hz_79phon_bass_boost_magnitude();
     test_50hz_bass_boost_is_monotonic();
+    test_loudness_all_curve_transitions_glitchfree();
 #endif
     test_loudness_dither_and_noise_shaping();
     test_loudness_get_equalizer_step_14_levels();

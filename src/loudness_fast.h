@@ -9,9 +9,11 @@
 #include <stdint.h>
 #include "compiler.h"
 
+#define LOUDNESS_FAST_FILTERS 2
+
 typedef struct {
-    int32_t w1;  /* transposed DF-II delay state 1 */
-    int32_t w2;  /* transposed DF-II delay state 2 */
+    int32_t w1;  /* canonical DF-II delay state 1, stored with M-bit headroom */
+    int32_t w2;  /* canonical DF-II delay state 2, stored with M-bit headroom */
 } biquad_state_fast_t;
 
 typedef struct {
@@ -32,8 +34,9 @@ void loudness_change_frequency_fast(uint32_t frequency);
 #ifdef BUILD_TESTING
 void loudness_test_load_active_quotients_fast(int equalizer_step);
 void loudness_test_get_fast_section(int section,
-    biquad_state_fast_t *state, biquad_quotients_fast_t *quotients,
-    int32_t input_history[2], int32_t output_history[2]);
+    biquad_state_fast_t *state, biquad_quotients_fast_t *quotients);
+void loudness_test_set_fast_section(int section,
+    const biquad_state_fast_t *state);
 #endif
 
 #endif /* LOUDNESS_FAST_H_ */

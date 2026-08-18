@@ -54,11 +54,6 @@ extern S16 spk_vol_usb_L, spk_vol_usb_R;
 #define LOUDNESS_GAIN_WEIGHT_PCT   90
 #define LOUDNESS_TRACK_WEIGHT_PCT  10
 
-#define LOUDNESS_SCALE_Q15_SHIFT       15
-#define LOUDNESS_SCALE_Q15_UNITY       (1 << LOUDNESS_SCALE_Q15_SHIFT)
-#define LOUDNESS_SCALE_UP_MIDPOINT       33808  /* (65/63) * 32768 */
-#define LOUDNESS_SCALE_DOWN_MIDPOINT     31760  /* (63/65) * 32768 */
-
 static void loudness_print_build_config(void) {
     LOUDNESS_PRINT("Audio firmware build options:\n");
 #ifndef LOUDNESS_DISABLE
@@ -191,30 +186,6 @@ static int32_t loudness_get_gain_dbfs_x10(void)
             loudness_clamp_gain_dbfs_q8((int32_t)target_gain_dbfs_q8));
     }
     return loudness_get_gain_dbfs() * 10;
-}
-
-int32_t loudness_combined_step_scale_q15(int prev_step, int new_step)
-{
-    int32_t factor_q15 = LOUDNESS_SCALE_Q15_UNITY;
-    int step;
-
-    if (prev_step == new_step) {
-        return factor_q15;
-    }
-
-    if (prev_step < new_step) {
-        for (step = prev_step; step < new_step; step++) {
-            factor_q15 = (int32_t)((int64_t)factor_q15 * LOUDNESS_SCALE_UP_MIDPOINT
-                >> LOUDNESS_SCALE_Q15_SHIFT);
-        }
-    } else {
-        for (step = new_step; step < prev_step; step++) {
-            factor_q15 = (int32_t)((int64_t)factor_q15 * LOUDNESS_SCALE_DOWN_MIDPOINT
-                >> LOUDNESS_SCALE_Q15_SHIFT);
-        }
-    }
-
-    return factor_q15;
 }
 
 #if !defined(USBSTATISTICS_DISABLE)

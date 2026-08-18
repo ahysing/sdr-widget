@@ -21,7 +21,6 @@ int32_t loudness_clamp_gain_dbfs_q8(int32_t gain_dbfs_q8);
 int32_t loudness_clamp_gain_dbfs(int32_t gain_dbfs);
 int32_t loudness_gain_dbfs_q8_to_x10(int32_t gain_dbfs_q8);
 int loudness_get_equalizer_step(int32_t db_spl);
-int32_t loudness_combined_step_scale_q15(int prev_step, int new_step);
 int32_t loudness_internal_current_db_spl(void);
 
 void loudness_publish_equalizer_step(int32_t db_spl);

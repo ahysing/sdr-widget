@@ -46,8 +46,6 @@ static inline S64 mul_shift_q61(S64 a, S64 b) {
 #define SAMPLE_24BITS 24
 #define LOUDNESS_FILTERS 2
 #define LOUDNESS_Q61_ONE  ((int64_t)1 << 61)
-#define LOUDNESS_SCALE_Q15_SHIFT       15
-#define LOUDNESS_SCALE_Q15_UNITY       (1 << LOUDNESS_SCALE_Q15_SHIFT)
 
 static const biquad_quotients_precise_t
 loudness_quotients_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS][LOUDNESS_FILTERS] = {
@@ -205,23 +203,6 @@ static biquad_quotients_precise_t staging_quotients[LOUDNESS_FILTERS];
 static biquad_state_precise_t     loudness_states[LOUDNESS_FILTERS];
 static biquad_quotients_precise_t loudness_scale_quotients_precise(biquad_quotients_precise_t base, uint32_t n, biquad_type_t filter_type);
 
-static int64_t loudness_scale_w_q15_s64(int64_t w, int32_t factor_q15)
-{
-    return (int64_t)((int64_t)w * (int64_t)factor_q15 >> LOUDNESS_SCALE_Q15_SHIFT);
-}
-
-static void loudness_apply_df2_state_scale_precise(int32_t factor_q15)
-{
-    int i;
-    if (factor_q15 == LOUDNESS_SCALE_Q15_UNITY) {
-        return;
-    }
-    for (i = 0; i < LOUDNESS_FILTERS; i++) {
-        loudness_states[i].w1 = loudness_scale_w_q15_s64(loudness_states[i].w1, factor_q15);
-        loudness_states[i].w2 = loudness_scale_w_q15_s64(loudness_states[i].w2, factor_q15);
-    }
-}
-
 int64_t biquad_step_precise_24bit(int64_t sample, biquad_state_precise_t* biquad_states,
     const biquad_quotients_precise_t* q)
 {
@@ -288,12 +269,9 @@ static void loudness_load_active_quotients_precise(int equalizer_step)
 void loudness_precise_select_equalizer_step(int32_t db_spl, int equalizer_step) {
     int32_t prev_db_spl = (int32_t)last_db_spl;
     int prev_step = loudness_get_equalizer_step(prev_db_spl);
-    int32_t factor_q15;
     target_gain_dbfs_q8 = (S16)loudness_clamp_gain_dbfs_q8((int32_t)target_gain_dbfs_q8);
     loudness_fill_staging_quotients_precise(equalizer_step);
-    factor_q15 = loudness_combined_step_scale_q15(prev_step, equalizer_step);
     taskENTER_CRITICAL();
-    loudness_apply_df2_state_scale_precise(factor_q15);
     loudness_commit_staging_quotients_precise();
     loudness_publish_equalizer_step(db_spl);
     taskEXIT_CRITICAL();
