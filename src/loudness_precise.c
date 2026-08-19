@@ -380,4 +380,14 @@ void loudness_change_frequency_precise(uint32_t frequency) {
     loudness_inferred_gain_set_rate(frequency);
 }
 
+Bool loudness_filter_is_active() {
+    int i;
+    Bool filter_is_active = FALSE;
+    for (i = 0; i < LOUDNESS_FILTERS; i++) {
+        filter_is_active = filter_is_active || (loudness_states[i].w1 != 0);
+        filter_is_active = filter_is_active || (loudness_states[i].w2 != 0);
+    }
+    return filter_is_active;
+}
+
 #endif /* PRECISE */

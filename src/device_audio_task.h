@@ -108,5 +108,10 @@ extern volatile wm8805_status_t wm8805_status;
 
 //_____ D E C L A R A T I O N S ____________________________________________
 
+#ifdef FEATURE_VOLUME_CTRL
+void device_audio_volume_update_mult_left(void);
+void device_audio_volume_update_mult_right(void);
+void device_audio_volume_refresh_mult(void);
+#endif
 
 #endif  // _DEVICE_AUDIO_TASK_H_

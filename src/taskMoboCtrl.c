@@ -525,7 +525,9 @@ static void vtaskMoboCtrl( void * pcParameters )
 {
 
 	uint32_t time, ten_s_counter=0;					// Time management
+#if I2C
 	uint32_t lastIteration=0, Timerval;				// Counters to keep track of time
+#endif
 
 #ifdef HW_GEN_DIN20
 	uint8_t usb_ch_counter = 0;						// How many poll periods have passed since a USB change detection?

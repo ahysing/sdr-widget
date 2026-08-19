@@ -2,6 +2,9 @@
 #include "loudness.h"
 #include "loudness_test_access.h"
 #include "usb_specific_request.h"
+#ifdef FAST
+#include "loudness_fast_golden_vectors.h"
+#endif
 #include <stdio.h>
 #include <assert.h>
 #include <stdint.h>
@@ -910,6 +913,16 @@ void test_loudness_all_curve_transitions_glitchfree(void)
     fflush(stdout);
     printf("test_loudness_all_curve_transitions_glitchfree passed\n\n");
 }
+
+void test_loudness_fast_golden_vectors(void)
+{
+    int failure;
+
+    printf("Running test_loudness_fast_golden_vectors...\n");
+    failure = loudness_fast_run_golden_selftest();
+    assert(failure == 0);
+    printf("test_loudness_fast_golden_vectors passed\n\n");
+}
 #endif
 
 int main() {
@@ -961,6 +974,7 @@ int main() {
     test_50hz_79phon_bass_boost_magnitude();
     test_50hz_bass_boost_is_monotonic();
     test_loudness_all_curve_transitions_glitchfree();
+    test_loudness_fast_golden_vectors();
 #endif
     test_loudness_dither_and_noise_shaping();
     test_loudness_get_equalizer_step_14_levels();

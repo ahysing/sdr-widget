@@ -119,11 +119,10 @@ void uac2_AK5394A_task(void *pvParameters) {
 		if (old_spk_usb_heart_beat == spk_usb_heart_beat){
 			if ( (input_select == MOBO_SRC_UAC2) || (input_select == MOBO_SRC_NONE) ) {
 
-				// This is quite busy while idle
-				#ifdef USB_STATE_MACHINE_DEBUG
-//					print_dbg_char_char('?');
-				#endif
-				mobo_clear_dac_channel();
+				// Defer buffer clear to the audio task; avoid clearing every 5 ms while stalled.
+				if (dac_must_clear != DAC_MUST_CLEAR && dac_must_clear != DAC_CLEARED) {
+					dac_must_clear = DAC_MUST_CLEAR;
+				}
 			}
 
 			// BSB 20131209 attempting improved playerstarted detection

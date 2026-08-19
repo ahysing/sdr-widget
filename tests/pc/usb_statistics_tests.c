@@ -249,6 +249,46 @@ void test_statistics_full_mode_restores_buffer_swap() {
     printf("test_statistics_full_mode_restores_buffer_swap passed\n");
 }
 
+static Bool test_loudness_rates_active(uint32_t frequency_hz) {
+    return (frequency_hz == 44100U || frequency_hz == 48000U ||
+        frequency_hz == 88200U || frequency_hz == 96000U);
+}
+
+void test_loudness_rates_match_transport_stats_gating() {
+    printf("Running test_loudness_rates_match_transport_stats_gating...\n");
+
+    assert(test_loudness_rates_active(44100U));
+    assert(test_loudness_rates_active(48000U));
+    assert(test_loudness_rates_active(88200U));
+    assert(test_loudness_rates_active(96000U));
+    assert(!test_loudness_rates_active(176400U));
+    assert(!test_loudness_rates_active(192000U));
+    printf("test_loudness_rates_match_transport_stats_gating passed\n");
+}
+
+void test_statistics_full_mode_reports_live_fifo_at_88200() {
+    printf("Running test_statistics_full_mode_reports_live_fifo_at_88200...\n");
+    setup();
+
+    Is_device_enumerated_fake.return_val = TRUE;
+    Is_usb_in_ready_fake.return_val = TRUE;
+    stats_telemetry_set_frequency_hz(88200);
+    statistics_runtime_set_active(TRUE);
+
+    volatile usb_stats_t *buf = statistics_test_get_buffer(0);
+    buf->fifo_level = 1492;
+    buf->max_fifo = 1495;
+    buf->min_fifo = 1488;
+
+    statistics_report_iteration();
+
+    assert(statistics_test_get_report_seq() == 1);
+    assert(buf->fifo_level == 0);
+    assert(buf->max_fifo == 0);
+    assert(buf->min_fifo == 0xFFFF);
+    printf("test_statistics_full_mode_reports_live_fifo_at_88200 passed\n");
+}
+
 int main() {
     test_get_usb_stats();
     test_statistics_report_iteration_swaps_buffers();
@@ -260,6 +300,8 @@ int main() {
     test_statistics_heartbeat_mode_no_buffer_swap();
     test_statistics_heartbeat_mode_zero_transport_counters();
     test_statistics_full_mode_restores_buffer_swap();
+    test_loudness_rates_match_transport_stats_gating();
+    test_statistics_full_mode_reports_live_fifo_at_88200();
     printf("\nAll USB statistics tests completed!\n");
     return 0;
 }

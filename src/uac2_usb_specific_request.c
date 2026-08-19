@@ -292,7 +292,6 @@ void uac2_freq_change_handler() {
 #if (defined HW_GEN_DIN10) || (defined HW_GEN_DIN20)
 		if (input_select == MOBO_SRC_UAC2) { // Only mute if appropriate. Perhaps input has changed to NONE before this can execute
 			spk_mute = TRUE; // mute speaker while changing frequency and oscillator
-			mobo_clear_dac_channel();
 		}
 		if ( (input_select == MOBO_SRC_UAC2) || (input_select == MOBO_SRC_NONE) ) {	// Only change I2S settings if appropriate
 			mobo_xo_select(current_freq.frequency, MOBO_SRC_UAC2);	// Give USB the I2S control with proper MCLK
@@ -309,11 +308,12 @@ void uac2_freq_change_handler() {
 		#ifdef USB_STATE_MACHINE_DEBUG
 			print_dbg_char_char('=');
 		#endif
-		mobo_clear_dac_channel();
 
 		mobo_xo_select(current_freq.frequency, MOBO_SRC_UAC2); // GPIO XO control and frequency indication
 		mobo_clock_division(current_freq.frequency);
 #endif
+
+		audio_playback_request_reset();
 
 		/*
 		 poolingFreq = 8000 / (1 << (EP_INTERVAL_2_HS - 1));
@@ -506,12 +506,14 @@ void uac2_freq_change_handler() {
 			static uint32_t stats_last_sample_rate_khz;
 			uint32_t new_hz = current_freq.frequency;
 			uint32_t new_khz = new_hz / 1000U;
-			Bool stats_full_mode = (new_hz == FREQ_44 || new_hz == FREQ_48);
+			Bool stats_full_mode = uac2_loudness_rates_active(new_hz);
+			Bool prev_full_mode = (stats_last_sample_rate_khz != 0U) &&
+				uac2_loudness_rates_active(stats_last_sample_rate_khz * 1000U);
 
 			stats_telemetry_set_frequency_hz(new_hz);
 			statistics_runtime_set_active(stats_full_mode);
-			if (stats_full_mode && stats_last_sample_rate_khz != 0U &&
-				stats_last_sample_rate_khz != new_khz) {
+			if (stats_last_sample_rate_khz != 0U && stats_last_sample_rate_khz != new_khz &&
+				(stats_full_mode || prev_full_mode)) {
 				audio_stats_record_event(get_usb_stats(), USB_STATS_TAG_FREQ_CHANGE,
 					(U8)stats_last_sample_rate_khz, (U8)new_khz, 0);
 			}
@@ -1573,6 +1575,10 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 								LSB( spk_vol_usb_L) = temp1;
 								MSB( spk_vol_usb_L) = temp2;
 
+#ifdef FEATURE_VOLUME_CTRL
+								device_audio_volume_update_mult_left();
+#endif
+
 #ifdef USB_STATE_MACHINE_DEBUG
 								print_dbg_char('s');
 								print_dbg_char('L');
@@ -1584,6 +1590,10 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 							} else if (wValue_lsb == CH_RIGHT) {
 								LSB( spk_vol_usb_R) = temp1;
 								MSB( spk_vol_usb_R) = temp2;
+
+#ifdef FEATURE_VOLUME_CTRL
+								device_audio_volume_update_mult_right();
+#endif
 							}
 						}
 

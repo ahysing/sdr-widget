@@ -120,7 +120,7 @@ Round-half-up is applied for negative blends. Typical result range: **~53–81 d
 
 The biquad runs as **canonical Direct Form II** with `w1`/`w2` delay state per shelf section (low + high). FAST stores states with **M-bit headroom** (scaled canonical DF-II) so internal pole buildup at low frequencies does not overflow `int32_t` states.
 
-Coefficients commit **immediately** when the background task selects a new step. **`w1`/`w2` are not scaled, reconstructed, or reset** on step change — only `active_quotients` are updated via `memcpy`. Canonical DF-II states represent the signal path through the poles and continue uninterrupted when contour coefficients change.
+Coefficients commit **immediately** when the background task selects a new step. **`w1`/`w2` are not scaled, reconstructed, or reset** on step change — active quotients publish via a double bank flip (see [`LOUDNESS_DEVICE_DEBUG.md`](LOUDNESS_DEVICE_DEBUG.md) for on-device debugging).
 
 1. **Step change:** when hysteresis boundaries are crossed, [`loudness_select_equalizer_step()`](../src/loudness.c) stages new coefficients and copies them into `active_quotients` inside a short critical section.
 2. **Events:** firmware records `USB_STATS_TAG_EQUALIZER_STEP_SWITCH` (prev dB SPL, new dB SPL, step index 0–13).

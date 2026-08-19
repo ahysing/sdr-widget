@@ -71,6 +71,7 @@ AUDIO_WIDGET_DEFAULTS=-DFEATURE_BOARD_DEFAULT=feature_board_usbi2s \
 LOUDNESS_TYPE ?= FAST
 LOUDNESS_DISABLE ?= 0
 USBSTATISTICS_DISABLE ?= 0
+CONFIGURATION ?= Release
 # Peak reported dB SPL at 0 dBFS host gain; must be > LOUDNESS_REF_PHON (80).
 LOUDNESS_DB_SPL_MAX ?= 95
 CFLAGS_LOUDNESS_DB_SPL_MAX = -DLOUDNESS_DB_SPL_MAX=$(LOUDNESS_DB_SPL_MAX)
@@ -91,8 +92,25 @@ else
   CFLAGS_LOUDNESS_USB_STATS_EVENTS =
 endif
 
-WIDGET_LOUDNESS_FLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS) $(CFLAGS_LOUDNESS_DB_SPL_MAX)
-AUDIO_WIDGET_CFLAGS = $(AUDIO_WIDGET_DEFAULTS) $(WIDGET_LOUDNESS_FLAGS)
+ifeq ($(LOUDNESS_FORCE_UNITY_STEP),1)
+  CFLAGS_LOUDNESS_FORCE_UNITY = -DLOUDNESS_FORCE_UNITY_STEP
+else
+  CFLAGS_LOUDNESS_FORCE_UNITY =
+endif
+
+ifeq ($(CONFIGURATION),Release)
+  CFLAGS_CONFIGURATION = -DRELEASE
+  CFLAGS_FRAMEPOINTER = -fomit-frame-pointer
+  CONFIGURATION_MSG = Release configuration: configDBG is 0. Deactivating debug trace.
+else
+  CFLAGS_CONFIGURATION =
+  CFLAGS_FRAMEPOINTER =
+  CONFIGURATION_MSG = Debug configuration: configDBG is 1. Activating debug trace.
+endif
+
+CFLAGS_OPTIMIZATIONS = -O3 -fno-strict-aliasing -funroll-loops $(CFLAGS_FRAMEPOINTER)
+WIDGET_LOUDNESS_FLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS) $(CFLAGS_LOUDNESS_DB_SPL_MAX) $(CFLAGS_LOUDNESS_FORCE_UNITY)
+AUDIO_WIDGET_CFLAGS = $(AUDIO_WIDGET_DEFAULTS) $(WIDGET_LOUDNESS_FLAGS) $(CFLAGS_CONFIGURATION)
 
 # Choose wisely:
 #   -DFEATURE_PRODUCT_AMB
@@ -206,12 +224,14 @@ endif
 all:: Release/widget.elf widget-control$(EXE_EXT)
 
 Release/widget.elf::
+	@echo $(CONFIGURATION_MSG)
 	rm -f Release/widget.elf Release/src/features.o
-	CFLAGS="$(AUDIO_WIDGET_CFLAGS)" ./make-widget
+	CFLAGS="$(AUDIO_WIDGET_CFLAGS)" CFLAGS_APP_OPTIMIZATIONS="$(CFLAGS_OPTIMIZATIONS)" ./make-widget
 
 audio-widget::
+	@echo $(CONFIGURATION_MSG)
 	rm -f Release/widget.elf Release/src/features.o
-	CFLAGS="$(AUDIO_WIDGET_CFLAGS)" ./make-widget
+	CFLAGS="$(AUDIO_WIDGET_CFLAGS)" CFLAGS_APP_OPTIMIZATIONS="$(CFLAGS_OPTIMIZATIONS)" ./make-widget
 
 #sdr-widget::
 #	rm -f Release/widget.elf Release/src/features.o
@@ -242,8 +262,11 @@ $(TEST_BUILD_DIR):
 $(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT): tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c | $(TEST_BUILD_DIR)
 	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUNIT_TEST $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c
 
-$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
+$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c tests/loudness_fast_golden_run.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests/pc -I tests $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c tests/loudness_fast_golden_run.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
+
+$(TEST_BUILD_DIR)/golden_print$(EXE_EXT): tests/golden_print.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests/pc -I tests $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/golden_print.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
 
 $(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT): tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
 	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_precise.c src/loudness_fast.c src/track_dbfs.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
@@ -301,10 +324,13 @@ run-test-precise:
 	@echo Skipping PRECISE loudness tests: LOUDNESS_DISABLE=1
 endif
 
-test-avr32: tests/avr32/statistics_avr32_tests.o
+test-avr32: tests/avr32/statistics_avr32_tests.o tests/avr32/loudness_fast_avr32.o
 
 tests/avr32/statistics_avr32_tests.o: tests/avr32/statistics_avr32_tests.c
 	"$(AVR32BIN)/avr32-gcc" -DBOARD=SDRwdgtLite -DFREERTOS_USED -Isrc/SOFTWARE_FRAMEWORK/UTILS/DEBUG -Isrc/SOFTWARE_FRAMEWORK/SERVICES/USB -Isrc/CONFIG -Isrc/SOFTWARE_FRAMEWORK/UTILS/PREPROCESSOR -Isrc/SOFTWARE_FRAMEWORK/UTILS -Isrc/SOFTWARE_FRAMEWORK/BOARDS -Isrc -mpart=uc3a3256 -c -o $@ $<
+
+tests/avr32/loudness_fast_avr32.o: src/loudness_fast.c
+	"$(AVR32BIN)/avr32-gcc" -DBOARD=SDRwdgtLite -DFREERTOS_USED -DFAST -Isrc/SOFTWARE_FRAMEWORK/UTILS/DEBUG -Isrc/SOFTWARE_FRAMEWORK/SERVICES/USB -Isrc/CONFIG -Isrc/SOFTWARE_FRAMEWORK/UTILS/PREPROCESSOR -Isrc/SOFTWARE_FRAMEWORK/UTILS -Isrc/SOFTWARE_FRAMEWORK/BOARDS -Isrc -mpart=uc3a3256 -c -o $@ $<
 
 help:
 	@echo "Firmware targets:"
@@ -316,8 +342,10 @@ help:
 	@echo "  LOUDNESS_TYPE=FAST|PRECISE   Biquad path (default: FAST)"
 	@echo "  LOUDNESS_DB_SPL_MAX=N        Peak dB SPL at 0 dBFS gain (default: 105, must be > 80)"
 	@echo "  LOUDNESS_DISABLE=1           Omit loudness filter from firmware"
+	@echo "  LOUDNESS_FORCE_UNITY_STEP=1  Force equalizer step 13 (unity A/B debug build)"
 	@echo "  USBSTATISTICS_DISABLE=1"
 	@echo "                               Omit loudness equalizer-step USB events"
+	@echo "  CONFIGURATION=Release|Debug  App src/*.c optimization level (default: Release)"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make audio-widget LOUDNESS_TYPE=PRECISE"
@@ -336,3 +364,4 @@ help:
 	@echo "  LOUDNESS_TYPE=$(LOUDNESS_TYPE)"
 	@echo "  LOUDNESS_DISABLE=$(LOUDNESS_DISABLE)"
 	@echo "  USBSTATISTICS_DISABLE=$(USBSTATISTICS_DISABLE)"
+	@echo "  CONFIGURATION=$(CONFIGURATION)"

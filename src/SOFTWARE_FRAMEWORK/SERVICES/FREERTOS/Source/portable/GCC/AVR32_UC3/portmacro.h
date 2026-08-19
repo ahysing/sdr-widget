@@ -118,6 +118,25 @@ extern "C" {
 #define portTICK_RATE_MS      ( ( portTickType ) 1000 / configTICK_RATE_HZ )
 #define portBYTE_ALIGNMENT    4
 #define portNOP()             {__asm__ __volatile__ ("nop");}
+
+#ifndef configUSE_PORT_OPTIMISED_TASK_SELECTION
+	#define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
+#endif
+
+#if configUSE_PORT_OPTIMISED_TASK_SELECTION == 1
+
+	/* configMAX_PRIORITIES must be <= 32 (this project uses 5). */
+
+	#define portRECORD_READY_PRIORITY( uxPriority, uxReadyPriorities ) \
+		( uxReadyPriorities ) |= ( 1UL << ( uxPriority ) )
+
+	#define portRESET_READY_PRIORITY( uxPriority, uxReadyPriorities ) \
+		( uxReadyPriorities ) &= ~( 1UL << ( uxPriority ) )
+
+	#define portGET_HIGHEST_PRIORITY( uxTopPriority, uxReadyPriorities ) \
+		uxTopPriority = ( 31UL - ( unsigned portLONG ) clz( uxReadyPriorities ) )
+
+#endif
 /*-----------------------------------------------------------*/
 
 

@@ -184,10 +184,10 @@ void device_mouse_hid_task(void)
 {
 //  U8 data_length; // BSB 20120718 unused variable, sane?
 //  const U8 EP_HID_RX = ep_hid_rx; // BSB 20120718 unused variable, sane?
+#ifdef FEATURE_HID
   const U8 EP_HID_TX = ep_hid_tx;
-
-  // BSB 20120810 HID variables moved up
   const U8 ReportByte0 = 0x01;	// Report ID doesn't change
+#endif
   U8 ReportByte1 = 0;			// 1st variable byte of HID report
   U8 ReportByte2 = 0; 			// 2nd variable byte of HID report
   U8 ReportByte1_prev = 0;		// Previous ReportByte1

@@ -112,8 +112,21 @@ volatile S32 usb_buffer_toggle;
 volatile U8 audio_OUT_alive;
 volatile U8 audio_OUT_must_sync;
 
+volatile U8 spk_establishment_grace;
+volatile U8 audio_playback_reset_pending;
+
 // BSB 20170324 SPDIF buffer processor detects silence
 volatile U8 dig_in_silence;
+
+void audio_playback_request_reset(void)
+{
+	audio_playback_reset_pending = 1;
+	audio_OUT_must_sync = 1;
+	audio_OUT_alive = 0;
+	usb_buffer_toggle = 0;
+	spk_establishment_grace = SPK_ESTABLISHMENT_GRACE_PACKETS;
+	dac_must_clear = DAC_MUST_CLEAR;
+}
 
 
 

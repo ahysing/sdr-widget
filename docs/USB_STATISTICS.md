@@ -70,6 +70,25 @@ USBB FIFO access for HID IN and audio endpoints is serialized with `usb_fifo_hw_
 
 Recording: [`audio_stats_record_event()`](../src/audio_stats_logic.h) increments `event_count` and overwrites `last_tag` / args.
 
+## Transport vs heartbeat mode
+
+Full **transport** counters (`fifo_level`, `deadline_misses`, skip/insert events) are collected at the same USB sample rates as the loudness filter:
+
+| Sample rate | Transport stats | Loudness filter |
+|-------------|-----------------|-----------------|
+| 44.1 kHz | full | on |
+| 48 kHz | full | on |
+| 88.2 kHz | full | on |
+| 96 kHz | full | on |
+| 176.4 kHz | heartbeat (zeros) | off |
+| 192 kHz | heartbeat (zeros) | off |
+
+Firmware gates both via `uac2_loudness_rates_active()` in [`uac2_device_audio_task.c`](../src/uac2_device_audio_task.c) and `statistics_runtime_set_active()` in [`uac2_usb_specific_request.c`](../src/uac2_usb_specific_request.c).
+
+In **heartbeat** mode at 176.4/192 kHz, HID reports still arrive every ~1 s with live telemetry (`frequency_hz`, loudness fields) but period transport counters are zero and `min_fifo` is the idle sentinel (`0xFFFF`, shown as `null` in Python).
+
+The host tool adds `"transport_mode": "full" | "heartbeat"` and nulls transport fields only in heartbeat mode.
+
 ## Host usage
 
 ```bash

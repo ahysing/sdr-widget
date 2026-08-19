@@ -58,6 +58,7 @@
 //_____ I N C L U D E S ____________________________________________________
 
 #include "conf_usb.h"
+#include "compiler.h"
 
 #if USB_DEVICE_FEATURE == DISABLED
   #error uac2_device_audio_task.h is #included although USB_DEVICE_FEATURE is disabled
@@ -71,6 +72,9 @@
 
 
 //_____ D E C L A R A T I O N S ____________________________________________
+
+/* True at USB rates where loudness filter and full transport stats are active. */
+Bool uac2_loudness_rates_active(U32 frequency_hz);
 
 extern void uac2_device_audio_task_init(U8 ep_in, U8 ep_out, U8 ep_out_fb);
 #ifdef FREERTOS_USED

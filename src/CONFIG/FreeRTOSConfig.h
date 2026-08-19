@@ -96,6 +96,8 @@
 #define configUSE_16_BIT_TICKS    0
 #define configIDLE_SHOULD_YIELD   1
 #define configUSE_MUTEXES		  1
+/* Use AVR32 clz-based ready-priority bitmap (requires portmacro.h support). */
+#define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
 /* Co-routine definitions. */
 #define configUSE_CO_ROUTINES     0
 #define configMAX_CO_ROUTINE_PRIORITIES ( 0 )
@@ -128,14 +130,19 @@ to exclude the API function. */
 
 /* Debug trace configuration.
    configDBG is a boolean indicating whether to activate the debug trace. */
-#define configDBG                     1
-#define configDBG_USART               (&AVR32_USART1)
-#define configDBG_USART_RX_PIN        AVR32_USART1_RXD_0_2_PIN
-#define configDBG_USART_RX_FUNCTION   AVR32_USART1_RXD_0_2_FUNCTION
-#define configDBG_USART_TX_PIN        AVR32_USART1_TXD_0_2_PIN
-#define configDBG_USART_TX_FUNCTION   AVR32_USART1_TXD_0_2_FUNCTION
-#define configDBG_USART_BAUDRATE      57600
-
+#ifndef RELEASE
+   #define configDBG                     1
+   #define configDBG_USART               (&AVR32_USART1)
+   #define configDBG_USART_RX_PIN        AVR32_USART1_RXD_0_2_PIN
+   #define configDBG_USART_RX_FUNCTION   AVR32_USART1_RXD_0_2_FUNCTION
+   #define configDBG_USART_TX_PIN        AVR32_USART1_TXD_0_2_PIN
+   #define configDBG_USART_TX_FUNCTION   AVR32_USART1_TXD_0_2_FUNCTION
+   #define configDBG_USART_BAUDRATE      57600
+#else
+   #define configDBG                     0
+#endif
+/* FreeRTOS configuration macro in FreeRTOSConfig.h that tells the kernel whether to use fast, hardware-specific assembly instructions (like "count leading zeros") or slow, generic C code to pick the next task to run. */
+#define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
 
 /* USB task definitions. */
 #define configTSK_USB_NAME                    ((const signed portCHAR *)"USB")

@@ -133,8 +133,7 @@ void uac2_device_audio_task_init(U8 ep_in, U8 ep_out, U8 ep_out_fb)
 	// spk_vol_usb_L = usb_volume_flash(CH_LEFT, 0, VOL_READ);		// Fetch stored or default volume setting
 	// spk_vol_usb_R = usb_volume_flash(CH_RIGHT, 0, VOL_READ);
 	// Without working volume flash, spk_vol_usb_? = VOL_DEFAULT is set in device_audio_task.c
-	spk_vol_mult_L = usb_volume_format(spk_vol_usb_L);
-	spk_vol_mult_R = usb_volume_format(spk_vol_usb_R);
+	device_audio_volume_refresh_mult();
 
 	loudness_init();
 	loudness_filter_init();
@@ -155,12 +154,19 @@ void uac2_device_audio_task_init(U8 ep_in, U8 ep_out, U8 ep_out_fb)
 
 #define UAC2_USB_OUT_MAX_STEREO_SAMPLES  (EP_OUT_LENGTH_2_HS / 8u)
 
+Bool uac2_loudness_rates_active(U32 frequency_hz)
+{
+	return (frequency_hz == FREQ_44 ||
+		frequency_hz == FREQ_48 ||
+		frequency_hz == FREQ_88 ||
+		frequency_hz == FREQ_96);
+}
+
 #ifndef LOUDNESS_DISABLE
 static Bool uac2_loudness_filter_enabled(void)
 {
 	return (usb_spk_mute == 0) &&
-		(current_freq.frequency == FREQ_44 ||
-		 current_freq.frequency == FREQ_48);
+		uac2_loudness_rates_active(current_freq.frequency);
 }
 #endif
 
@@ -183,7 +189,7 @@ void uac2_device_audio_task(void *pvParameters)
 	U8 skip_indicate = 0;	// Should we show skipping on module LEDs?
 	U16 samples_to_transfer_OUT = 1; // Default value 1. Skip:0. Insert:2
 	S32 FB_error_acc = 0;	// BSB 20131102 Accumulated error for skip/insert
-	U8 sample_HSB;
+	U8 sample_HSB = 0;
 	U8 sample_MSB;
 	U8 sample_SB;
 	U8 sample_LSB;
@@ -234,6 +240,19 @@ void uac2_device_audio_task(void *pvParameters)
 #endif
 
 		vTaskDelayUntil(&xLastWakeTime, UAC2_configTSK_USB_DAUDIO_PERIOD);
+
+		if (audio_playback_reset_pending) {
+			audio_playback_reset_pending = 0;
+			playerStarted = FALSE;
+			skip_enable = 0;
+			skip_indicate = 0;
+			FB_error_acc = 0;
+			FB_rate = FB_rate_initial;
+			old_gap = DAC_BUFFER_SIZE;
+			packets_since_feedback = 0;
+			time_to_calculate_gap = SPK_ESTABLISHMENT_GRACE_PACKETS;
+			usb_buffer_toggle = 0;
+		}
 
 		// Introduced into UAC2 code with mobodebug
 		// Must we clear the DAC buffer contents?
@@ -541,11 +560,6 @@ void uac2_device_audio_task(void *pvParameters)
 					Usb_ack_out_received_free(EP_AUDIO_OUT);
 					usb_fifo_hw_unlock(&usb_lock);
 
-#ifdef FEATURE_VOLUME_CTRL
-					spk_vol_mult_L = usb_volume_format(spk_vol_usb_L);
-					spk_vol_mult_R = usb_volume_format(spk_vol_usb_R);
-#endif
-
 					xSemaphoreTake( mutexSpkUSB, portMAX_DELAY );
 					spk_usb_heart_beat++;					// indicates EP_AUDIO_OUT receiving data from host
 					spk_usb_sample_counter += num_samples; 	// track the num of samples received
@@ -558,7 +572,7 @@ void uac2_device_audio_task(void *pvParameters)
 							audio_stats_record_event(get_usb_stats(), USB_STATS_TAG_FORCED_RESYNC, freq_khz, 0, 0);
 						}
 #endif
-						time_to_calculate_gap = 0;			// BSB 20131031 moved gap calculation for DAC use
+						time_to_calculate_gap = SPK_ESTABLISHMENT_GRACE_PACKETS;
 						packets_since_feedback = 0;			// BSB 20131031 assuming feedback system may soon kick in
 						FB_error_acc = 0;					// BSB 20131102 reset feedback error
 						FB_rate = FB_rate_initial;			// BSB 20131113 reset feedback rate
@@ -566,6 +580,7 @@ void uac2_device_audio_task(void *pvParameters)
 						skip_enable = 0;					// BSB 20131115 Not skipping yet...
 						skip_indicate = 0;
 						usb_buffer_toggle = 0;				// BSB 20131201 Attempting improved playerstarted detection
+						spk_establishment_grace = SPK_ESTABLISHMENT_GRACE_PACKETS;
 						dac_must_clear = DAC_READY;			// Prepare to send actual data to DAC interface
 
 						// Align buffers at arrival of USB OUT audio packets as well. But only when we're not playing SPDIF
@@ -594,6 +609,9 @@ void uac2_device_audio_task(void *pvParameters)
 						playerStarted = TRUE;				// Moved here from mutex take code
 					} // end if (!playerStarted) || (audio_OUT_must_sync)
 
+					if (spk_establishment_grace > 0)
+						spk_establishment_grace--;
+
 
 					// BSB 20140917 attempting to help uacX_device_audio_task.c synchronize to DMA
 					audio_OUT_alive = 1;					// Indicate samples arriving on audio OUT endpoint. Do this after syncing
@@ -616,7 +634,11 @@ void uac2_device_audio_task(void *pvParameters)
 					// Default:1 Skip:0 Insert:2 Only one skip or insert per USB package
 					// .. prior to for(num_samples) Hence 1st sample in a package is skipped or inserted
 					samples_to_transfer_OUT = 1;
-					if (skip_enable == 0) {					// Respond to all skip enablers
+					if (spk_establishment_grace > 0) {
+						skip_enable = 0;
+						FB_error_acc = 0;
+					}
+					else if (skip_enable == 0) {					// Respond to all skip enablers
 						FB_error_acc = 0;
 					}
 					else {
@@ -901,6 +923,10 @@ void uac2_device_audio_task(void *pvParameters)
 								}
 #endif
 
+								if (spk_establishment_grace > 0) {
+									old_gap = gap;
+								}
+								else {
 	#ifndef USB_METALLIC_NOISE_SIM										// Disable skip/insert when demoing metallic noise
 								if (FEATURE_NOSKIP_OFF) { 				// If skip/insert isn't disabled...
 									if (gap < SPK_GAP_LSKIP) {
@@ -967,6 +993,7 @@ void uac2_device_audio_task(void *pvParameters)
 									LED_Off(LED0);
 									LED_Off(LED1);
 								}
+								} // end establishment grace else
 							} // end if(playerStarted)
 						} // end if (usb_alternate_setting_out >= 1)
 

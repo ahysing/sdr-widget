@@ -26,6 +26,7 @@ int32_t loudness_internal_current_db_spl(void);
 void loudness_publish_equalizer_step(int32_t db_spl);
 void loudness_report_equalizer_step_switch(int32_t prev_db_spl, int32_t db_spl,
     int prev_step, int equalizer_step);
+void loudness_apply_equalizer_step_if_needed(void);
 
 #ifdef PRECISE
 void loudness_precise_select_equalizer_step(int32_t db_spl, int equalizer_step);

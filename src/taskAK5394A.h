@@ -138,6 +138,14 @@ extern volatile S32 usb_buffer_toggle;
 extern volatile U8 audio_OUT_alive;
 extern volatile U8 audio_OUT_must_sync;
 
+/* After resync or sample-rate change, suppress gap-based skip/insert and FB tuning
+ * until the FIFO has time to reach nominal fill (~8 ms at HS). */
+#define SPK_ESTABLISHMENT_GRACE_PACKETS 32u
+extern volatile U8 spk_establishment_grace;
+extern volatile U8 audio_playback_reset_pending;
+
+void audio_playback_request_reset(void);
+
 // BSB 20170324 SPDIF buffer processor detects silence
 extern volatile U8 dig_in_silence;
 

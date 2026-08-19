@@ -7,6 +7,7 @@
 #define LOUDNESS_PRECISE_H_
 
 #include <stdint.h>
+#include "compiler.h"
 
 typedef struct {
     int64_t w1;  /* w[n-1] */
@@ -25,5 +26,6 @@ int64_t loudness_precise_24bit(int64_t sample);
 int64_t biquad_step_precise_24bit(int64_t sample, biquad_state_precise_t* biquad_states,
     const biquad_quotients_precise_t* q);
 void loudness_change_frequency_precise(uint32_t frequency);
+Bool loudness_filter_is_active();
 
 #endif /* LOUDNESS_PRECISE_H_ */

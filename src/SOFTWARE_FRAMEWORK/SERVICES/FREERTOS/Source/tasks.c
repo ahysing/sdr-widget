@@ -251,6 +251,13 @@ PRIVILEGED_DATA static unsigned portBASE_TYPE uxTaskNumber 						= ( unsigned po
  * executing task, then it will only be rescheduled after the currently
  * executing task has been rescheduled.
  */
+#if ( configUSE_PORT_OPTIMISED_TASK_SELECTION == 1 )
+#define prvAddTaskToReadyQueue( pxTCB )																						\
+{																															\
+	portRECORD_READY_PRIORITY( ( pxTCB )->uxPriority, uxTopReadyPriority );													\
+	vListInsertEnd( ( xList * ) &( pxReadyTasksLists[ ( pxTCB )->uxPriority ] ), &( ( pxTCB )->xGenericListItem ) );		\
+}
+#else
 #define prvAddTaskToReadyQueue( pxTCB )																			\
 {																												\
 	if( pxTCB->uxPriority > uxTopReadyPriority )																\
@@ -259,6 +266,7 @@ PRIVILEGED_DATA static unsigned portBASE_TYPE uxTaskNumber 						= ( unsigned po
 	}																											\
 	vListInsertEnd( ( xList * ) &( pxReadyTasksLists[ pxTCB->uxPriority ] ), &( pxTCB->xGenericListItem ) );	\
 }
+#endif
 /*-----------------------------------------------------------*/
 
 /*
@@ -1582,6 +1590,20 @@ void vTaskSwitchContext( void )
 	taskSECOND_CHECK_FOR_STACK_OVERFLOW();
 
 	/* Find the highest priority queue that contains ready tasks. */
+	#if ( configUSE_PORT_OPTIMISED_TASK_SELECTION == 1 )
+	{
+		unsigned portBASE_TYPE uxTopPriority;
+
+		portGET_HIGHEST_PRIORITY( uxTopPriority, uxTopReadyPriority );
+		while( listLIST_IS_EMPTY( &( pxReadyTasksLists[ uxTopPriority ] ) ) )
+		{
+			portRESET_READY_PRIORITY( uxTopPriority, uxTopReadyPriority );
+			portGET_HIGHEST_PRIORITY( uxTopPriority, uxTopReadyPriority );
+		}
+
+		listGET_OWNER_OF_NEXT_ENTRY( pxCurrentTCB, &( pxReadyTasksLists[ uxTopPriority ] ) );
+	}
+	#else
 	while( listLIST_IS_EMPTY( &( pxReadyTasksLists[ uxTopReadyPriority ] ) ) )
 	{
 		--uxTopReadyPriority;
@@ -1590,6 +1612,7 @@ void vTaskSwitchContext( void )
 	/* listGET_OWNER_OF_NEXT_ENTRY walks through the list, so the tasks of the
 	same priority get an equal share of the processor time. */
 	listGET_OWNER_OF_NEXT_ENTRY( pxCurrentTCB, &( pxReadyTasksLists[ uxTopReadyPriority ] ) );
+	#endif
 
 	traceTASK_SWITCHED_IN();
 	vWriteTraceToBuffer();

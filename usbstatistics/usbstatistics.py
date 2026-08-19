@@ -35,9 +35,23 @@ PRODUCT_IDS = (
     0x0768,  # UAC2
 )
 
-# Above 48 kHz the firmware still sends HID reports every ~1 s (heartbeat mode):
-# transport counters are zero/null, frequency_hz is live, and skip/insert/deadline_misses
-# are not collected. That is not a disconnected HID endpoint.
+# Full transport stats (fifo, deadline_misses, skip/insert events) follow loudness
+# filter rates: 44.1, 48, 88.2, and 96 kHz. At 176.4/192 kHz the firmware sends
+# heartbeat reports (transport counters zero, frequency_hz still live).
+
+TRANSPORT_STATS_RATES_HZ = frozenset({44100, 48000, 88200, 96000})
+HEARTBEAT_STATS_RATES_HZ = frozenset({176400, 192000})
+TRANSPORT_STATS_NULL_FIELDS = (
+    "overruns",
+    "underruns",
+    "fifo_level",
+    "max_fifo",
+    "min_fifo",
+    "deadline_misses",
+    "event_count",
+    "last_tag",
+    "last_event",
+)
 
 USB_STATS_HID_REPORT_ID = 1
 USB_STATS_HID_TRANSFER_SIZE = 64
@@ -329,6 +343,18 @@ def find_hid_anchor_offset(payload):
     return None
 
 
+def transport_stats_active(frequency_hz):
+    return frequency_hz in TRANSPORT_STATS_RATES_HZ
+
+
+def transport_mode_for_frequency(frequency_hz):
+    if transport_stats_active(frequency_hz):
+        return "full"
+    if frequency_hz in HEARTBEAT_STATS_RATES_HZ:
+        return "heartbeat"
+    return "unknown"
+
+
 def find_packet_offset(payload):
     return find_hid_anchor_offset(payload)
 
@@ -454,9 +480,43 @@ def parse_stats_payload(payload):
 
 def format_stats_output(stats):
     output = dict(stats)
-    if output["min_fifo"] == USB_STATS_MIN_FIFO_IDLE:
+    frequency_hz = output["frequency_hz"]
+    output["transport_mode"] = transport_mode_for_frequency(frequency_hz)
+    if output["transport_mode"] == "heartbeat":
+        for field in TRANSPORT_STATS_NULL_FIELDS:
+            if field in output:
+                output[field] = None
+    elif output["min_fifo"] == USB_STATS_MIN_FIFO_IDLE:
         output["min_fifo"] = None
     return output
+
+
+def format_stats_deltas(prev_stats, stats):
+    """Human-readable per-report deltas for transport and contour debugging."""
+    def delta(name):
+        return stats[name] - prev_stats[name]
+
+    parts = [
+        f"d_deadline={delta('deadline_misses'):+d}",
+        f"d_overrun={delta('overruns'):+d}",
+        f"d_underrun={delta('underruns'):+d}",
+        f"gain={stats['gain_dbfs']}dB",
+        f"step={stats['equalizer_step']}",
+    ]
+    if stats["equalizer_step"] != prev_stats["equalizer_step"]:
+        parts.append(
+            f"STEP_CHANGE {prev_stats['equalizer_step']}->{stats['equalizer_step']}"
+        )
+    if transport_mode_for_frequency(stats["frequency_hz"]) == "heartbeat":
+        parts.append("HEARTBEAT")
+    tag = stats["last_tag"]
+    if tag == USB_STATS_TAG_SKIP:
+        parts.append("SKIP")
+    elif tag == USB_STATS_TAG_INSERT:
+        parts.append("INSERT")
+    elif tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH:
+        parts.append("EQ_SWITCH_EVENT")
+    return " ".join(parts)
 
 
 def is_valid_stats_packet(stats, last_report_seq):
@@ -471,19 +531,19 @@ def process_hid_report(data, last_report_seq, args):
     if payload is None:
         if args.debug and data:
             print(f"reject normalize: {bytes(data).hex()}", file=sys.stderr)
-        return last_report_seq, False
+        return last_report_seq, False, None
 
     try:
         stats = parse_stats_payload(payload)
     except ValueError as exc:
         if args.debug:
             print(f"reject parse ({exc}): {payload.hex()}", file=sys.stderr)
-        return last_report_seq, False
+        return last_report_seq, False, None
 
     if not is_valid_stats_packet(stats, last_report_seq):
         if args.debug:
             print(f"reject validate seq={stats['report_seq']} last={last_report_seq}", file=sys.stderr)
-        return last_report_seq, False
+        return last_report_seq, False, None
 
     if args.debug and last_report_seq is not None:
         expected_seq = (last_report_seq + 1) & 0xFF
@@ -495,7 +555,7 @@ def process_hid_report(data, last_report_seq, args):
     stats_output = format_stats_output(stats)
     print(json.dumps(stats_output))
     sys.stdout.flush()
-    return stats["report_seq"], True
+    return stats["report_seq"], True, stats
 
 
 def is_empty_packet(data: dict) -> bool:
@@ -506,6 +566,11 @@ def main():
     parser = argparse.ArgumentParser(description="Read USB audio statistics from Henry Audio firmware (HID)")
     parser.add_argument("--list", action="store_true", help="List statistics HID interfaces and exit")
     parser.add_argument("--verbose", action="store_true", help="Print read-loop status to stderr")
+    parser.add_argument(
+        "--deltas",
+        action="store_true",
+        help="Print per-report transport/contour deltas to stderr",
+    )
     parser.add_argument("--debug", action="store_true", help="Print rejected HID reads on stderr")
     args = parser.parse_args()
 
@@ -524,6 +589,7 @@ def main():
     print(f"Using {device_label(info)}", file=sys.stderr)
 
     last_report_seq = None
+    prev_stats = None
     accepted = 0
     empty_reads = 0
     while True:
@@ -536,15 +602,18 @@ def main():
                     if empty_reads == 3:
                         print(
                             "hint: no bytes from firmware yet — start playback at "
-                            "44.1/48 kHz, or reflash if stats HID send was broken; "
+                            "44.1/48/88.2/96 kHz, or reflash if stats HID send was broken; "
                             "use --debug to inspect rejected packets",
                             file=sys.stderr,
                         )
                 continue
             empty_reads = 0
-            last_report_seq, accepted_now = process_hid_report(data, last_report_seq, args)
+            last_report_seq, accepted_now, stats = process_hid_report(data, last_report_seq, args)
             if accepted_now:
                 accepted += 1
+                if args.deltas and prev_stats is not None:
+                    print(format_stats_deltas(prev_stats, stats), file=sys.stderr)
+                prev_stats = stats
                 if args.verbose:
                     print(f"accepted report_seq={last_report_seq} (#{accepted})", file=sys.stderr)
             elif args.verbose:
@@ -561,6 +630,7 @@ def main():
             if dev is None:
                 sys.exit(f"HID Error: {exc}")
             last_report_seq = None
+            prev_stats = None
             accepted = 0
             print(f"Reconnected to {device_label(info)}", file=sys.stderr)
         except KeyboardInterrupt:
