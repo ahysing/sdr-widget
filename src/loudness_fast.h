@@ -17,6 +17,13 @@ typedef struct {
 } biquad_state_fast_t;
 
 typedef struct {
+    int32_t y_prev_biquad;
+    int32_t y_derivative;
+    int32_t y_current_est;
+    uint8_t sample_counter;
+} loudness_highres_channel_state_t;
+
+typedef struct {
     int32_t a1;
     int32_t a2;
     int32_t b0;
@@ -36,8 +43,20 @@ typedef struct {
     int32_t a2;
 } biquad_runtime_fast_t;
 
+typedef int32_t (*loudness_fast_biquad1_step_runtime_stride_fn)(int32_t x_24,
+    biquad_state_fast_t *st, loudness_highres_channel_state_t *ch,
+    const biquad_runtime_fast_t *rt);
+
 int32_t loudness_fast_biquad1_step_runtime(int32_t x_n, biquad_state_fast_t *st,
     const biquad_runtime_fast_t *rt);
+int32_t loudness_fast_biquad1_step_runtime_stride2(int32_t x_24,
+    biquad_state_fast_t *st, loudness_highres_channel_state_t *ch,
+    const biquad_runtime_fast_t *rt);
+int32_t loudness_fast_biquad1_step_runtime_stride4(int32_t x_24,
+    biquad_state_fast_t *st, loudness_highres_channel_state_t *ch,
+    const biquad_runtime_fast_t *rt);
+void loudness_fast_biquad1_unity_advance_state_24bit(int32_t x_n,
+    biquad_state_fast_t *st);
 int32_t loudness_fast_24bit(int32_t sample);
 int32_t biquad_step_fast_32bit(int32_t sample, biquad_state_fast_t* biquad_states,
     const biquad_quotients_fast_t* q);

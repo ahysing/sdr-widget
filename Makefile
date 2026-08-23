@@ -109,9 +109,9 @@ else
 endif
 
 CFLAGS_OPTIMIZATIONS = -O3 -fno-strict-aliasing -funroll-loops $(CFLAGS_OPT_FP) \
-  -ffunction-sections -fdata-sections -fno-common -mno-pic -mimm-in-const-pool
+  -ffunction-sections -fdata-sections -mno-pic -mimm-in-const-pool
 LDFLAGS_APP_OPTIMIZATIONS = -Wl,--gc-sections
-CFLAGS_LOUDNESS_HOT = -O3 -funroll-loops -finline-functions -finline-limit=1000 \
+CFLAGS_LOUDNESS_HOT = -O3 -funroll-loops -finline-functions \
   -fno-strict-aliasing
 
 WIDGET_LOUDNESS_FLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS) $(CFLAGS_LOUDNESS_DB_SPL_MAX) $(CFLAGS_LOUDNESS_FORCE_UNITY)

@@ -326,6 +326,29 @@ int32_t loudness_fast_biquad1_step_runtime(int32_t x_n,
 #define LOUDNESS_BIQUAD1_STEP loudness_fast_biquad1_step_runtime
 #endif
 
+#define LOUDNESS_FAST_DEFINE_BIQUAD1_STEP_RUNTIME_STRIDE(fn_name, shift_plus_one, counter_mask) \
+int32_t fn_name(int32_t x_24, biquad_state_fast_t *st,                                      \
+    loudness_highres_channel_state_t *ch, const biquad_runtime_fast_t *rt)                  \
+{                                                                                             \
+    if (ch->sample_counter == 0) {                                                            \
+        int32_t y_true = loudness_fast_biquad1_step_runtime(x_24, st, rt);                  \
+        ch->y_derivative = (y_true - ch->y_prev_biquad) >> ((shift_plus_one) - 1);           \
+        ch->y_current_est = y_true;                                                           \
+        ch->y_prev_biquad = y_true;                                                           \
+        ch->sample_counter = 1;                                                               \
+        return y_true;                                                                        \
+    }                                                                                         \
+    ch->y_current_est += ch->y_derivative;                                                    \
+    ch->sample_counter++;                                                                     \
+    ch->sample_counter &= (counter_mask);                                                     \
+    return ch->y_current_est;                                                                 \
+}
+
+LOUDNESS_FAST_DEFINE_BIQUAD1_STEP_RUNTIME_STRIDE(
+    loudness_fast_biquad1_step_runtime_stride4, 3, 0x03)
+LOUDNESS_FAST_DEFINE_BIQUAD1_STEP_RUNTIME_STRIDE(
+    loudness_fast_biquad1_step_runtime_stride2, 2, 0x01)
+
 static inline int32_t loudness_downsample_filter_to_16bit_container(int32_t y_24)
 {
     int32_t s;
@@ -344,7 +367,7 @@ static inline int32_t loudness_downsample_filter_to_16bit_container(int32_t y_24
  * follow the same delay-line update as the full kernel so contour transitions
  * off unity do not start from stale state.
  */
-static inline void loudness_biquad1_unity_advance_state_24bit(int32_t x_n,
+static inline void loudness_biquad1_unity_advance_state_24bit_inline(int32_t x_n,
     biquad_state_fast_t *st)
 {
     int32_t w0;
@@ -354,13 +377,19 @@ static inline void loudness_biquad1_unity_advance_state_24bit(int32_t x_n,
     st->w1 = w0;
 }
 
+void loudness_fast_biquad1_unity_advance_state_24bit(int32_t x_n,
+    biquad_state_fast_t *st)
+{
+    loudness_biquad1_unity_advance_state_24bit_inline(x_n, st);
+}
+
 LOUDNESS_FAST_INLINE int32_t loudness_biquad1_16bit_container_unity_step(
     int32_t x_container, biquad_state_fast_t *st)
 {
     int32_t x_24;
 
     x_24 = (int32_t)(int16_t)(x_container >> 16) << 8;
-    loudness_biquad1_unity_advance_state_24bit(x_24, st);
+    loudness_biquad1_unity_advance_state_24bit_inline(x_24, st);
     return x_container;
 }
 
@@ -498,6 +527,7 @@ void loudness_fast_reset_states(void)
     taskENTER_CRITICAL();
     memset(loudness_states, 0, sizeof(loudness_states));
     taskEXIT_CRITICAL();
+    loudness_highres_reset_states();
 }
 
 int32_t loudness_fast_24bit(int32_t sample)
@@ -505,7 +535,7 @@ int32_t loudness_fast_24bit(int32_t sample)
     const biquad_runtime_fast_t *runtime;
 
     if (loudness_fast_is_unity_step()) {
-        loudness_biquad1_unity_advance_state_24bit(sample, &loudness_states[0]);
+        loudness_fast_biquad1_unity_advance_state_24bit(sample, &loudness_states[0]);
         return saturate_24bit_s32_to_s32(sample);
     }
 
@@ -539,12 +569,17 @@ void loudness_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R, U16 num_s
     st = &loudness_states[0];
 
     if (loudness_fast_is_unity_step()) {
+        if (loudness_highres_applies(loudness_fast_frequency_hz)) {
+            loudness_highres_unity_advance_stereo_packet(sample_L, sample_R, num_samples, st);
+            return;
+        }
+
         for (i = 0; i < num_samples; i++) {
             int32_t xL = (int32_t)(int16_t)(sample_L[i] >> 16) << 8;
             int32_t xR = (int32_t)(int16_t)(sample_R[i] >> 16) << 8;
 
-            loudness_biquad1_unity_advance_state_24bit(xL, st);
-            loudness_biquad1_unity_advance_state_24bit(xR, st);
+            loudness_fast_biquad1_unity_advance_state_24bit(xL, st);
+            loudness_fast_biquad1_unity_advance_state_24bit(xR, st);
         }
         return;
     }
@@ -552,8 +587,7 @@ void loudness_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R, U16 num_s
     runtime = loudness_fast_active_runtime();
 
     if (loudness_highres_applies(loudness_fast_frequency_hz)) {
-        loudness_highres_filter_16bit_stereo_packet(sample_L, sample_R,
-            num_samples, st);
+        loudness_highres_filter_16bit_stereo_packet(sample_L, sample_R, num_samples, st);
         return;
     }
 
@@ -632,6 +666,7 @@ void loudness_change_frequency_fast(uint32_t frequency) {
         return;
     }
     loudness_fast_frequency_hz = frequency;
+    loudness_highres_set_stride(frequency);
     uint32_t n = 1;
     const biquad_quotients_fast_t (*base_table)[LOUDNESS_TABLE_SECTIONS] = loudness_quotients_44100hz;
     if (frequency % 48000 == 0) {

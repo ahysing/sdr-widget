@@ -1,6 +1,6 @@
 /* -*- mode: c; tab-width: 4; c-basic-offset: 4 -*- */
 /*
- * loudness_highres.h — half-rate delta interpolation for high sample rates
+ * loudness_highres.h — delta-interpolated biquad path for high sample rates
  */
 
 #ifndef LOUDNESS_HIGHRES_H_
@@ -24,6 +24,11 @@ void loudness_highres_staging_fill_halfrate(
 
 void loudness_highres_staging_commit(void);
 
+void loudness_highres_set_stride(uint32_t sample_rate_hz);
+void loudness_highres_reset_states(void);
+void loudness_highres_unity_advance_stereo_packet(S32 *sample_L, S32 *sample_R,
+    U16 num_samples, biquad_state_fast_t *st);
+
 void loudness_highres_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R,
     U16 num_samples, biquad_state_fast_t *st);
 
@@ -31,6 +36,7 @@ void loudness_highres_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R,
 void loudness_highres_test_filter_16bit_stereo_packet_fullrate(S32 *sample_L,
     S32 *sample_R, U16 num_samples, biquad_state_fast_t *st,
     const biquad_runtime_fast_t *runtime);
+const loudness_highres_channel_state_t *loudness_highres_test_channel_state(int channel);
 #endif
 
 #endif /* LOUDNESS_HIGHRES_H_ */

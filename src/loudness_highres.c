@@ -6,14 +6,13 @@
 
 #define LOUDNESS_HIGHRES_FILTERS LOUDNESS_FAST_FILTERS
 
-/*
- * Max stereo frames in one HS 16-bit USB packet (392 bytes / 8).
- */
-#define LOUDNESS_MAX_STEREO_PACKET_SAMPLES  49u
-
 static biquad_runtime_fast_t staging_hires_halfrate_runtime[LOUDNESS_HIGHRES_FILTERS];
 static biquad_runtime_fast_t loudness_hires_halfrate_runtime_bank[2][LOUDNESS_HIGHRES_FILTERS];
 static volatile uint8_t loudness_highres_active_bank;
+
+static loudness_highres_channel_state_t loudness_highres_ch[2];
+static loudness_fast_biquad1_step_runtime_stride_fn loudness_fast_biquad1_stride_step =
+    loudness_fast_biquad1_step_runtime_stride2;
 
 static void loudness_highres_runtime_from_quotients(const biquad_quotients_fast_t *src,
     biquad_runtime_fast_t *dst)
@@ -40,6 +39,19 @@ static inline int32_t loudness_highres_container_to_s16(int32_t container)
     return (int32_t)(int16_t)(container >> 16);
 }
 
+static inline int32_t loudness_highres_s16_to_24bit(int32_t container)
+{
+    return loudness_highres_container_to_s16(container) << 8;
+}
+
+static inline int32_t loudness_highres_y24_to_container(int32_t y_24)
+{
+    int32_t s;
+
+    s = y_24 >> 8;
+    return loudness_highres_s16_to_container(s);
+}
+
 static const biquad_runtime_fast_t *loudness_highres_active_runtime(void)
 {
     return loudness_hires_halfrate_runtime_bank[loudness_highres_active_bank & 1u];
@@ -49,6 +61,23 @@ Bool loudness_highres_applies(uint32_t sample_rate_hz)
 {
     return sample_rate_hz == 88200U || sample_rate_hz == 96000U
         || sample_rate_hz == 176400U || sample_rate_hz == 192000U;
+}
+
+void loudness_highres_set_stride(uint32_t sample_rate_hz)
+{
+    if (!loudness_highres_applies(sample_rate_hz)) {
+        return;
+    }
+
+    memset(loudness_highres_ch, 0, sizeof(loudness_highres_ch));
+    loudness_fast_biquad1_stride_step = (sample_rate_hz >= 176400U)
+        ? loudness_fast_biquad1_step_runtime_stride4
+        : loudness_fast_biquad1_step_runtime_stride2;
+}
+
+void loudness_highres_reset_states(void)
+{
+    memset(loudness_highres_ch, 0, sizeof(loudness_highres_ch));
 }
 
 const biquad_quotients_fast_t *loudness_highres_halfrate_quotients(
@@ -90,52 +119,39 @@ void loudness_highres_staging_commit(void)
     loudness_highres_active_bank = inactive;
 }
 
+void loudness_highres_unity_advance_stereo_packet(S32 *sample_L, S32 *sample_R,
+    U16 num_samples, biquad_state_fast_t *st)
+{
+    U16 i;
+
+    for (i = 0; i < num_samples; i++) {
+        int32_t xL = loudness_highres_s16_to_24bit(sample_L[i]);
+        int32_t xR = loudness_highres_s16_to_24bit(sample_R[i]);
+
+        loudness_fast_biquad1_unity_advance_state_24bit(xL, st);
+        loudness_fast_biquad1_unity_advance_state_24bit(xR, st);
+    }
+}
+
 /*
- * At 88.2/96/176.4/192 kHz run one biquad on the stereo mid (L+R)/2 and apply
- * the same shelf delta to both channels. Filter only even-index samples; odd
- * samples get the shelf delta linearly interpolated from their neighbors. Coeffs
- * for the biquad come from the native 44.1/48 kHz table (fs/2 shelf).
+ * At 88.2/96 kHz (stride 2) and 176.4/192 kHz (stride 4), run one shared biquad
+ * with per-channel delta-interpolated output between anchor samples.
  */
 void loudness_highres_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R,
     U16 num_samples, biquad_state_fast_t *st)
 {
-    int32_t delta_buf[LOUDNESS_MAX_STEREO_PACKET_SAMPLES];
     const biquad_runtime_fast_t *runtime = loudness_highres_active_runtime();
+    loudness_fast_biquad1_step_runtime_stride_fn step = loudness_fast_biquad1_stride_step;
     U16 i;
 
-    for (i = 0; i < num_samples; i += 2u) {
-        int32_t sL = loudness_highres_container_to_s16(sample_L[i]);
-        int32_t sR = loudness_highres_container_to_s16(sample_R[i]);
-        int32_t mid = (sL + sR) >> 1;
-        int32_t y_mid;
-        int32_t out_mid;
-        int32_t delta;
+    for (i = 0; i < num_samples; i++) {
+        int32_t xL = loudness_highres_s16_to_24bit(sample_L[i]);
+        int32_t xR = loudness_highres_s16_to_24bit(sample_R[i]);
+        int32_t yL = step(xL, st, &loudness_highres_ch[0], runtime);
+        int32_t yR = step(xR, st, &loudness_highres_ch[1], runtime);
 
-        y_mid = loudness_fast_biquad1_step_runtime(mid << 8, st, runtime);
-        out_mid = y_mid >> 8;
-        if (out_mid > INT16_MAX) {
-            out_mid = INT16_MAX;
-        } else if (out_mid < INT16_MIN) {
-            out_mid = INT16_MIN;
-        }
-        delta = out_mid - mid;
-        delta_buf[i] = delta;
-        sample_L[i] = loudness_highres_s16_to_container(sL + delta);
-        sample_R[i] = loudness_highres_s16_to_container(sR + delta);
-    }
-
-    for (i = 1; i < num_samples; i += 2u) {
-        int32_t sL = loudness_highres_container_to_s16(sample_L[i]);
-        int32_t sR = loudness_highres_container_to_s16(sample_R[i]);
-        int32_t delta;
-
-        if ((i + 1u) < num_samples) {
-            delta = (delta_buf[i - 1u] + delta_buf[i + 1u]) >> 1;
-        } else {
-            delta = delta_buf[i - 1u];
-        }
-        sample_L[i] = loudness_highres_s16_to_container(sL + delta);
-        sample_R[i] = loudness_highres_s16_to_container(sR + delta);
+        sample_L[i] = loudness_highres_y24_to_container(yL);
+        sample_R[i] = loudness_highres_y24_to_container(yR);
     }
 }
 
@@ -147,21 +163,21 @@ void loudness_highres_test_filter_16bit_stereo_packet_fullrate(S32 *sample_L,
     U16 i;
 
     for (i = 0; i < num_samples; i++) {
-        int32_t sL = loudness_highres_container_to_s16(sample_L[i]);
-        int32_t sR = loudness_highres_container_to_s16(sample_R[i]);
-        int32_t mid = (sL + sR) >> 1;
-        int32_t y_mid = loudness_fast_biquad1_step_runtime(mid << 8, st, runtime);
-        int32_t out_mid = y_mid >> 8;
-        int32_t delta;
+        int32_t xL = loudness_highres_s16_to_24bit(sample_L[i]);
+        int32_t xR = loudness_highres_s16_to_24bit(sample_R[i]);
+        int32_t yL = loudness_fast_biquad1_step_runtime(xL, st, runtime);
+        int32_t yR = loudness_fast_biquad1_step_runtime(xR, st, runtime);
 
-        if (out_mid > INT16_MAX) {
-            out_mid = INT16_MAX;
-        } else if (out_mid < INT16_MIN) {
-            out_mid = INT16_MIN;
-        }
-        delta = out_mid - mid;
-        sample_L[i] = loudness_highres_s16_to_container(sL + delta);
-        sample_R[i] = loudness_highres_s16_to_container(sR + delta);
+        sample_L[i] = loudness_highres_y24_to_container(yL);
+        sample_R[i] = loudness_highres_y24_to_container(yR);
     }
+}
+
+const loudness_highres_channel_state_t *loudness_highres_test_channel_state(int channel)
+{
+    if (channel < 0 || channel > 1) {
+        return NULL;
+    }
+    return &loudness_highres_ch[channel];
 }
 #endif
