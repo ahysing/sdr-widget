@@ -17,7 +17,6 @@
 
 #include "I2C.h"
 
-portBASE_TYPE xStatus;
 xSemaphoreHandle mutexI2C;
 
 

@@ -19,17 +19,9 @@ volatile U8 usb_alternate_setting_out = 1;
 S16 spk_vol_usb_L = 0, spk_vol_usb_R = 0;
 volatile U8 spk_bit_resolution = 24;
 
-#ifdef FAST
 static int64_t process_sample(int64_t sample) {
     return loudness_fast_24bit((int32_t)sample);
 }
-#elif defined(PRECISE)
-static int64_t process_sample(int64_t sample) {
-    return loudness_precise_24bit(sample);
-}
-#else
-#error FAST or PRECISE must be defined
-#endif
 
 static void reset_usb_stats_buffers(void) {
     usb_test_mocks_reset();
@@ -198,11 +190,7 @@ static void test_usb_volume_change_updates_telemetry_immediately(void) {
 }
 
 int main(void) {
-#ifdef FAST
-    printf("=== loudness_equalizer_step_switch_stats_tests (FAST) ===\n");
-#else
-    printf("=== loudness_equalizer_step_switch_stats_tests (PRECISE) ===\n");
-#endif
+    printf("=== loudness_equalizer_step_switch_stats_tests ===\n");
     test_equalizer_step_switch_tagged_events_volume_sweep();
     test_equalizer_step_switch_stats_report_and_reset();
     test_equalizer_step_switch_rapid_sweep_no_deadline_misses();

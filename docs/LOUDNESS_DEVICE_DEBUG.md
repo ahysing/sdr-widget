@@ -6,8 +6,8 @@ Procedures for diagnosing pitch and glitch artifacts on Henry Audio hardware aft
 
 | Build | Command | Purpose |
 |-------|---------|---------|
-| Normal FAST | `make audio-widget LOUDNESS_TYPE=FAST` | Production contour |
-| Forced unity (A/B) | `make audio-widget LOUDNESS_TYPE=FAST LOUDNESS_FORCE_UNITY_STEP=1` | Locks equalizer step 13; isolates contour vs transport |
+| Normal | `make audio-widget` | Production contour |
+| Forced unity (A/B) | `make audio-widget LOUDNESS_FORCE_UNITY_STEP=1` | Locks equalizer step 13; isolates contour vs transport |
 | No loudness | `make audio-widget LOUDNESS_DISABLE=1` | Bypass filter entirely |
 
 Flash `Release/widget.elf` with your usual AVR32 programming flow.
@@ -15,7 +15,7 @@ Flash `Release/widget.elf` with your usual AVR32 programming flow.
 ## Task 2 — Flash forced-unity firmware
 
 ```powershell
-make audio-widget LOUDNESS_TYPE=FAST LOUDNESS_FORCE_UNITY_STEP=1
+make audio-widget LOUDNESS_FORCE_UNITY_STEP=1
 ```
 
 Confirm playback starts. Telemetry must show `equalizer_step: 13` at every volume setting.
@@ -74,7 +74,7 @@ After flashing normal FAST (without `LOUDNESS_FORCE_UNITY_STEP`):
 
 Shared vectors: [`tests/loudness_fast_golden_vectors.h`](../tests/loudness_fast_golden_vectors.h)
 
-PC regression: `test_loudness_fast_golden_vectors` in `make test LOUDNESS_TYPE=FAST`.
+PC regression: `test_loudness_fast_golden_vectors` in `make test`.
 
 Compile check on AVR32 toolchain:
 
@@ -121,7 +121,7 @@ Your forced-unity A/B confirms:
 Build and flash:
 
 ```powershell
-make audio-widget LOUDNESS_TYPE=FAST LOUDNESS_FORCE_UNITY_STEP=1
+make audio-widget LOUDNESS_FORCE_UNITY_STEP=1
 ```
 
 C3 success criteria:

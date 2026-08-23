@@ -12,12 +12,7 @@
 #include <stdint.h>
 #include "compiler.h"
 
-#ifdef PRECISE
-#include "loudness_precise.h"
-#endif
-#ifdef FAST
 #include "loudness_fast.h"
-#endif
 
 typedef enum {
     LOUDNESS_FILTER_LOW_SHELF = 0,
@@ -61,30 +56,14 @@ void loudness_rtos_init(void);
 Bool loudness_rtos_is_ready(void);
 void loudness_request_frequency_change(uint32_t frequency);
 #endif
-#ifdef PRECISE
-void loudness_change_frequency_precise(uint32_t frequency);
-#define loudness_change_frequency loudness_change_frequency_precise
-#endif
-#ifdef FAST
 void loudness_change_frequency_fast(uint32_t frequency);
 #define loudness_change_frequency loudness_change_frequency_fast
-#endif
 
-#ifdef PRECISE
-#define LOUDNESS_FILTER_PRECISE_24(sample_64) loudness_precise_24bit(sample_64)
-#else
-#define LOUDNESS_FILTER_PRECISE_24(sample_64) (sample_64)
-#endif
-
-#ifdef FAST
 #define LOUDNESS_FILTER_FAST_32(sample_32) ((S32)loudness_fast_24bit(sample_32))
 #define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) loudness_filter_16bit_container(sample_32)
+#define LOUDNESS_FILTER_16BIT_STEREO_PACKET(L, R, N) \
+    loudness_filter_16bit_stereo_packet((L), (R), (N))
 #define LOUDNESS_FILTER_24BIT_CONTAINER(sample_32) loudness_filter_24bit_container(sample_32)
-#else
-#define LOUDNESS_FILTER_FAST_32(sample_32) (sample_32)
-#define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) (sample_32)
-#define LOUDNESS_FILTER_24BIT_CONTAINER(sample_32) (sample_32)
-#endif
 
 /* Force the active loudness band from an external dBFS estimate (<= 0). */
 void loudness_set_level_dbfs(int32_t db_fs);
@@ -109,7 +88,6 @@ int32_t loudness_get_db_spl(void);
 int16_t loudness_get_last_db_spl(void);
 
 #else /* LOUDNESS_DISABLE */
-#define LOUDNESS_FILTER_PRECISE_24(sample_64) (sample_64)
 #define LOUDNESS_FILTER_FAST_32(sample_32) (sample_32)
 #define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) (sample_32)
 #define LOUDNESS_FILTER_24BIT_CONTAINER(sample_32) (sample_32)

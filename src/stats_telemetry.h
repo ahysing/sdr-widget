@@ -5,8 +5,6 @@
 
 typedef struct {
     U16 frequency_100hz;
-    S8 track_dbfs;
-    S8 track_rms_dbfs;
     S8 gain_dbfs;
     S8 db_spl;
     U8 equalizer_step;
@@ -16,7 +14,6 @@ typedef struct {
 void stats_telemetry_init(void);
 void stats_telemetry_set_frequency_hz(U32 frequency_hz);
 void stats_telemetry_set_gain_dbfs(S8 gain_dbfs);
-void stats_telemetry_set_track_levels(S8 track_dbfs, S8 track_rms_dbfs);
 void stats_telemetry_set_equalizer_state(S8 db_spl, U8 equalizer_step);
 void stats_telemetry_set_source_volume_control(U8 source_volume_control);
 

@@ -35,34 +35,18 @@ PRODUCT_IDS = (
     0x0768,  # UAC2
 )
 
-# Full transport stats (fifo, deadline_misses, skip/insert events) follow loudness
-# filter rates: 44.1, 48, 88.2, and 96 kHz. At 176.4/192 kHz the firmware sends
-# heartbeat reports (transport counters zero, frequency_hz still live).
-
-TRANSPORT_STATS_RATES_HZ = frozenset({44100, 48000, 88200, 96000})
-HEARTBEAT_STATS_RATES_HZ = frozenset({176400, 192000})
-TRANSPORT_STATS_NULL_FIELDS = (
-    "overruns",
-    "underruns",
-    "fifo_level",
-    "max_fifo",
-    "min_fifo",
-    "deadline_misses",
-    "event_count",
-    "last_tag",
-    "last_event",
-)
+# Transport counters are always collected and reported at every USB sample rate.
+TRANSPORT_STATS_RATES_HZ = frozenset({
+    44100, 48000, 88200, 96000, 176400, 192000,
+})
 
 USB_STATS_HID_REPORT_ID = 1
 USB_STATS_HID_TRANSFER_SIZE = 64
 USB_STATS_PACKET_HID_ANCHOR = 0x53
 USB_STATS_PACKET_MAGIC = USB_STATS_PACKET_HID_ANCHOR  # backward-compatible alias
-USB_STATS_PACKET_VERSION = 3
-USB_STATS_PACKET_FORMAT_V2 = "<BBBBIIHHHIHbbbbIBBBBB"
-USB_STATS_PACKET_FORMAT_V3 = "<BBBBIIHHHIHbbbbIBBBBBB"
-USB_STATS_PACKET_SIZE_V2 = struct.calcsize(USB_STATS_PACKET_FORMAT_V2)
-USB_STATS_PACKET_SIZE_V3 = struct.calcsize(USB_STATS_PACKET_FORMAT_V3)
-USB_STATS_PACKET_SIZE = USB_STATS_PACKET_SIZE_V3
+USB_STATS_PACKET_VERSION = 1
+USB_STATS_PACKET_FORMAT = "<BBBBIIHHHIHbbIBBBBBB"
+USB_STATS_PACKET_SIZE = struct.calcsize(USB_STATS_PACKET_FORMAT)
 USB_STATS_PACKET_CHECKSUM_INDEX = 3
 USB_STATS_HID_REPORT_SIZE = 63
 USB_STATS_TAG_NONE = 0
@@ -335,7 +319,7 @@ def find_hid_anchor_offset(payload):
         if payload[offset] != USB_STATS_PACKET_HID_ANCHOR:
             continue
         version = payload[offset + 1]
-        if version not in (1, 2, USB_STATS_PACKET_VERSION):
+        if version != USB_STATS_PACKET_VERSION:
             continue
         if offset > 0 and any(payload[i] != 0 for i in range(offset)):
             continue
@@ -350,8 +334,6 @@ def transport_stats_active(frequency_hz):
 def transport_mode_for_frequency(frequency_hz):
     if transport_stats_active(frequency_hz):
         return "full"
-    if frequency_hz in HEARTBEAT_STATS_RATES_HZ:
-        return "heartbeat"
     return "unknown"
 
 
@@ -394,17 +376,11 @@ def parse_stats_payload(payload):
         raise ValueError("stats packet hid_anchor/version not found")
 
     version = payload[offset + 1]
-    if version == 1:
-        packet_size = USB_STATS_PACKET_SIZE_V2
-        packet_format = USB_STATS_PACKET_FORMAT_V2
-    elif version == 2:
-        packet_size = USB_STATS_PACKET_SIZE_V2
-        packet_format = USB_STATS_PACKET_FORMAT_V2
-    elif version == USB_STATS_PACKET_VERSION:
-        packet_size = USB_STATS_PACKET_SIZE_V3
-        packet_format = USB_STATS_PACKET_FORMAT_V3
-    else:
+    if version != USB_STATS_PACKET_VERSION:
         raise ValueError("stats packet version mismatch")
+
+    packet_size = USB_STATS_PACKET_SIZE
+    packet_format = USB_STATS_PACKET_FORMAT
 
     chunk = payload[offset : offset + packet_size]
     if len(chunk) < packet_size:
@@ -430,8 +406,6 @@ def parse_stats_payload(payload):
         min_fifo,
         deadline_misses,
         frequency_100hz,
-        track_dbfs,
-        track_rms_dbfs,
         gain_dbfs,
         db_spl,
         event_count,
@@ -440,16 +414,13 @@ def parse_stats_payload(payload):
         last_arg1,
         last_arg2,
         equalizer_step,
-    ) = fields[:21]
-    source_volume_control = fields[21] if len(fields) > 21 else 0
+        source_volume_control,
+    ) = fields
 
     if hid_anchor != USB_STATS_PACKET_HID_ANCHOR:
         raise ValueError("stats packet header mismatch")
 
-    if version == 1:
-        frequency_hz = frequency_100hz
-    else:
-        frequency_hz = frequency_100hz * 100
+    frequency_hz = frequency_100hz * 100
 
     stats = {
         "version": version,
@@ -461,8 +432,6 @@ def parse_stats_payload(payload):
         "min_fifo": min_fifo,
         "deadline_misses": deadline_misses,
         "frequency_hz": frequency_hz,
-        "track_dbfs": track_dbfs,
-        "track_rms_dbfs": track_rms_dbfs,
         "gain_dbfs": gain_dbfs,
         "db_spl": db_spl,
         "event_count": event_count,
@@ -480,13 +449,8 @@ def parse_stats_payload(payload):
 
 def format_stats_output(stats):
     output = dict(stats)
-    frequency_hz = output["frequency_hz"]
-    output["transport_mode"] = transport_mode_for_frequency(frequency_hz)
-    if output["transport_mode"] == "heartbeat":
-        for field in TRANSPORT_STATS_NULL_FIELDS:
-            if field in output:
-                output[field] = None
-    elif output["min_fifo"] == USB_STATS_MIN_FIFO_IDLE:
+    output["transport_mode"] = transport_mode_for_frequency(output["frequency_hz"])
+    if output["min_fifo"] == USB_STATS_MIN_FIFO_IDLE:
         output["min_fifo"] = None
     return output
 
@@ -507,8 +471,6 @@ def format_stats_deltas(prev_stats, stats):
         parts.append(
             f"STEP_CHANGE {prev_stats['equalizer_step']}->{stats['equalizer_step']}"
         )
-    if transport_mode_for_frequency(stats["frequency_hz"]) == "heartbeat":
-        parts.append("HEARTBEAT")
     tag = stats["last_tag"]
     if tag == USB_STATS_TAG_SKIP:
         parts.append("SKIP")
@@ -601,8 +563,8 @@ def main():
                     print("waiting for HID report...", file=sys.stderr)
                     if empty_reads == 3:
                         print(
-                            "hint: no bytes from firmware yet — start playback at "
-                            "44.1/48/88.2/96 kHz, or reflash if stats HID send was broken; "
+                            "hint: no bytes from firmware yet — start playback, "
+                            "or reflash if stats HID send was broken; "
                             "use --debug to inspect rejected packets",
                             file=sys.stderr,
                         )

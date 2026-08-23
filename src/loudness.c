@@ -1,12 +1,8 @@
 #include "loudness.h"
 #include "track_dbfs.h"
 #include "loudness_internal.h"
-#ifdef PRECISE
-#include "loudness_precise.h"
-#endif
-#ifdef FAST
 #include "loudness_fast.h"
-#endif
+#include "loudness_highres.h"
 #if defined(BUILD_TESTING)
 #include "../tests/pc/usb_specific_request.h"
 extern S16 spk_vol_usb_L, spk_vol_usb_R;
@@ -57,11 +53,7 @@ extern S16 spk_vol_usb_L, spk_vol_usb_R;
 static void loudness_print_build_config(void) {
     LOUDNESS_PRINT("Audio firmware build options:\n");
 #ifndef LOUDNESS_DISABLE
-#ifdef FAST
     LOUDNESS_PRINT("  equalizer filter: FAST\n");
-#else
-    LOUDNESS_PRINT("  equalizer filter: PRECISE\n");
-#endif
 #else
     LOUDNESS_PRINT("  equalizer filter: disabled\n");
 #endif
@@ -311,12 +303,7 @@ Bool loudness_test_should_change_equalizer_step(int32_t db_spl_x10) {
 
 static void loudness_select_equalizer_step(int32_t db_spl) {
     int equalizer_step = loudness_get_equalizer_step(db_spl);
-#ifdef PRECISE
-    loudness_precise_select_equalizer_step(db_spl, equalizer_step);
-#endif
-#ifdef FAST
     loudness_fast_select_equalizer_step(db_spl, equalizer_step);
-#endif
 }
 
 #ifdef FREERTOS_USED
@@ -356,7 +343,8 @@ static void loudness_update_filter_by_volume_or_frequency(void *pvParameters)
             continue;
         }
 
-        if (current_freq.frequency == FREQ_44 || current_freq.frequency == FREQ_48) {
+        if (current_freq.frequency == FREQ_44 || current_freq.frequency == FREQ_48
+            || loudness_highres_applies(current_freq.frequency)) {
             if (xQueueReceive(xLoudnessFreqQueue, &request, xDelay20ms) == pdPASS) {
                 if (request.type == LOUDNESS_REQUEST_FREQUENCY) {
                     loudness_change_frequency(request.value);
@@ -567,12 +555,7 @@ void loudness_filter_init(void) {
     loudness_reset_rms();
     loudness_inferred_gain_reset();
 
-#ifdef PRECISE
-    loudness_precise_reset_states();
-#endif
-#ifdef FAST
     loudness_fast_reset_states();
-#endif
 
     loudness_select_equalizer_step(LOUDNESS_DB_SPL_MAX);
     loudness_change_frequency(current_freq.frequency);

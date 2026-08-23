@@ -6,13 +6,8 @@
 
 #include "track_dbfs.h"
 
-#ifdef FAST
 void loudness_update_track_level_fast(int32_t sample);
 #define loudness_update_track_level(sample) loudness_update_track_level_fast(sample)
-#elif defined(PRECISE)
-void loudness_update_track_level_precise(int64_t sample);
-#define loudness_update_track_level(sample) loudness_update_track_level_precise(sample)
-#endif
 
 #ifdef BUILD_TESTING
 #include "compiler.h"

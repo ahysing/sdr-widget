@@ -2,9 +2,8 @@
 #include "loudness.h"
 #include "loudness_test_access.h"
 #include "usb_specific_request.h"
-#ifdef FAST
+#include "loudness_fast.h"
 #include "loudness_fast_golden_vectors.h"
-#endif
 #include <stdio.h>
 #include <assert.h>
 #include <stdint.h>
@@ -121,14 +120,7 @@ void test_loudness_init() {
 }
 
 int64_t loudness_24bit_wrapper(int64_t sample) {
-#ifdef PRECISE
-    return loudness_precise_24bit(sample);
-#elif defined(FAST)
     return loudness_fast_24bit((int32_t)sample);
-#else
-    assert(0 && "Unable to test loudness when FAST and PRECISE is not defined");
-    return 0;
-#endif
 }
 
 void test_loudness_24bit_processing() {
@@ -313,7 +305,6 @@ void test_loudness_get_track_dbfs(void) {
 
 
 /* Test for Use Case A og B: Verifiser 16-bit CD-audio fortegnsbevaring og prosessering */
-#ifdef FAST
 void test_loudness_16bit_cd_audio_processing(void) {
     printf("Running test_loudness_16bit_cd_audio_processing...\n");
     loudness_init();
@@ -357,7 +348,6 @@ void test_loudness_16bit_container_no_int32_overflow(void) {
 
     printf("test_loudness_16bit_container_no_int32_overflow passed\n");
 }
-#endif
 
 /* Test for Volum-grenser: Sjekk at indeks 255 gir absolutt digital stillhet (Mute) */
 void test_digital_volume_mute(void) {
@@ -384,13 +374,13 @@ void test_loudness_16bit_sign_extension(void) {
     uint16_t raw_negative_16bit = (uint16_t)-4000;
     uint32_t usb_container_sample = (uint32_t)raw_negative_16bit;
 
-    /* Verify FAST mode upsampling macro (32-bit output) */
+    /* Verify upsampling macro (32-bit output) */
     int32_t sample_32 = UPSAMPLE_16BIT_32(usb_container_sample);
     /* A negative input MUST remain a properly sign-extended negative input */
     assert(sample_32 == -4000 * 65536LL || sample_32 == (-4000 << 16));
     assert(sample_32 < 0);
 
-    /* Verify PRECISE mode upsampling macro (64-bit output) */
+    /* Verify 64-bit upsampling macro */
     int64_t sample_64 = UPSAMPLE_16BIT_64(usb_container_sample);
     assert(sample_64 == -4000 * 65536LL || sample_64 == ((int64_t)-4000 << 16));
     assert(sample_64 < 0);
@@ -422,7 +412,6 @@ void test_loudness_24bit_sign_extension(void) {
     printf("test_loudness_24bit_sign_extension passed\n\n");
 }
 
-#ifdef FAST
 /**
  * TEST 1: Verifiser at fortegnshåndteringen (Sign Extension) er intakt.
  * Et negativt 24-bits tall plassert i bits 31:8 må ikke vris om til et
@@ -579,7 +568,6 @@ void test_loudness_df2_step_transition_no_reset(void) {
 
     printf("test_loudness_df2_step_transition_no_reset passed\n\n");
 }
-#endif
 
 
 /**
@@ -677,7 +665,6 @@ void test_loudness_equalizer_step_hysteresis_79_80(void) {
     printf("test_loudness_equalizer_step_hysteresis_79_80 passed\n\n");
 }
 
-#ifdef FAST
 #define SINE_TEST_SAMPLE_COUNT   48000
 #define SINE_TEST_SETTLE_SAMPLES 2000
 #define SINE_TEST_AMPLITUDE      2097152
@@ -923,7 +910,98 @@ void test_loudness_fast_golden_vectors(void)
     assert(failure == 0);
     printf("test_loudness_fast_golden_vectors passed\n\n");
 }
-#endif
+
+#define HIRES_HALF_DELTA_PACKET_SAMPLES 49u
+#define HIRES_HALF_DELTA_TEST_SAMPLES   8820
+#define HIRES_HALF_DELTA_GAIN_TOLERANCE_DB 0.35
+
+static double measure_fast_50hz_gain_db_stereo_packet(uint32_t sample_rate_hz,
+    int equalizer_step)
+{
+    double input_sum_squares = 0.0;
+    double output_sum_squares = 0.0;
+    double input_rms;
+    double output_rms;
+    int i;
+    S32 packet_L[HIRES_HALF_DELTA_PACKET_SAMPLES];
+    S32 packet_R[HIRES_HALF_DELTA_PACKET_SAMPLES];
+
+    current_freq.frequency = sample_rate_hz;
+    loudness_change_frequency_fast(sample_rate_hz);
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(equalizer_step);
+
+    for (i = 0; i < HIRES_HALF_DELTA_TEST_SAMPLES; i += HIRES_HALF_DELTA_PACKET_SAMPLES) {
+        int j;
+        int chunk = HIRES_HALF_DELTA_PACKET_SAMPLES;
+
+        if (i + chunk > HIRES_HALF_DELTA_TEST_SAMPLES) {
+            chunk = HIRES_HALF_DELTA_TEST_SAMPLES - i;
+        }
+
+        for (j = 0; j < chunk; j++) {
+            double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
+                (double)(i + j) / (double)sample_rate_hz;
+            int32_t s16 = (int32_t)lrint(
+                (32767.0 * 0.25) * sin(phase));
+
+            packet_L[j] = s16 << 16;
+            packet_R[j] = s16 << 16;
+        }
+
+        loudness_filter_16bit_stereo_packet(packet_L, packet_R, (U16)chunk);
+
+        for (j = 0; j < chunk; j++) {
+            int abs_index = i + j;
+
+            if (abs_index >= SINE_TEST_SETTLE_SAMPLES) {
+                double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
+                    (double)abs_index / (double)sample_rate_hz;
+                int32_t input_ref = (int32_t)lrint(
+                    (32767.0 * 0.25) * sin(phase));
+                int32_t output_s16 = (int32_t)(int16_t)(packet_L[j] >> 16);
+
+                input_sum_squares += (double)input_ref * (double)input_ref;
+                output_sum_squares += (double)output_s16 * (double)output_s16;
+            }
+        }
+    }
+
+    input_rms = sqrt(input_sum_squares /
+        (HIRES_HALF_DELTA_TEST_SAMPLES - SINE_TEST_SETTLE_SAMPLES));
+    output_rms = sqrt(output_sum_squares /
+        (HIRES_HALF_DELTA_TEST_SAMPLES - SINE_TEST_SETTLE_SAMPLES));
+    return 20.0 * log10(output_rms / input_rms);
+}
+
+void test_loudness_hires_halfrate_delta_near_fullrate(void)
+{
+    double gain_halfrate;
+    double gain_176;
+    double gain_192;
+    double expected_gain_44100 = bass_boost_test_cases[10].expected_gain_44100_db;
+    double expected_gain_48000 = bass_boost_test_cases[10].expected_gain_48000_db;
+
+    printf("Running test_loudness_hires_halfrate_delta_near_fullrate...\n");
+
+    gain_halfrate = measure_fast_50hz_gain_db_stereo_packet(88200, 10);
+    printf("  half-rate 88.2 kHz packet gain=%.3f dB, "
+        "expected 44.1 kHz gain=%.3f dB\n",
+        gain_halfrate, expected_gain_44100);
+    fflush(stdout);
+    assert(fabs(gain_halfrate - expected_gain_44100) <=
+        HIRES_HALF_DELTA_GAIN_TOLERANCE_DB);
+
+    gain_176 = measure_fast_50hz_gain_db_stereo_packet(176400, 10);
+    assert(fabs(gain_176 - expected_gain_44100) <=
+        HIRES_HALF_DELTA_GAIN_TOLERANCE_DB);
+
+    gain_192 = measure_fast_50hz_gain_db_stereo_packet(192000, 10);
+    assert(fabs(gain_192 - expected_gain_48000) <=
+        HIRES_HALF_DELTA_GAIN_TOLERANCE_DB);
+
+    printf("test_loudness_hires_halfrate_delta_near_fullrate passed\n\n");
+}
 
 int main() {
     test_loudness_reset_rms();
@@ -942,16 +1020,13 @@ int main() {
     test_saturate_16bit_s32_to_s32();
     test_loudness_get_gain_dbfs();
     test_loudness_get_track_dbfs();
-#ifdef FAST
     test_loudness_16bit_cd_audio_processing();
     test_loudness_16bit_container_no_int32_overflow();
-#endif
     test_loudness_intersample_peak_saturation();
     test_digital_volume_mute();
 
     test_loudness_16bit_sign_extension();
     test_loudness_24bit_sign_extension();
-#ifdef FAST
     test_loudness_24bit_container_round_trip();
     test_loudness_24bit_container_zero_crossing();
     test_loudness_df2_step_transition_no_reset();
@@ -974,8 +1049,8 @@ int main() {
     test_50hz_79phon_bass_boost_magnitude();
     test_50hz_bass_boost_is_monotonic();
     test_loudness_all_curve_transitions_glitchfree();
+    test_loudness_hires_halfrate_delta_near_fullrate();
     test_loudness_fast_golden_vectors();
-#endif
     test_loudness_dither_and_noise_shaping();
     test_loudness_get_equalizer_step_14_levels();
     test_loudness_80_phon_unity_filter();

@@ -154,19 +154,10 @@ void uac2_device_audio_task_init(U8 ep_in, U8 ep_out, U8 ep_out_fb)
 
 #define UAC2_USB_OUT_MAX_STEREO_SAMPLES  (EP_OUT_LENGTH_2_HS / 8u)
 
-Bool uac2_loudness_rates_active(U32 frequency_hz)
-{
-	return (frequency_hz == FREQ_44 ||
-		frequency_hz == FREQ_48 ||
-		frequency_hz == FREQ_88 ||
-		frequency_hz == FREQ_96);
-}
-
 #ifndef LOUDNESS_DISABLE
 static Bool uac2_loudness_filter_enabled(void)
 {
-	return (usb_spk_mute == 0) &&
-		uac2_loudness_rates_active(current_freq.frequency);
+	return usb_spk_mute == 0;
 }
 #endif
 
@@ -226,7 +217,7 @@ void uac2_device_audio_task(void *pvParameters)
 
 	while (TRUE) {
 #ifndef USBSTATISTICS_DISABLE
-		if (statistics_runtime_is_active()) {
+		{
 			volatile usb_stats_t *stats = get_usb_stats();
 			portTickType now = xTaskGetTickCount();
 			portTickType lateness = now - xLastWakeTime;
@@ -567,7 +558,7 @@ void uac2_device_audio_task(void *pvParameters)
 
 					if( (!playerStarted) || (audio_OUT_must_sync) ) {	// BSB 20140917 attempting to help uacX_device_audio_task.c synchronize to DMA
 #ifndef USBSTATISTICS_DISABLE
-						if (statistics_runtime_is_active() && audio_OUT_must_sync) {
+						if (audio_OUT_must_sync) {
 							U8 freq_khz = (U8)(current_freq.frequency / 1000);
 							audio_stats_record_event(get_usb_stats(), USB_STATS_TAG_FORCED_RESYNC, freq_khz, 0, 0);
 						}
@@ -693,7 +684,7 @@ void uac2_device_audio_task(void *pvParameters)
 					} // end if skip_enable
 
 #ifndef USBSTATISTICS_DISABLE
-					if (statistics_runtime_is_active()) {
+					{
 						volatile usb_stats_t *stats = get_usb_stats();
 						U8 freq_khz = (U8)(current_freq.frequency / 1000);
 						U8 gap_arg = (U8)(old_gap >> 4);
@@ -710,6 +701,21 @@ void uac2_device_audio_task(void *pvParameters)
 
 					silence_det_L = 0;						// We're looking for non-zero or non-static audio data..
 					silence_det_R = 0;						// We're looking for non-zero or non-static audio data..
+
+#ifndef LOUDNESS_DISABLE
+					if (uac2_loudness_filter_enabled()) {
+						if (!loudness_inferred_gain_has_source_volume_control()) {
+							for (i = 0; i < num_samples; i++) {
+								loudness_envelope_follower_update_stereo(usb_out_L[i],
+									usb_out_R[i]);
+							}
+						}
+						if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {
+							LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L,
+								usb_out_R, num_samples);
+						}
+					}
+#endif
 
 					for (i = 0; i < num_samples; i++) {
 						sample_L = usb_out_L[i];
@@ -759,16 +765,10 @@ void uac2_device_audio_task(void *pvParameters)
 
 
 #ifndef LOUDNESS_DISABLE
-						/* Keep the complete loudness path at base rates.
-						 * Through performance tests we have found higher frequency rates to fail this path. */
 						if (uac2_loudness_filter_enabled()) {
-							loudness_inferred_gain_feed_stereo(sample_L, sample_R);
 							if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX) {
 								sample_L = LOUDNESS_FILTER_24BIT_CONTAINER(sample_L);
 								sample_R = LOUDNESS_FILTER_24BIT_CONTAINER(sample_R);
-							} else if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {
-								sample_L = LOUDNESS_FILTER_16BIT_CONTAINER(sample_L);
-								sample_R = LOUDNESS_FILTER_16BIT_CONTAINER(sample_R);
 							}
 						}
 #endif
@@ -918,9 +918,7 @@ void uac2_device_audio_task(void *pvParameters)
 
 							if(playerStarted) {
 #ifndef USBSTATISTICS_DISABLE
-								if (statistics_runtime_is_active()) {
-									audio_stats_update(get_usb_stats(), gap, DAC_BUFFER_SIZE);
-								}
+								audio_stats_update(get_usb_stats(), gap, DAC_BUFFER_SIZE);
 #endif
 
 								if (spk_establishment_grace > 0) {

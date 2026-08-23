@@ -1,14 +1,88 @@
 #
-# Change this to fit your local installation, so that the
-# cross compiler/assembler could find your header files.
+# Application compile overrides (included from Release/makefile after subdir.mk).
+# -mpart=uc3a3256 is set here; optimization flags come from the root Makefile.
 #
 CFLAGS+= -I/opt/atmel-headers
 ASFLAGS+= -I/opt/atmel-headers
 
-# Aggressive optimizations apply only to application sources in src/*.c.
-# SOFTWARE_FRAMEWORK keeps the -O2 baked into its auto-generated subdir.mk rules.
 CFLAGS_APP_OPTIMIZATIONS ?=
+CFLAGS_LOUDNESS_HOT ?=
+LDFLAGS_APP_OPTIMIZATIONS ?=
 
+AVR32_APP_INCLUDES = \
+	-DBOARD=SDRwdgtLite -DFREERTOS_USED \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/SSC/I2S \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/PDCA \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/TWIM \
+	-I../src/SOFTWARE_FRAMEWORK/UTILS/DEBUG \
+	-I../src/SOFTWARE_FRAMEWORK/SERVICES/USB/CLASS/AUDIO \
+	-I../src/SOFTWARE_FRAMEWORK/SERVICES/USB/CLASS/CDC \
+	-I../src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/portable/GCC/AVR32_UC3 \
+	-I../src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/include \
+	-I../src/SOFTWARE_FRAMEWORK/SERVICES/USB/CLASS/HID \
+	-I../src/SOFTWARE_FRAMEWORK/SERVICES/USB \
+	-I../src/CONFIG \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/USBB/ENUM/DEVICE \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/USBB/ENUM \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/USBB \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/USART \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/TC \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/WDT \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/CPU/CYCLE_COUNTER \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/EIC \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/RTC \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/PM \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/GPIO \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/FLASHC \
+	-I../src/SOFTWARE_FRAMEWORK/UTILS/LIBS/NEWLIB_ADDONS/INCLUDE \
+	-I../src/SOFTWARE_FRAMEWORK/UTILS/PREPROCESSOR \
+	-I../src/SOFTWARE_FRAMEWORK/UTILS \
+	-I../src/SOFTWARE_FRAMEWORK/DRIVERS/INTC \
+	-I../src/SOFTWARE_FRAMEWORK/BOARDS \
+	-I../src
+
+AVR32_APP_CFLAGS = -O2 -fdata-sections -Wall -c -fmessage-length=0 \
+	-mpart=uc3a3256 -ffunction-sections -masm-addr-pseudos -mrelax
+
+AVR32_FRAMEWORK_CFLAGS = -O2 -fdata-sections -Wall -c -fmessage-length=0 \
+	-mpart=uc3a3256 -ffunction-sections -masm-addr-pseudos
+
+define AVR32_COMPILE_APP
+	@echo Compile $(if $(2),[hot] ,)$(CFLAGS) $(CFLAGS_APP_OPTIMIZATIONS) $(2) $<
+	@avr32-gcc $(CFLAGS) $(AVR32_APP_INCLUDES) $(AVR32_APP_CFLAGS) \
+		$(CFLAGS_APP_OPTIMIZATIONS) $(2) \
+		-MMD -MP -MF"$(1:%.o=%.d)" -MT"$(1:%.o=%.d)" -o"$(1)" "$<"
+endef
+
+define AVR32_COMPILE_FRAMEWORK
+	@echo Compile [framework] $(CFLAGS) $<
+	@avr32-gcc $(CFLAGS) $(AVR32_APP_INCLUDES) $(AVR32_FRAMEWORK_CFLAGS) \
+		-MMD -MP -MF"$(1:%.o=%.d)" -MT"$(1:%.o=%.d)" -o"$(1)" "$<"
+endef
+
+# SOFTWARE_FRAMEWORK / FreeRTOS: fixed -O2, no app-level -O3 (overrides subdir.mk).
+src/SOFTWARE_FRAMEWORK/%.o: ../src/SOFTWARE_FRAMEWORK/%.c
+	$(call AVR32_COMPILE_FRAMEWORK,$@)
+
+# Top-level application sources under src/*.c (not subfolders).
 src/%.o: ../src/%.c
-	@echo Compile $(CFLAGS) $(CFLAGS_APP_OPTIMIZATIONS) $<
-	@avr32-gcc $(CFLAGS) -DBOARD=SDRwdgtLite -DFREERTOS_USED -I../src/SOFTWARE_FRAMEWORK/DRIVERS/SSC/I2S -I../src/SOFTWARE_FRAMEWORK/DRIVERS/PDCA -I../src/SOFTWARE_FRAMEWORK/DRIVERS/TWIM -I../src/SOFTWARE_FRAMEWORK/UTILS/DEBUG -I../src/SOFTWARE_FRAMEWORK/SERVICES/USB/CLASS/AUDIO -I../src/SOFTWARE_FRAMEWORK/SERVICES/USB/CLASS/CDC -I../src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/portable/GCC/AVR32_UC3 -I../src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/include -I../src/SOFTWARE_FRAMEWORK/SERVICES/USB/CLASS/HID -I../src/SOFTWARE_FRAMEWORK/SERVICES/USB -I../src/CONFIG -I../src/SOFTWARE_FRAMEWORK/DRIVERS/USBB/ENUM/DEVICE -I../src/SOFTWARE_FRAMEWORK/DRIVERS/USBB/ENUM -I../src/SOFTWARE_FRAMEWORK/DRIVERS/USBB -I../src/SOFTWARE_FRAMEWORK/DRIVERS/USART -I../src/SOFTWARE_FRAMEWORK/DRIVERS/TC -I../src/SOFTWARE_FRAMEWORK/DRIVERS/WDT -I../src/SOFTWARE_FRAMEWORK/DRIVERS/CPU/CYCLE_COUNTER -I../src/SOFTWARE_FRAMEWORK/DRIVERS/EIC -I../src/SOFTWARE_FRAMEWORK/DRIVERS/RTC -I../src/SOFTWARE_FRAMEWORK/DRIVERS/PM -I../src/SOFTWARE_FRAMEWORK/DRIVERS/GPIO -I../src/SOFTWARE_FRAMEWORK/DRIVERS/FLASHC -I../src/SOFTWARE_FRAMEWORK/UTILS/LIBS/NEWLIB_ADDONS/INCLUDE -I../src/SOFTWARE_FRAMEWORK/UTILS/PREPROCESSOR -I../src/SOFTWARE_FRAMEWORK/UTILS -I../src/SOFTWARE_FRAMEWORK/DRIVERS/INTC -I../src/SOFTWARE_FRAMEWORK/BOARDS -I../src -O2 -fdata-sections -Wall -c -fmessage-length=0 -mpart=uc3a3256 -ffunction-sections -masm-addr-pseudos $(CFLAGS_APP_OPTIMIZATIONS) -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -o"$@" "$<"
+	$(call AVR32_COMPILE_APP,$@,)
+
+# Loudness hot-path objects get extra compile flags from the root Makefile.
+src/loudness_fast.o: ../src/loudness_fast.c
+	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))
+
+src/loudness_highres.o: ../src/loudness_highres.c
+	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))
+
+src/loudness_inferred_gain.o: ../src/loudness_inferred_gain.c
+	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))
+
+src/loudness.o: ../src/loudness.c
+	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))
+
+src/track_dbfs.o: ../src/track_dbfs.c
+	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))
+
+src/uac2_device_audio_task.o: ../src/uac2_device_audio_task.c
+	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))

@@ -1,0 +1,6 @@
+# Override auto-generated Release/makefile link rule so --gc-sections / LDFLAGS_APP_OPTIMIZATIONS apply.
+widget.elf: $(OBJS) $(USER_OBJS)
+	@echo Link $@ $(LDFLAGS_APP_OPTIMIZATIONS)
+	@avr32-gcc -nostartfiles -Wl,-e,_trampoline -mpart=uc3a3256 \
+		-Wl,--gc-sections --rodata-writable -Wl,--direct-data \
+		$(LDFLAGS_APP_OPTIMIZATIONS) -o"widget.elf" $(OBJS) $(USER_OBJS) $(LIBS)

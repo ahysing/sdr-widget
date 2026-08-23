@@ -22,8 +22,8 @@ C_SRCS += \
 ../src/host_audio_task.c \
 ../src/image.c \
 ../src/loudness.c \
-../src/loudness_precise.c \
 ../src/loudness_fast.c \
+../src/loudness_highres.c \
 ../src/track_dbfs.c \
 ../src/loudness_inferred_gain.c \
 ../src/rotary_encoder.c \
@@ -68,8 +68,8 @@ OBJS += \
 ./src/host_audio_task.o \
 ./src/image.o \
 ./src/loudness.o \
-./src/loudness_precise.o \
 ./src/loudness_fast.o \
+./src/loudness_highres.o \
 ./src/track_dbfs.o \
 ./src/loudness_inferred_gain.o \
 ./src/rotary_encoder.o \
@@ -115,8 +115,8 @@ C_DEPS += \
 ./src/host_audio_task.d \
 ./src/image.d \
 ./src/loudness.d \
-./src/loudness_precise.d \
 ./src/loudness_fast.d \
+./src/loudness_highres.d \
 ./src/track_dbfs.d \
 ./src/loudness_inferred_gain.d \
 ./src/rotary_encoder.d \

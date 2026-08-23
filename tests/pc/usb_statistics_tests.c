@@ -131,7 +131,6 @@ void test_statistics_wire_packet_is_little_endian() {
     buf->event_count = 3;
 
     stats_telemetry_set_frequency_hz(192000);
-    stats_telemetry_set_track_levels((S8)-12, (S8)-24);
     stats_telemetry_set_gain_dbfs((S8)-10);
     stats_telemetry_set_equalizer_state((S8)80, 2);
     stats_telemetry_set_source_volume_control(1);
@@ -153,22 +152,20 @@ void test_statistics_wire_packet_is_little_endian() {
     assert(wire[21] == 0x00);
     assert(wire[22] == 0x80);
     assert(wire[23] == 0x07);
-    assert((int8_t)wire[24] == -12);
-    assert((int8_t)wire[25] == -24);
-    assert((int8_t)wire[26] == -10);
-    assert((int8_t)wire[27] == 80);
-    assert(wire[28] == 0x03);
+    assert((int8_t)wire[24] == -10);
+    assert((int8_t)wire[25] == 80);
+    assert(wire[26] == 0x03);
+    assert(wire[27] == 0x00);
+    assert(wire[28] == 0x00);
     assert(wire[29] == 0x00);
-    assert(wire[30] == 0x00);
-    assert(wire[31] == 0x00);
-    assert(wire[36] == 2);
-    assert(wire[37] == 1);
+    assert(wire[34] == 2);
+    assert(wire[35] == 1);
     assert(wire[3] == statistics_test_build_wire_checksum(wire));
     printf("test_statistics_wire_packet_is_little_endian passed\n");
 }
 
-void test_statistics_heartbeat_mode_no_buffer_swap() {
-    printf("Running test_statistics_heartbeat_mode_no_buffer_swap...\n");
+void test_statistics_report_swaps_buffers_when_runtime_inactive() {
+    printf("Running test_statistics_report_swaps_buffers_when_runtime_inactive...\n");
     setup();
 
     Is_device_enumerated_fake.return_val = TRUE;
@@ -183,26 +180,26 @@ void test_statistics_heartbeat_mode_no_buffer_swap() {
 
     statistics_report_iteration();
 
-    assert(statistics_test_get_collect_index() == 0);
-    assert(buf0->overruns == 42);
-    assert(buf0->deadline_misses == 99);
+    assert(statistics_test_get_collect_index() == 1);
+    assert(buf0->overruns == 0);
+    assert(buf0->deadline_misses == 0);
     assert(statistics_test_get_report_seq() == 1);
     assert(Usb_send_in_fake.call_count == 1);
-    printf("test_statistics_heartbeat_mode_no_buffer_swap passed\n");
+    printf("test_statistics_report_swaps_buffers_when_runtime_inactive passed\n");
 }
 
-void test_statistics_heartbeat_mode_zero_transport_counters() {
-    printf("Running test_statistics_heartbeat_mode_zero_transport_counters...\n");
+void test_statistics_idle_wire_packet_fields() {
+    printf("Running test_statistics_idle_wire_packet_fields...\n");
     setup();
 
     stats_telemetry_set_frequency_hz(96000);
 
-    volatile usb_stats_t heartbeat = {
+    volatile usb_stats_t idle = {
         0, 0, 0, 0, 0, 0xFFFF, 0, 0, USB_STATS_TAG_NONE, 0, 0, 0
     };
     U8 wire[USB_STATS_PACKET_WIRE_SIZE];
 
-    statistics_test_build_wire_packet(wire, &heartbeat, 1);
+    statistics_test_build_wire_packet(wire, &idle, 1);
 
     assert(wire[4] == 0);
     assert(wire[5] == 0);
@@ -224,13 +221,13 @@ void test_statistics_heartbeat_mode_zero_transport_counters() {
     assert(wire[21] == 0);
     assert(wire[22] == 0xC0);
     assert(wire[23] == 0x03);
-    assert(wire[32] == USB_STATS_TAG_NONE);
+    assert(wire[30] == USB_STATS_TAG_NONE);
     assert(wire[3] == statistics_test_build_wire_checksum(wire));
-    printf("test_statistics_heartbeat_mode_zero_transport_counters passed\n");
+    printf("test_statistics_idle_wire_packet_fields passed\n");
 }
 
-void test_statistics_full_mode_restores_buffer_swap() {
-    printf("Running test_statistics_full_mode_restores_buffer_swap...\n");
+void test_statistics_report_always_swaps_buffers() {
+    printf("Running test_statistics_report_always_swaps_buffers...\n");
     setup();
 
     Is_device_enumerated_fake.return_val = TRUE;
@@ -238,32 +235,33 @@ void test_statistics_full_mode_restores_buffer_swap() {
 
     statistics_runtime_set_active(FALSE);
     statistics_report_iteration();
-    assert(statistics_test_get_collect_index() == 0);
+    assert(statistics_test_get_collect_index() == 1);
 
     statistics_runtime_set_active(TRUE);
     statistics_report_iteration();
-    assert(statistics_test_get_collect_index() == 1);
+    assert(statistics_test_get_collect_index() == 0);
 
     statistics_report_iteration();
-    assert(statistics_test_get_collect_index() == 0);
-    printf("test_statistics_full_mode_restores_buffer_swap passed\n");
+    assert(statistics_test_get_collect_index() == 1);
+    printf("test_statistics_report_always_swaps_buffers passed\n");
 }
 
-static Bool test_loudness_rates_active(uint32_t frequency_hz) {
+static Bool test_transport_stats_rate(uint32_t frequency_hz) {
     return (frequency_hz == 44100U || frequency_hz == 48000U ||
-        frequency_hz == 88200U || frequency_hz == 96000U);
+        frequency_hz == 88200U || frequency_hz == 96000U ||
+        frequency_hz == 176400U || frequency_hz == 192000U);
 }
 
-void test_loudness_rates_match_transport_stats_gating() {
-    printf("Running test_loudness_rates_match_transport_stats_gating...\n");
+void test_transport_stats_rates_include_hires() {
+    printf("Running test_transport_stats_rates_include_hires...\n");
 
-    assert(test_loudness_rates_active(44100U));
-    assert(test_loudness_rates_active(48000U));
-    assert(test_loudness_rates_active(88200U));
-    assert(test_loudness_rates_active(96000U));
-    assert(!test_loudness_rates_active(176400U));
-    assert(!test_loudness_rates_active(192000U));
-    printf("test_loudness_rates_match_transport_stats_gating passed\n");
+    assert(test_transport_stats_rate(44100U));
+    assert(test_transport_stats_rate(48000U));
+    assert(test_transport_stats_rate(88200U));
+    assert(test_transport_stats_rate(96000U));
+    assert(test_transport_stats_rate(176400U));
+    assert(test_transport_stats_rate(192000U));
+    printf("test_transport_stats_rates_include_hires passed\n");
 }
 
 void test_statistics_full_mode_reports_live_fifo_at_88200() {
@@ -297,10 +295,10 @@ int main() {
     test_statistics_report_iteration_reports_deadline_misses();
     test_statistics_report_iteration_preserves_counters_on_send_failure();
     test_statistics_wire_packet_is_little_endian();
-    test_statistics_heartbeat_mode_no_buffer_swap();
-    test_statistics_heartbeat_mode_zero_transport_counters();
-    test_statistics_full_mode_restores_buffer_swap();
-    test_loudness_rates_match_transport_stats_gating();
+    test_statistics_report_swaps_buffers_when_runtime_inactive();
+    test_statistics_idle_wire_packet_fields();
+    test_statistics_report_always_swaps_buffers();
+    test_transport_stats_rates_include_hires();
     test_statistics_full_mode_reports_live_fifo_at_88200();
     printf("\nAll USB statistics tests completed!\n");
     return 0;

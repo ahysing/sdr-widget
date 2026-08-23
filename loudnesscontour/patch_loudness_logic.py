@@ -83,24 +83,6 @@ static Bool loudness_should_change_equalizer_step(int32_t db_spl_x10) {
 }
 '''
 
-SELECT_PRECISE = r'''static void loudness_select_equalizer_step_precise(int32_t db_spl, int equalizer_step) {
-    int32_t prev_db_spl = (int32_t)last_db_spl;
-    loudness_set_target_from_equalizer_step_precise(equalizer_step);
-
-    taskENTER_CRITICAL();
-    last_db_spl = (int16_t)db_spl;
-#ifdef FREERTOS_USED
-    target_db_spl = (int16_t)db_spl;
-#endif
-    loudness_commit_coefficients_precise();
-    taskEXIT_CRITICAL();
-#if !defined(USBSTATISTICS_DISABLE)
-    loudness_record_equalizer_step_switch_event(prev_db_spl, db_spl, equalizer_step);
-    stats_telemetry_set_equalizer_state(loudness_clamp_s8(db_spl), (U8)equalizer_step);
-#endif
-}
-'''
-
 SELECT_FAST = r'''static void loudness_select_equalizer_step_fast(int32_t db_spl, int equalizer_step) {
     int32_t prev_db_spl = (int32_t)last_db_spl;
     loudness_set_target_from_equalizer_step_fast(equalizer_step);
@@ -121,12 +103,7 @@ SELECT_FAST = r'''static void loudness_select_equalizer_step_fast(int32_t db_spl
 
 SELECT_WRAPPER = r'''static void loudness_select_equalizer_step(int32_t db_spl) {
     int equalizer_step = loudness_get_equalizer_step(db_spl);
-#ifdef PRECISE
-    loudness_select_equalizer_step_precise(db_spl, equalizer_step);
-#endif
-#ifdef FAST
     loudness_select_equalizer_step_fast(db_spl, equalizer_step);
-#endif
 }
 '''
 
@@ -260,13 +237,6 @@ def main():
     text = text.replace("    result.a0 = (int64_t)LOUDNESS_Q61_ONE;\n", "")
     text = text.replace("    result.a0 = (int32_t)536870912LL;\n", "")
 
-    text = re.sub(
-        r"static void loudness_select_equalizer_step_precise\(int32_t db_spl, int equalizer_step, Bool immediate\) \{.*?\n\}\n#endif",
-        SELECT_PRECISE + "#endif",
-        text,
-        count=1,
-        flags=re.DOTALL,
-    )
     text = re.sub(
         r"static void loudness_select_equalizer_step_fast\(int32_t db_spl, int equalizer_step, Bool immediate\) \{.*?\n\}\n#endif",
         SELECT_FAST + "#endif",

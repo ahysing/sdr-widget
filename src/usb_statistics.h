@@ -22,8 +22,8 @@ typedef struct {
 } usb_stats_t;
 
 #define USB_STATS_PACKET_HID_ANCHOR  0x53u
-#define USB_STATS_PACKET_VERSION     3u
-#define USB_STATS_PACKET_WIRE_SIZE   38u
+#define USB_STATS_PACKET_VERSION     1u
+#define USB_STATS_PACKET_WIRE_SIZE   36u
 #define USB_STATS_PACKET_CHECKSUM_OFFSET 3u
 
 #define USB_STATS_TAG_NONE         0u
@@ -46,8 +46,6 @@ PACK(struct usb_stats_packet {
     U16 min_fifo;
     U32 deadline_misses;
     U16 frequency_100hz;
-    S8 track_dbfs;
-    S8 track_rms_dbfs;
     S8 gain_dbfs;
     S8 db_spl;
     U32 event_count;

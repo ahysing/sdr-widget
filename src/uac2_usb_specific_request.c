@@ -506,9 +506,8 @@ void uac2_freq_change_handler() {
 			static uint32_t stats_last_sample_rate_khz;
 			uint32_t new_hz = current_freq.frequency;
 			uint32_t new_khz = new_hz / 1000U;
-			Bool stats_full_mode = uac2_loudness_rates_active(new_hz);
-			Bool prev_full_mode = (stats_last_sample_rate_khz != 0U) &&
-				uac2_loudness_rates_active(stats_last_sample_rate_khz * 1000U);
+			Bool stats_full_mode = TRUE;
+			Bool prev_full_mode = (stats_last_sample_rate_khz != 0U);
 
 			stats_telemetry_set_frequency_hz(new_hz);
 			statistics_runtime_set_active(stats_full_mode);

@@ -1,8 +1,7 @@
-#ifdef FAST
 #include "loudness_fast.h"
+#include "loudness_highres.h"
 #include "loudness_internal.h"
 #include "loudness_inferred_gain.h"
-#include "track_dbfs.h"
 #include "compiler.h"
 #include <stdint.h>
 #include <limits.h>
@@ -55,6 +54,13 @@ S64 macs_d(S64 d, S32 a, S32 b) {
  */
 #define LOUDNESS_DF2_STATE_HEADROOM_M   13
 #define LOUDNESS_DF2_Q29_SHIFT          29
+#define LOUDNESS_DF2_Q29_ROUND          (1LL << (LOUDNESS_DF2_Q29_SHIFT - 1))
+
+#if defined(__GNUC__)
+#define LOUDNESS_FAST_INLINE static __attribute__((always_inline)) inline
+#else
+#define LOUDNESS_FAST_INLINE static inline
+#endif
 
 static inline void loudness_fast_memory_barrier(void)
 {
@@ -64,6 +70,7 @@ static inline void loudness_fast_memory_barrier(void)
 }
 
 static uint8_t loudness_fast_committed_step = 0xFFu;
+static uint32_t loudness_fast_frequency_hz;
 
 static const biquad_quotients_fast_t
 loudness_quotients_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS][LOUDNESS_TABLE_SECTIONS] = {
@@ -216,7 +223,9 @@ loudness_quotients_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS][LOUDNESS_TABLE_SECTIONS
 static biquad_quotients_fast_t loudness_quotients_scaled[LOUDNESS_NUM_EQUALIZER_STEPS][LOUDNESS_TABLE_SECTIONS];
 static const biquad_quotients_fast_t (*active_equalizer_step_table)[LOUDNESS_TABLE_SECTIONS] = loudness_quotients_44100hz;
 static biquad_quotients_fast_t staging_quotients[LOUDNESS_FILTERS];
+static biquad_runtime_fast_t staging_runtime[LOUDNESS_FILTERS];
 static biquad_quotients_fast_t loudness_quotients_bank[2][LOUDNESS_FILTERS];
+static biquad_runtime_fast_t loudness_runtime_bank[2][LOUDNESS_FILTERS];
 static volatile uint8_t loudness_active_quotients_bank;
 static biquad_state_fast_t     loudness_states[LOUDNESS_FILTERS];
 
@@ -232,12 +241,22 @@ static int loudness_fast_resolve_equalizer_step(int equalizer_step)
 #endif
 }
 
-static const biquad_quotients_fast_t *loudness_fast_active_quotients(void)
+static const biquad_runtime_fast_t *loudness_fast_active_runtime(void)
 {
-    return loudness_quotients_bank[loudness_active_quotients_bank & 1u];
+    return loudness_runtime_bank[loudness_active_quotients_bank & 1u];
 }
 
-static int32_t loudness_saturate_s64_to_s32(int64_t value)
+static void loudness_runtime_from_quotients(const biquad_quotients_fast_t *src,
+    biquad_runtime_fast_t *dst)
+{
+    dst->b0 = src->b0;
+    dst->b1 = src->b1;
+    dst->b2 = src->b2;
+    dst->a1 = src->a1;
+    dst->a2 = src->a2;
+}
+
+static inline int32_t loudness_saturate_s64_to_s32(int64_t value)
 {
     if (value > INT32_MAX) {
         return INT32_MAX;
@@ -248,35 +267,128 @@ static int32_t loudness_saturate_s64_to_s32(int64_t value)
     return (int32_t)value;
 }
 
-int32_t biquad_step_fast_24bit(int32_t x_n, biquad_state_fast_t* biquad_states,
-    const biquad_quotients_fast_t* q)
+#if defined(__GNUC__) && defined(__AVR32_HAS_DSP__)
+LOUDNESS_FAST_INLINE int32_t loudness_biquad1_step_runtime_inline(int32_t x_n,
+    biquad_state_fast_t *st, const biquad_runtime_fast_t *rt)
 {
     int64_t acc;
+    int64_t fb;
     int64_t w_unscaled;
     int32_t w0;
     int32_t y_n;
 
-    acc = (int64_t)x_n * ((int64_t)1 << LOUDNESS_DF2_Q29_SHIFT);
-    acc -= FMA_24BIT(0, q->a1, biquad_states->w1)
-        << LOUDNESS_DF2_STATE_HEADROOM_M;
-    acc -= FMA_24BIT(0, q->a2, biquad_states->w2)
-        << LOUDNESS_DF2_STATE_HEADROOM_M;
+    fb = FMS_24BIT(FMS_24BIT(0, rt->a1, st->w1), rt->a2, st->w2);
+    acc = ((int64_t)x_n << LOUDNESS_DF2_Q29_SHIFT)
+        + (fb << LOUDNESS_DF2_STATE_HEADROOM_M);
     w_unscaled = acc >> LOUDNESS_DF2_Q29_SHIFT;
 
-    acc = (int64_t)q->b0 * w_unscaled;
-    acc += FMA_24BIT(0, q->b1, biquad_states->w1)
-        << LOUDNESS_DF2_STATE_HEADROOM_M;
-    acc += FMA_24BIT(0, q->b2, biquad_states->w2)
-        << LOUDNESS_DF2_STATE_HEADROOM_M;
+    fb = FMA_24BIT(FMA_24BIT(0, rt->b1, st->w1), rt->b2, st->w2);
+    acc = (int64_t)rt->b0 * w_unscaled + (fb << LOUDNESS_DF2_STATE_HEADROOM_M);
+    y_n = saturate_24bit_s64_to_s32((acc + LOUDNESS_DF2_Q29_ROUND) >> LOUDNESS_DF2_Q29_SHIFT);
+
+    w0 = loudness_saturate_s64_to_s32(w_unscaled >> LOUDNESS_DF2_STATE_HEADROOM_M);
+    st->w2 = st->w1;
+    st->w1 = w0;
+    return y_n;
+}
+
+int32_t loudness_fast_biquad1_step_runtime(int32_t x_n, biquad_state_fast_t *st,
+    const biquad_runtime_fast_t *rt)
+{
+    return loudness_biquad1_step_runtime_inline(x_n, st, rt);
+}
+
+#define LOUDNESS_BIQUAD1_STEP loudness_biquad1_step_runtime_inline
+#else
+int32_t loudness_fast_biquad1_step_runtime(int32_t x_n,
+    biquad_state_fast_t *st, const biquad_runtime_fast_t *rt)
+{
+    int64_t acc;
+    int64_t fb;
+    int64_t w_unscaled;
+    int32_t w0;
+    int32_t y_n;
+
+    fb = FMA_24BIT(FMA_24BIT(0, rt->a1, st->w1), rt->a2, st->w2);
+    acc = ((int64_t)x_n << LOUDNESS_DF2_Q29_SHIFT) - (fb << LOUDNESS_DF2_STATE_HEADROOM_M);
+    w_unscaled = acc >> LOUDNESS_DF2_Q29_SHIFT;
+
+    fb = FMA_24BIT(FMA_24BIT(0, rt->b1, st->w1), rt->b2, st->w2);
+    acc = (int64_t)rt->b0 * w_unscaled + (fb << LOUDNESS_DF2_STATE_HEADROOM_M);
     y_n = saturate_24bit_s64_to_s32(FROM_Q29(acc));
 
-    w0 = loudness_saturate_s64_to_s32(
-        w_unscaled >> LOUDNESS_DF2_STATE_HEADROOM_M);
-
-    biquad_states->w2 = biquad_states->w1;
-    biquad_states->w1 = w0;
-
+    w0 = loudness_saturate_s64_to_s32(w_unscaled >> LOUDNESS_DF2_STATE_HEADROOM_M);
+    st->w2 = st->w1;
+    st->w1 = w0;
     return y_n;
+}
+
+#define LOUDNESS_BIQUAD1_STEP loudness_fast_biquad1_step_runtime
+#endif
+
+static inline int32_t loudness_downsample_filter_to_16bit_container(int32_t y_24)
+{
+    int32_t s;
+
+    s = y_24 >> 8;
+    if (s > INT16_MAX) {
+        s = INT16_MAX;
+    } else if (s < INT16_MIN) {
+        s = INT16_MIN;
+    }
+    return s << 16;
+}
+
+/*
+ * At unity (step 13) the biquad is identity on the output, but w1/w2 must still
+ * follow the same delay-line update as the full kernel so contour transitions
+ * off unity do not start from stale state.
+ */
+static inline void loudness_biquad1_unity_advance_state_24bit(int32_t x_n,
+    biquad_state_fast_t *st)
+{
+    int32_t w0;
+
+    w0 = loudness_saturate_s64_to_s32((int64_t)x_n >> LOUDNESS_DF2_STATE_HEADROOM_M);
+    st->w2 = st->w1;
+    st->w1 = w0;
+}
+
+LOUDNESS_FAST_INLINE int32_t loudness_biquad1_16bit_container_unity_step(
+    int32_t x_container, biquad_state_fast_t *st)
+{
+    int32_t x_24;
+
+    x_24 = (int32_t)(int16_t)(x_container >> 16) << 8;
+    loudness_biquad1_unity_advance_state_24bit(x_24, st);
+    return x_container;
+}
+
+LOUDNESS_FAST_INLINE int32_t loudness_biquad1_16bit_container_step(int32_t x_container,
+    biquad_state_fast_t *st, const biquad_runtime_fast_t *rt)
+{
+    int32_t x_24;
+    int32_t y_24;
+
+    x_24 = (int32_t)(int16_t)(x_container >> 16) << 8;
+    y_24 = LOUDNESS_BIQUAD1_STEP(x_24, st, rt);
+    return loudness_downsample_filter_to_16bit_container(y_24);
+}
+
+void loudness_test_filter_16bit_stereo_packet_hires_fullrate(S32 *sample_L,
+    S32 *sample_R, U16 num_samples)
+{
+    loudness_highres_test_filter_16bit_stereo_packet_fullrate(sample_L, sample_R,
+        num_samples, &loudness_states[0], loudness_fast_active_runtime());
+}
+
+int32_t biquad_step_fast_24bit(int32_t x_n, biquad_state_fast_t* biquad_states,
+    const biquad_quotients_fast_t* q)
+{
+    biquad_runtime_fast_t rt;
+
+    loudness_runtime_from_quotients(q, &rt);
+    return LOUDNESS_BIQUAD1_STEP(x_n, biquad_states, &rt);
 }
 
 int32_t biquad_step_fast_32bit(int32_t x_n, biquad_state_fast_t* biquad_states,
@@ -288,6 +400,12 @@ int32_t biquad_step_fast_32bit(int32_t x_n, biquad_state_fast_t* biquad_states,
 static void loudness_fill_staging_quotients_fast(int equalizer_step)
 {
     int i;
+    const biquad_quotients_fast_t *hires_halfrate_src;
+
+    hires_halfrate_src = loudness_highres_halfrate_quotients(
+        loudness_fast_frequency_hz, equalizer_step,
+        loudness_quotients_44100hz, loudness_quotients_48000hz);
+
     for (i = 0; i < LOUDNESS_FILTERS; i++) {
         const biquad_quotients_fast_t* src = &active_equalizer_step_table[equalizer_step][i];
         int64_t b0 = src->b0;
@@ -298,7 +416,9 @@ static void loudness_fill_staging_quotients_fast(int equalizer_step)
         staging_quotients[i].b2 = (int32_t)b2;
         staging_quotients[i].a1 = src->a1;
         staging_quotients[i].a2 = src->a2;
+        loudness_runtime_from_quotients(&staging_quotients[i], &staging_runtime[i]);
     }
+    loudness_highres_staging_fill_halfrate(hires_halfrate_src, staging_runtime);
 }
 
 static void loudness_commit_staging_quotients_fast(void)
@@ -307,11 +427,19 @@ static void loudness_commit_staging_quotients_fast(void)
 
     memcpy(loudness_quotients_bank[inactive], staging_quotients,
         sizeof(staging_quotients));
+    memcpy(loudness_runtime_bank[inactive], staging_runtime,
+        sizeof(staging_runtime));
+    loudness_highres_staging_commit();
     loudness_fast_memory_barrier();
     loudness_active_quotients_bank = inactive;
 }
 
 #ifdef BUILD_TESTING
+static const biquad_quotients_fast_t *loudness_fast_active_quotients(void)
+{
+    return loudness_quotients_bank[loudness_active_quotients_bank & 1u];
+}
+
 void loudness_test_load_active_quotients_fast(int equalizer_step)
 {
     equalizer_step = loudness_fast_resolve_equalizer_step(equalizer_step);
@@ -374,21 +502,67 @@ void loudness_fast_reset_states(void)
 
 int32_t loudness_fast_24bit(int32_t sample)
 {
-    int i;
-    const biquad_quotients_fast_t *quotients = loudness_fast_active_quotients();
+    const biquad_runtime_fast_t *runtime;
 
-    for (i = 0; i < LOUDNESS_FILTERS; i++) {
-        sample = biquad_step_fast_24bit(sample, &loudness_states[i],
-            &quotients[i]);
+    if (loudness_fast_is_unity_step()) {
+        loudness_biquad1_unity_advance_state_24bit(sample, &loudness_states[0]);
+        return saturate_24bit_s32_to_s32(sample);
     }
+
+    runtime = loudness_fast_active_runtime();
+    sample = LOUDNESS_BIQUAD1_STEP(sample, &loudness_states[0], &runtime[0]);
     return saturate_24bit_s32_to_s32(sample);
 }
 
 S32 loudness_filter_16bit_container(S32 sample)
 {
-    S32 x = UPSAMPLE_16BIT_TO_FILTER_32(sample);
-    S32 y = loudness_fast_24bit(x);
-    return DOWNSAMPLE_FILTER_TO_16BIT_CONTAINER(y);
+    if (loudness_fast_is_unity_step()) {
+        return loudness_biquad1_16bit_container_unity_step(sample,
+            &loudness_states[0]);
+    }
+
+    return loudness_biquad1_16bit_container_step(sample, &loudness_states[0],
+        loudness_fast_active_runtime());
+}
+
+Bool loudness_fast_is_unity_step(void)
+{
+    return loudness_fast_committed_step == (uint8_t)LOUDNESS_NEUTRAL_STEP;
+}
+
+void loudness_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R, U16 num_samples)
+{
+    const biquad_runtime_fast_t *runtime;
+    biquad_state_fast_t *st;
+    U16 i;
+
+    st = &loudness_states[0];
+
+    if (loudness_fast_is_unity_step()) {
+        for (i = 0; i < num_samples; i++) {
+            int32_t xL = (int32_t)(int16_t)(sample_L[i] >> 16) << 8;
+            int32_t xR = (int32_t)(int16_t)(sample_R[i] >> 16) << 8;
+
+            loudness_biquad1_unity_advance_state_24bit(xL, st);
+            loudness_biquad1_unity_advance_state_24bit(xR, st);
+        }
+        return;
+    }
+
+    runtime = loudness_fast_active_runtime();
+
+    if (loudness_highres_applies(loudness_fast_frequency_hz)) {
+        loudness_highres_filter_16bit_stereo_packet(sample_L, sample_R,
+            num_samples, st);
+        return;
+    }
+
+    for (i = 0; i < num_samples; i++) {
+        sample_L[i] = loudness_biquad1_16bit_container_step(sample_L[i], st,
+            runtime);
+        sample_R[i] = loudness_biquad1_16bit_container_step(sample_R[i], st,
+            runtime);
+    }
 }
 
 S32 loudness_filter_24bit_container(S32 sample)
@@ -457,6 +631,7 @@ void loudness_change_frequency_fast(uint32_t frequency) {
     if (frequency == 0) {
         return;
     }
+    loudness_fast_frequency_hz = frequency;
     uint32_t n = 1;
     const biquad_quotients_fast_t (*base_table)[LOUDNESS_TABLE_SECTIONS] = loudness_quotients_44100hz;
     if (frequency % 48000 == 0) {
@@ -498,4 +673,3 @@ Bool loudness_filter_is_active() {
     return filter_is_active;
 }
 
-#endif /* FAST */

@@ -18,7 +18,7 @@ void loudness_inferred_gain_reset(void);
 void loudness_inferred_gain_set_rate(uint32_t frequency_hz);
 Bool loudness_inferred_gain_has_source_volume_control(void);
 void loudness_set_source_has_volume_control(void);
-void loudness_inferred_gain_feed_stereo(int32_t sample_L, int32_t sample_R);
+void loudness_envelope_follower_update_stereo(int32_t sample_L, int32_t sample_R);
 int32_t loudness_inferred_gain_dbfs(void);
 
 #ifdef BUILD_TESTING
@@ -34,7 +34,7 @@ uint32_t loudness_test_get_active_loudness_level(void);
 #else /* LOUDNESS_DISABLE */
 
 void loudness_set_source_has_volume_control(void);
-void loudness_inferred_gain_feed_stereo(int32_t sample_L, int32_t sample_R);
+void loudness_envelope_follower_update_stereo(int32_t sample_L, int32_t sample_R);
 
 #endif /* LOUDNESS_DISABLE */
 

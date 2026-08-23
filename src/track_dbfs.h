@@ -17,12 +17,7 @@ int32_t loudness_get_track_dbfs(void);
 
 extern uint64_t root_mean_square;
 
-#ifdef PRECISE
-void loudness_update_track_level_precise(int64_t sample);
-#endif
-#ifdef FAST
 void loudness_update_track_level_fast(int32_t sample);
-#endif
 
 #endif /* LOUDNESS_DISABLE */
 

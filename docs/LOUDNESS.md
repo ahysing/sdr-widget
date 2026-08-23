@@ -138,7 +138,7 @@ PC tests include a **State Transition Equivalence** check: mid-stream coefficien
 4. USB volume lookup table
 5. DAC output
 
-Compile variants: **FAST** (`-DFAST`, 32-bit Q29) or **PRECISE** (`-DPRECISE`, 64-bit Q61). See [INSTALLATION.md](INSTALLATION.md) for build flags.
+The firmware uses the biquad path (2-bit Q29). See [INSTALLATION.md](INSTALLATION.md) for build flags.
 
 ## USB statistics debug fields
 

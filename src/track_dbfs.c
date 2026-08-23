@@ -95,31 +95,6 @@ static int32_t calculate_dB_24bit(uint32_t rms) {
     return (db > 0) ? 0 : db;
 }
 
-#ifdef PRECISE
-void loudness_update_track_level_precise(int64_t sample) {
-    uint32_t fs = current_freq.frequency;
-    if (fs == 0) {
-        return;
-    }
-
-    if (sample < 0) {
-        sample = -sample;
-    }
-    uint64_t sample_sq = (uint64_t)sample * (uint64_t)sample;
-    /* One call per channel; L and R form a single interleaved series whose
-     * mean square matches stereo RMS^2 = (L^2 + R^2) / (2N). */
-    loudness_rms_write_begin();
-    if (sample_sq > root_mean_square) {
-        root_mean_square += (sample_sq - root_mean_square) >> ROOT_MEAN_SQUARE_WINDOW_SHIFT;
-    } else {
-        root_mean_square -= (root_mean_square - sample_sq) >> ROOT_MEAN_SQUARE_WINDOW_SHIFT;
-    }
-
-    loudness_rms_write_end();
-}
-#endif
-
-#ifdef FAST
 void loudness_update_track_level_fast(int32_t sample) {
     uint32_t fs = current_freq.frequency;
     if (fs == 0) {
@@ -148,7 +123,6 @@ void loudness_update_track_level_fast(int32_t sample) {
     }
     loudness_rms_write_end();
 }
-#endif
 
 int32_t loudness_get_track_rms_dbfs(void) {
     uint32_t rms = sqrt_i(loudness_rms_read());

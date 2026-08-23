@@ -165,7 +165,7 @@ static uint32_t loudness_gain_leak_down(uint32_t high, uint32_t low, int shift)
     return (high > delta) ? (high - delta) : low;
 }
 
-/* Oppdater kort/lang peak-minne fra instant_sample_peak (positiv magnitude). */
+/* Update short long peak time from instant_sample_peak (positive magnitude). */
 static void loudness_combined_context_loop(uint32_t instant_sample_peak)
 {
     int attack_shift = gain_short_attack_shift;
@@ -199,7 +199,7 @@ static uint32_t loudness_get_active_loudness_level(void)
     return gain_long_memory;
 }
 
-static void loudness_inferred_gain_feed_sample(int32_t sample, Bool is_16bit_container)
+static void envelope_follower_update_sample(int32_t sample, Bool is_16bit_container)
 {
     uint32_t mag;
 
@@ -220,7 +220,6 @@ Bool loudness_inferred_gain_has_source_volume_control(void)
 int32_t loudness_inferred_gain_dbfs(void)
 {
     uint32_t mag = loudness_get_active_loudness_level();
-
     if (mag > (uint32_t)INT24_MAX) {
         mag = (uint32_t)INT24_MAX;
     }
@@ -235,17 +234,15 @@ void loudness_set_source_has_volume_control(void)
     }
 }
 
-void loudness_inferred_gain_feed_stereo(int32_t sample_L, int32_t sample_R)
+void loudness_envelope_follower_update_stereo(int32_t sample_L, int32_t sample_R)
 {
-    Bool is_16bit_container;
-
     if (source_has_volume_control) {
         return;
     }
 
-    is_16bit_container = (usb_alternate_setting_out == 0x02);
-    loudness_inferred_gain_feed_sample(sample_L, is_16bit_container);
-    loudness_inferred_gain_feed_sample(sample_R, is_16bit_container);
+    Bool is_16bit_container = (usb_alternate_setting_out == 0x02);
+    envelope_follower_update_sample(sample_L, is_16bit_container);
+    envelope_follower_update_sample(sample_R, is_16bit_container);
 }
 
 #ifdef BUILD_TESTING
@@ -290,7 +287,7 @@ uint32_t loudness_test_get_active_loudness_level(void)
 
 void loudness_set_source_has_volume_control(void) {}
 
-void loudness_inferred_gain_feed_stereo(int32_t sample_L, int32_t sample_R)
+void loudness_envelope_follower_update_stereo(int32_t sample_L, int32_t sample_R)
 {
     (void)sample_L;
     (void)sample_R;
