@@ -32,86 +32,6 @@ static int32_t apply_digital_volume(int32_t sample, S32 mult) {
     return (int32_t)(((int64_t)sample * (int64_t)mult) >> VOL_MULT_SHIFT);
 }
 
-void test_loudness_reset_rms() {
-    printf("Running loudness_reset_rms...\n");
-    loudness_reset_rms();
-    assert(loudness_get_track_rms_dbfs() == -6);
-
-    printf("loudness_reset_rms passed\n");
-}
-
-void test_loudness_update_track_level() {
-    printf("Running test_loudness_update_track_level...\n");
-    current_freq.frequency = 44100;
-    loudness_init();
-    loudness_reset_rms();
-    printf("  Testing decay to silence...\n");
-    int i;
-    uint32_t window = 1UL << 21;
-    for (i = 0; i < (int)(window * 8); i++) {
-        loudness_update_track_level(0);
-    }
-
-    int32_t dbfs_silence = loudness_get_track_rms_dbfs();
-    printf("  dBFS after silence loop: %d\n", dbfs_silence);
-
-    /* Siden vi startet på -6 dBFS og matet inn ren stillhet, må energinivået ha falt betraktelig.
-     * Vi sjekker at det har falt under den definerte minimumsgrensen på -18 dBFS. */
-    assert(dbfs_silence < LOUDNESS_TRACK_DBFS_MIN);
-    printf("test_loudness_update_track_level passed\n");
-}
-
-
-
-void test_loudness_update_track_level_fullscale() {
-    printf("Running test_loudness_update_track_level_fullscale...\n");
-    current_freq.frequency = 44100;
-    loudness_init();
-    loudness_reset_rms();
-
-    printf("  Testing growth to full-scale signal...\n");
-    // full-scale 24-bits signal INT24_MAX (8388607).
-    int i;
-    for (i = 0; i < 20000; i++) {
-        if (i % 2 == 0) {
-            loudness_update_track_level(8388607LL);
-        } else {
-            loudness_update_track_level(-8388608LL);
-        }
-    }
-
-    int32_t dbfs_loud = loudness_get_track_rms_dbfs();
-    printf("  dBFS after loud signal loop: %d\n", dbfs_loud);
-
-    /* Et kontinuerlig full-scale signal skal stabilisere seg helt i toppen av skalaen (0 dBFS).
-     * Siden integratoren bruker tid, sjekker vi at den har klatret forbi vårt maksimale rock-vindu (-6 dBFS). */
-    assert(dbfs_loud >= LOUDNESS_TRACK_DBFS_MAX);
-    assert(dbfs_loud <= 0); // Kan aldri overstige digital klipping (0 dBFS)
-
-    printf("test_loudness_update_track_level_fullscale passed\n");
-}
-
-void test_loudness_rms_stereo_window_duration(void) {
-    printf("Running test_loudness_rms_stereo_window_duration...\n");
-    /* The window is now a fixed power-of-two (2^21) for performance. */
-    uint32_t expected_window = 1UL << 21;
-
-    current_freq.frequency = 48000;
-    loudness_reset_rms();
-
-    {
-        uint32_t i;
-        /* Feed enough samples to reach the window cap. */
-        for (i = 0; i < expected_window; i++) {
-            loudness_update_track_level(1000);
-        }
-        
-        loudness_update_track_level(1000);
-        }
-
-    printf("test_loudness_rms_stereo_window_duration passed\n");
-}
-
 void test_loudness_init() {
     printf("Running test_loudness_init...\n");
     loudness_init();
@@ -155,7 +75,6 @@ void test_loudness_update_active_equalizer_step_uncompressed_18dbfs(void) {
     printf("Running test_loudness_update_active_equalizer_step (Uncompressed -18 dBFS RMS)...\n");
     loudness_init();
     loudness_set_source_has_volume_control();
-    root_mean_square = 1099511627776ULL;
 
     loudness_usb_volume_changed(0);
     printf("  [0 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
@@ -180,7 +99,6 @@ void test_loudness_update_active_equalizer_step_compressed_6dbfs(void) {
     printf("Running test_loudness_update_active_equalizer_step (Max Compressed -6 dBFS RMS)...\n");
     loudness_init();
     loudness_set_source_has_volume_control();
-    root_mean_square = 17592186044416ULL;
 
     loudness_usb_volume_changed(0);
     printf("  [0 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
@@ -276,30 +194,6 @@ void test_loudness_get_gain_dbfs() {
     loudness_usb_volume_changed(VOL_MAX);
     assert(loudness_get_gain_dbfs() == 0);
     printf("test_loudness_get_gain_dbfs passed\n");
-}
-
-void test_loudness_get_track_dbfs(void) {
-    printf("Running test_loudness_get_track_dbfs...\n");
-    current_freq.frequency = 44100;
-    loudness_init();
-    loudness_reset_rms();
-
-    uint32_t window = 1UL << 21;
-    int i;
-    for (i = 0; i < (int)(window * 8); i++) {
-        loudness_update_track_level(0);
-    }
-    assert(loudness_get_track_dbfs() == LOUDNESS_TRACK_DBFS_MIN);
-
-    for (i = 0; i < (int)(window * 8); i++) {
-        if (i % 2 == 0) {
-            loudness_update_track_level(8388607LL);
-        } else {
-            loudness_update_track_level(-8388608LL);
-        }
-    }
-    assert(loudness_get_track_dbfs() == LOUDNESS_TRACK_DBFS_MAX);
-    printf("test_loudness_get_track_dbfs passed\n");
 }
 
 
@@ -546,7 +440,6 @@ void test_loudness_df2_step_transition_no_reset(void) {
 
     loudness_init();
     loudness_set_source_has_volume_control();
-    root_mean_square = 1099511627776ULL;
 
     loudness_usb_volume_changed(-10 * 256);
     assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 10);
@@ -1004,10 +897,6 @@ void test_loudness_hires_halfrate_delta_near_fullrate(void)
 }
 
 int main() {
-    test_loudness_reset_rms();
-    test_loudness_update_track_level();
-    test_loudness_update_track_level_fullscale();
-    test_loudness_rms_stereo_window_duration();
     test_loudness_init();
     test_loudness_24bit_processing();
     test_loudness_update_active_equalizer_step_uncompressed_18dbfs();
@@ -1019,7 +908,6 @@ int main() {
     test_saturate_24bit_s32_to_u32();
     test_saturate_16bit_s32_to_s32();
     test_loudness_get_gain_dbfs();
-    test_loudness_get_track_dbfs();
     test_loudness_16bit_cd_audio_processing();
     test_loudness_16bit_container_no_int32_overflow();
     test_loudness_intersample_peak_saturation();

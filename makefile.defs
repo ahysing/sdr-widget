@@ -81,8 +81,5 @@ src/loudness_inferred_gain.o: ../src/loudness_inferred_gain.c
 src/loudness.o: ../src/loudness.c
 	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))
 
-src/track_dbfs.o: ../src/track_dbfs.c
-	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))
-
 src/uac2_device_audio_task.o: ../src/uac2_device_audio_task.c
 	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))

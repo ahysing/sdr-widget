@@ -24,7 +24,6 @@ C_SRCS += \
 ../src/loudness.c \
 ../src/loudness_fast.c \
 ../src/loudness_highres.c \
-../src/track_dbfs.c \
 ../src/loudness_inferred_gain.c \
 ../src/rotary_encoder.c \
 ../src/taskAK5394A.c \
@@ -70,7 +69,6 @@ OBJS += \
 ./src/loudness.o \
 ./src/loudness_fast.o \
 ./src/loudness_highres.o \
-./src/track_dbfs.o \
 ./src/loudness_inferred_gain.o \
 ./src/rotary_encoder.o \
 ./src/taskAK5394A.o \
@@ -117,7 +115,6 @@ C_DEPS += \
 ./src/loudness.d \
 ./src/loudness_fast.d \
 ./src/loudness_highres.d \
-./src/track_dbfs.d \
 ./src/loudness_inferred_gain.d \
 ./src/rotary_encoder.d \
 ./src/taskAK5394A.d \

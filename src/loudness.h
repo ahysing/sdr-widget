@@ -74,8 +74,6 @@ void loudness_usb_volume_changed(S16 volume_q8);
 /* Update the active equalizer step based on current host gain level. */
 void loudness_update_active_equalizer_step(void);
 
-#include "track_dbfs.h"
-
 /* Return the current host-gain expressed in dBFS. Non-positive. */
 int32_t loudness_get_gain_dbfs(void);
 
@@ -91,7 +89,6 @@ int16_t loudness_get_last_db_spl(void);
 #define LOUDNESS_FILTER_FAST_32(sample_32) (sample_32)
 #define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) (sample_32)
 #define LOUDNESS_FILTER_24BIT_CONTAINER(sample_32) (sample_32)
-#include "track_dbfs.h"
 #endif /* LOUDNESS_DISABLE */
 
 int32_t loudness_apply_noise_shaper_to_output(int32_t sample_32bit, int32_t* noise_shaper_error);
@@ -145,18 +142,5 @@ S32 saturate_16bit_s32_to_s32(S32 acc);
 /* Quantize internal 32.8 fixed sample to 24-bit DAC word (round, not truncate). */
 #define DOWNSAMPLE_24BIT_ROUND(sample) \
     ((int32_t)ROUND_SHIFT_S64((sample), 8))
-
-
-
-/* Empirically measured RMS dBFS range for typical program material,
- * derived from the rock genre's "Loudness War" span:
- *   - 1980s pre-war masters:   ~ -18 dBFS RMS   (quiet, dynamic)
- *   - late-1990s/2000s masters:~  -6 dBFS RMS   (brickwalled, loud)
- * The measured track dBFS is clamped to this window before it
- * contributes to the phon-band selection so that outliers (silence,
- * unusually hot material) don't drag the blended level to extremes.
- */
-#define LOUDNESS_TRACK_DBFS_MIN   (-18)
-#define LOUDNESS_TRACK_DBFS_MAX    (-6)
 
 #endif

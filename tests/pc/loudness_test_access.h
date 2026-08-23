@@ -4,11 +4,6 @@
 #include <stdint.h>
 #include "loudness_inferred_gain.h"
 
-#include "track_dbfs.h"
-
-void loudness_update_track_level_fast(int32_t sample);
-#define loudness_update_track_level(sample) loudness_update_track_level_fast(sample)
-
 #ifdef BUILD_TESTING
 #include "compiler.h"
 

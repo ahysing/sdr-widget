@@ -7,29 +7,11 @@ function Slice($start, $end) {
     return ($lines[($start-1)..($end-1)] -join "`n")
 }
 
-# --- track_dbfs.c ---
-$trackDbfs = @"
-#include "track_dbfs.h"
-#if defined(BUILD_TESTING)
-#include "../tests/pc/usb_specific_request.h"
-#else
-#include "usb_specific_request.h"
-#endif
-#include "loudness.h"
-#include <stdint.h>
-
-#ifndef LOUDNESS_DISABLE
-
-"@ + (Slice 51 76) + "`n`n" + (Slice 625 631) + "`n`n" + (Slice 641 695) + "`n`n" + (Slice 725 752) + "`n`n" + (Slice 1265 1278) + "`n`n" + (Slice 1416 1423) + "`n`n#endif /* LOUDNESS_DISABLE */`n"
-
-Set-Content -Path (Join-Path $src 'track_dbfs.c') -Value $trackDbfs -NoNewline
-
 # --- loudness_fast.c ---
 $fast = @"
 #include "loudness_fast.h"
 #include "loudness_internal.h"
 #include "loudness_inferred_gain.h"
-#include "track_dbfs.h"
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
@@ -45,4 +27,4 @@ $fast = @"
 
 Set-Content -Path (Join-Path $src 'loudness_fast.c') -Value $fast -NoNewline
 
-Write-Host "Generated track_dbfs.c, loudness_fast.c"
+Write-Host "Generated loudness_fast.c"

@@ -26,17 +26,15 @@ Firmware exposes a 1 Hz statistics stream over a vendor HID interface (`usage_pa
 | 16–17 | `min_fifo` | U16 LE | Minimum gap; `0xFFFF` = idle sentinel |
 | 18–21 | `deadline_misses` | U32 LE | Audio-task scheduler slips > 10 ms |
 | 22–23 | `frequency_100hz` | U16 LE | USB sample rate divided by 100; Python exposes `frequency_hz` |
-| 24 | `track_dbfs` | S8 | Clamped track dBFS for equalizer blend; telemetry |
-| 25 | `track_rms_dbfs` | S8 | Raw RMS dBFS; telemetry |
-| 26 | `gain_dbfs` | S8 | Host volume dBFS from USB SET_CUR; telemetry |
-| 27 | `db_spl` | S8 | Blended listening level (dB SPL); telemetry |
-| 28–31 | `event_count` | U32 LE | Tagged events in this 1 s period |
-| 32 | `last_tag` | U8 | Tag of the most recent event |
-| 33 | `last_arg0` | U8 | Tag-specific payload |
-| 34 | `last_arg1` | U8 | Tag-specific payload |
-| 35 | `last_arg2` | U8 | Tag-specific payload |
-| 36 | `equalizer_step` | U8 | Active loudness equalizer step (0–13); telemetry |
-| 37 | `source_volume_control` | U8 | `1` when USB SET_CUR host volume is authoritative; `0` when PCM-inferred gain is used |
+| 24 | `gain_dbfs` | S8 | Host volume dBFS from USB SET_CUR; telemetry |
+| 25 | `db_spl` | S8 | Listening level (dB SPL); telemetry |
+| 26–29 | `event_count` | U32 LE | Tagged events in this 1 s period |
+| 30 | `last_tag` | U8 | Tag of the most recent event |
+| 31 | `last_arg0` | U8 | Tag-specific payload |
+| 32 | `last_arg1` | U8 | Tag-specific payload |
+| 33 | `last_arg2` | U8 | Tag-specific payload |
+| 34 | `equalizer_step` | U8 | Active loudness equalizer step (0–13); telemetry |
+| 35 | `source_volume_control` | U8 | `1` when USB SET_CUR host volume is authoritative; `0` when PCM-inferred gain is used |
 
 Python struct format: `"<BBBBIIHHHIHbbbbIBBBBBB"`
 
@@ -52,7 +50,6 @@ Slow telemetry fields live in `stats_telemetry` and are merged into the wire pac
 |-------|--------|----------|---------------------|
 | Period counters | `overruns`, `underruns`, FIFO fields, `deadline_misses`, `event_count` | Audio task / events | Yes, **only after successful HID IN** (`min_fifo` → `0xFFFF`) |
 | Telemetry | `frequency_100hz` | USB sample-rate apply | No |
-| Telemetry | `track_dbfs`, `track_rms_dbfs` | Loudness ~20 ms task | No |
 | Telemetry | `gain_dbfs`, `source_volume_control` | USB SET_CUR volume handler (immediate) | No |
 | Telemetry | `db_spl`, `equalizer_step` | Loudness equalizer selection | No |
 | Last event | `last_tag`, `last_arg0..2` | `audio_stats_record_event()` | Yes → `NONE` / 0 |

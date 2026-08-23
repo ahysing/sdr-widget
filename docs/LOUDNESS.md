@@ -29,13 +29,6 @@ This is the classic hi-fi “loudness” control, implemented digitally in the d
 
 ## Loudness level — how listening level is calculated
 
-### Track RMS measurement
-
-Every audio sample updates a **leaky integrator** (30 s window over **both** stereo channels):
-
-- [`loudness_update_track_level()`](../src/loudness.c) accumulates mean-square energy.
-- [`loudness_get_track_rms_dbfs()`](../src/loudness.c) returns raw program level in dBFS (non-positive, **unclamped**).
-
 ### Host volume
 
 USB Audio Class volume sets `spk_vol_usb_L`. Host gain in dBFS:
@@ -46,14 +39,16 @@ gain_dbfs = (spk_vol_usb_L − VOL_MAX) / 256
 
 Each step is 0.5 dB; `VOL_MAX` = 0 dBFS (full scale). Result is non-positive.
 
+When no host volume control is active, gain is inferred from PCM peaks via [`loudness_inferred_gain`](../src/loudness_inferred_gain.c).
+
 ### Background evaluation
 
 A FreeRTOS task runs every **~20 ms** and calls [`loudness_update_active_equalizer_step()`](../src/loudness.c), which:
 
-1. Blends host gain and track level into an integer **dB SPL** estimate.
+1. Maps host gain to an integer **dB SPL** estimate.
 2. Compares it to `last_db_spl` to select an equalizer step and update statistics snapshots.
 
-The per-sample audio path runs the active biquad chain — it does not recompute the full blend.
+The per-sample audio path runs the active biquad chain — it does not recompute the level estimate.
 
 ## Equalizers
 
@@ -68,53 +63,27 @@ The per-sample audio path runs the active biquad chain — it does not recompute
 
 Step lookup: [`loudness_get_equalizer_step()`](../src/loudness.c). Per-step boundary **hysteresis** (0.5 dB below each band floor) avoids flutter; step **12↔13** switches at **79.5 / 80.0 phon**.
 
-### Track compensation (`track_dbfs`) — compression and the loudness war
-
-Raw RMS is **clamped** before blending:
-
-```
-LOUDNESS_TRACK_DBFS_MIN = −18   (dynamic 1980s-style masters)
-LOUDNESS_TRACK_DBFS_MAX = −6    (brickwalled modern masters)
-```
-
-[`loudness_get_track_dbfs()`](../src/loudness.c) returns this clamped value. It maps the “loudness war” span so that quiet dynamic material and heavily compressed masters both contribute sensibly to step selection, without silence or outliers pulling the estimate to extremes.
-
-Normalized track contribution:
-
-```
-track_normalized = track_dbfs − (−18)    → range 0..12
-```
-
-This contributes **10%** of the listening-level blend (`LOUDNESS_TRACK_WEIGHT_PCT`).
-
-**Debugging note:** most program material has RMS **below −18 dBFS**, so clamped `track_dbfs` often reads **−18** even while playing. That is expected. Use HID stat **`track_rms_dbfs`** for the unclamped RMS.
-
 ### Volume gain (`gain_dbfs`)
 
-Host USB volume contributes **90%** of the blend (`LOUDNESS_GAIN_WEIGHT_PCT`). At full digital volume, `gain_dbfs = 0`. Turning the slider down yields negative values (e.g. −10 dBFS).
+Host USB volume (or inferred gain) maps directly to the listening-level estimate. At full digital volume, `gain_dbfs = 0`. Turning the slider down yields negative values (e.g. −10 dBFS).
 
 ### Effective loudness formula (dB SPL)
 
 From [`loudness_calculate_db_spl()`](../src/loudness.c):
 
 ```
-track_dbfs  = clamp(rms_dbfs, −18, −6)
-track_norm  = track_dbfs − (−18)
-gain_dbfs   = host volume dBFS  (≤ 0)
-
-blended_dBFS×10 = (gain_dbfs×10 × 90 + track_norm×10 × 10 − 50) / 100
-db_spl          = round(blended_dBFS×10 / 10) + 80
+db_spl = LOUDNESS_DB_SPL_MAX + gain_dbfs
 ```
 
-Round-half-up is applied for negative blends. Typical result range: **~53–81 dB SPL**.
+Typical result range: **~35–95 dB SPL** (depends on `LOUDNESS_DB_SPL_MAX` and host gain floor).
 
 **Examples:**
 
-| Condition | gain_dbfs | track_dbfs | db_spl (approx.) |
-|-----------|-----------|------------|------------------|
-| Full volume, typical quiet track | 0 | −18 | ~80 (bypass) |
-| Volume −10 dBFS | −10 | −18 | ~71 |
-| Full volume, loud mastered track | 0 | −6 | ~81 |
+| Condition | gain_dbfs | db_spl (approx.) |
+|-----------|-----------|------------------|
+| Full volume | 0 | ~95 (bypass at 80 phon) |
+| Volume −10 dBFS | −10 | ~85 |
+| Volume −30 dBFS | −30 | ~65 |
 
 ## Transitioning between loudness levels
 
@@ -132,11 +101,10 @@ PC tests include a **State Transition Equivalence** check: mid-stream coefficien
 
 ## Signal chain summary
 
-1. Track RMS integrator (~22 s stereo window at 48 kHz)
-2. ~20 ms task: blend gain + track → integer dB SPL → equalizer step (with hysteresis)
-3. Per sample: biquad filter chain (unity at step 13)
-4. USB volume lookup table
-5. DAC output
+1. ~20 ms task: map host gain → integer dB SPL → equalizer step (with hysteresis)
+2. Per sample: biquad filter chain (unity at step 13)
+3. USB volume lookup table
+4. DAC output
 
 The firmware uses the biquad path (2-bit Q29). See [INSTALLATION.md](INSTALLATION.md) for build flags.
 
@@ -146,9 +114,6 @@ The 1 Hz HID statistics packet exposes loudness state for debugging (see [USB_ST
 
 | Field | Meaning |
 |-------|---------|
-| `track_dbfs` | Clamped track level (−18..−6) used by the algorithm |
-| `track_rms_dbfs` | Raw RMS dBFS from `loudness_get_track_rms_dbfs()` |
 | `gain_dbfs` | Host volume dBFS from `loudness_get_gain_dbfs()` |
-| `db_spl` | Blended listening level used for step selection |
-
-Snapshots update from the loudness task when **db_spl**, **gain_dbfs**, or **track_rms_dbfs** (integer dB) changes — not on every audio tick.
+| `db_spl` | Listening level used for step selection |
+| `equalizer_step` | Active contour step (0–13) |

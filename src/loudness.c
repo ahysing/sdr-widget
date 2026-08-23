@@ -1,5 +1,4 @@
 #include "loudness.h"
-#include "track_dbfs.h"
 #include "loudness_internal.h"
 #include "loudness_fast.h"
 #include "loudness_highres.h"
@@ -42,13 +41,6 @@ extern S16 spk_vol_usb_L, spk_vol_usb_R;
 #else
 #define LOUDNESS_PRINT(x) printf("%s", x)
 #endif
-
-/* Weighting for blending gain vs. measured track loudness when
- * selecting the equalizer step. Gain (host volume) dominates; the
- * running RMS provides a small correction. Weights in percent,
- * must sum to 100. */
-#define LOUDNESS_GAIN_WEIGHT_PCT   90
-#define LOUDNESS_TRACK_WEIGHT_PCT  10
 
 static void loudness_print_build_config(void) {
     LOUDNESS_PRINT("Audio firmware build options:\n");
@@ -552,7 +544,6 @@ void loudness_filter_init(void) {
     }
 #endif
 
-    loudness_reset_rms();
     loudness_inferred_gain_reset();
 
     loudness_fast_reset_states();

@@ -36,7 +36,6 @@ static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
     current_freq.frequency = 44100;
     loudness_init();
     loudness_set_source_has_volume_control();
-    root_mean_square = 1099511627776ULL;
 
     assert(stats->event_count == 0);
     assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX);
@@ -111,7 +110,6 @@ static void test_equalizer_step_switch_rapid_sweep_no_deadline_misses(void) {
     current_freq.frequency = 48000;
     loudness_init();
     loudness_set_source_has_volume_control();
-    root_mean_square = 1099511627776ULL;
 
     const int volumes[] = {
         0,
