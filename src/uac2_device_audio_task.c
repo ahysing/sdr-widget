@@ -510,6 +510,10 @@ void uac2_device_audio_task(void *pvParameters)
 					usb_fifo_hw_lock_t usb_lock;
 					S32 usb_out_L[UAC2_USB_OUT_MAX_STEREO_SAMPLES];
 					S32 usb_out_R[UAC2_USB_OUT_MAX_STEREO_SAMPLES];
+					const U8 audio_out_alt = usb_alternate_setting_out;
+#ifndef LOUDNESS_DISABLE
+					const Bool loudness_enabled_packet = uac2_loudness_filter_enabled();
+#endif
 
 #ifdef USB_STATE_MACHINE_GPIO
 					gpio_tgl_gpio_pin(AVR32_PIN_PX31);
@@ -520,15 +524,9 @@ void uac2_device_audio_task(void *pvParameters)
 					num_samples = Usb_byte_count(EP_AUDIO_OUT);
 
 					// bBitResolution
-					if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX)		// Alternate 1 24 bits/sample, 8 bytes per stereo sample
+					if (audio_out_alt == ALT1_AS_INTERFACE_INDEX) {		// Alternate 1 24 bits/sample, 8 bytes per stereo sample
 						num_samples = num_samples / 8;
-					else if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX)	// Alternate 2 16 bits/sample, 4 bytes per stereo sample
-						num_samples = num_samples / 4;
-					else
-						num_samples = 0;											// Should never get here...
-
-					for (i = 0; i < num_samples; i++) {
-						if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX) {
+						for (i = 0; i < num_samples; i++) {
 							sample_HSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
 							sample_LSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
 							sample_SB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
@@ -539,7 +537,10 @@ void uac2_device_audio_task(void *pvParameters)
 							sample_SB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
 							sample_MSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
 							usb_out_R[i] = (S32)((((U32) sample_MSB) << 24) + (((U32)sample_SB) << 16) + (((U32) sample_LSB) << 8));
-						} else if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {
+						}
+					} else if (audio_out_alt == ALT2_AS_INTERFACE_INDEX) {	// Alternate 2 16 bits/sample, 4 bytes per stereo sample
+						num_samples = num_samples / 4;
+						for (i = 0; i < num_samples; i++) {
 							sample_LSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
 							sample_MSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
 							usb_out_L[i] = (S32)((((U32) sample_MSB) << 24) + (((U32)sample_LSB) << 16));
@@ -547,14 +548,13 @@ void uac2_device_audio_task(void *pvParameters)
 							sample_MSB = Usb_read_endpoint_data(EP_AUDIO_OUT, 8);
 							usb_out_R[i] = (S32)((((U32) sample_MSB) << 24) + (((U32)sample_LSB) << 16));
 						}
+					} else {
+						num_samples = 0;									// Should never get here...
 					}
 					Usb_ack_out_received_free(EP_AUDIO_OUT);
 					usb_fifo_hw_unlock(&usb_lock);
 
-					xSemaphoreTake( mutexSpkUSB, portMAX_DELAY );
 					spk_usb_heart_beat++;					// indicates EP_AUDIO_OUT receiving data from host
-					spk_usb_sample_counter += num_samples; 	// track the num of samples received
-					xSemaphoreGive(mutexSpkUSB);
 
 					if( (!playerStarted) || (audio_OUT_must_sync) ) {	// BSB 20140917 attempting to help uacX_device_audio_task.c synchronize to DMA
 #ifndef USBSTATISTICS_DISABLE
@@ -703,14 +703,14 @@ void uac2_device_audio_task(void *pvParameters)
 					silence_det_R = 0;						// We're looking for non-zero or non-static audio data..
 
 #ifndef LOUDNESS_DISABLE
-					if (uac2_loudness_filter_enabled()) {
+					if (loudness_enabled_packet) {
 						if (!loudness_inferred_gain_has_source_volume_control()) {
 							for (i = 0; i < num_samples; i++) {
 								loudness_envelope_follower_update_stereo(usb_out_L[i],
 									usb_out_R[i]);
 							}
 						}
-						if (usb_alternate_setting_out == ALT2_AS_INTERFACE_INDEX) {
+						if (audio_out_alt == ALT2_AS_INTERFACE_INDEX) {
 							LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L,
 								usb_out_R, num_samples);
 						}
@@ -765,8 +765,8 @@ void uac2_device_audio_task(void *pvParameters)
 
 
 #ifndef LOUDNESS_DISABLE
-						if (uac2_loudness_filter_enabled()) {
-							if (usb_alternate_setting_out == ALT1_AS_INTERFACE_INDEX) {
+						if (loudness_enabled_packet) {
+							if (audio_out_alt == ALT1_AS_INTERFACE_INDEX) {
 								sample_L = LOUDNESS_FILTER_24BIT_CONTAINER(sample_L);
 								sample_R = LOUDNESS_FILTER_24BIT_CONTAINER(sample_R);
 							}
