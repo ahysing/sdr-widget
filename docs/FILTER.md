@@ -2,11 +2,17 @@
 
 The loudness filter compensates ISO 226:2003 loudness contours.
 
-The `create2biquads.py` script optimizes a 2-biquad chain (low-shelf + high-shelf) for **13 contour levels** at **2 phon** spacing: **55, 57, 59, …, 79 phon**. Coefficients are stored in `{ a1, a2, b0, b1, b2 }` order (`a0 = 1`, not stored). A hand-written **80 phon** unity row (step 13) is appended in firmware.
+The `create1loudnessvolume.py` script optimizes one low-shelf biquad for **121
+contour levels** at **0.5 phon** spacing from **35.0 through 95.0 phon**.
+Coefficients are stored in `{ a1, a2, b0, b1, b2 }` order (`a0 = 1`, not
+stored).
 
-55–79 phon corresponds to the listening range where loudness compensation is most useful; at **≥ 80 phon** the equalizer runs unity biquads.
+Each row also bakes its corresponding -60..0 dB playback gain into
+`b0`/`b1`/`b2`. The 80-phon contour is flat in shape but still contains -15 dB
+gain, so it is processed by the normal kernel.
 
-**Runtime note:** ROM tables include both shelves per step, but AVR32 firmware steps **one** biquad section per sample per channel (`LOUDNESS_FAST_FILTERS=1` in [`src/loudness_fast.c`](../src/loudness_fast.c)). See [LOUDNESS.md](LOUDNESS.md) and [LOUDNESS_DEVICE_DEBUG.md](LOUDNESS_DEVICE_DEBUG.md).
+See [LOUDNESS.md](LOUDNESS.md) and
+[LOUDNESS_DEVICE_DEBUG.md](LOUDNESS_DEVICE_DEBUG.md).
 
 ## Results
 

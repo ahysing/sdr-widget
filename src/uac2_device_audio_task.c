@@ -186,7 +186,6 @@ void uac2_device_audio_task(void *pvParameters)
 	U8 sample_LSB;
 	S32 sample_L = 0;
 	S32 sample_R = 0; // BSB 20131102 Expanded for skip/insert, 20160322 changed to S32
-	Bool loudness_run_volume_gain = TRUE;
 #ifndef LOUDNESS_DISABLE
 	Bool loudness_filter_active_packet = FALSE;
 #endif
@@ -709,7 +708,6 @@ void uac2_device_audio_task(void *pvParameters)
 #ifndef LOUDNESS_DISABLE
 					if (loudness_enabled_packet) {
 						loudness_filter_active_packet = loudness_filter_is_active();
-						loudness_run_volume_gain = loudness_filter_active_packet;
 						if (!loudness_inferred_gain_has_source_volume_control()) {
 							for (i = 0; i < num_samples; i++) {
 								loudness_envelope_follower_update_stereo(usb_out_L[i],
@@ -738,7 +736,6 @@ void uac2_device_audio_task(void *pvParameters)
 						}
 					} else {
 						loudness_filter_active_packet = FALSE;
-						loudness_run_volume_gain = FALSE;
 					}
 #endif
 
@@ -804,7 +801,11 @@ void uac2_device_audio_task(void *pvParameters)
 							sample_L = 0;
 							sample_R = 0;
 						}
-						else if (loudness_run_volume_gain) {
+						else {
+#ifndef LOUDNESS_DISABLE
+							/* Loudness-enabled filters already contain volume. */
+							if (!loudness_enabled_packet) {
+#endif
 							if (spk_vol_mult_L != VOL_MULT_UNITY) {	// Only touch gain-controlled samples
 								// 32-bit data words volume control
 								sample_L = (S32)( (int64_t)( (int64_t)(sample_L) * (int64_t)spk_vol_mult_L ) >> VOL_MULT_SHIFT) ;
@@ -818,6 +819,9 @@ void uac2_device_audio_task(void *pvParameters)
 								// rand8() too expensive at 192ksps
 								// sample_R += rand8(); // dither in bits 7:0
 							}
+#ifndef LOUDNESS_DISABLE
+							}
+#endif
 						}
 	#endif
 

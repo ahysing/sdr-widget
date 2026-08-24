@@ -87,12 +87,6 @@ else
   CFLAGS_LOUDNESS_USB_STATS_EVENTS =
 endif
 
-ifeq ($(LOUDNESS_FORCE_UNITY_STEP),1)
-  CFLAGS_LOUDNESS_FORCE_UNITY = -DLOUDNESS_FORCE_UNITY_STEP
-else
-  CFLAGS_LOUDNESS_FORCE_UNITY =
-endif
-
 ifeq ($(CONFIGURATION),Release)
   CFLAGS_CONFIGURATION = -DRELEASE
   CONFIGURATION_MSG = Release configuration: configDBG is 0. Deactivating debug trace.
@@ -115,7 +109,7 @@ LDFLAGS_APP_OPTIMIZATIONS = -Wl,--gc-sections
 CFLAGS_LOUDNESS_HOT = -O3 -funroll-loops -finline-functions \
   -fno-strict-aliasing
 
-WIDGET_LOUDNESS_FLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS) $(CFLAGS_LOUDNESS_DB_SPL_MAX) $(CFLAGS_LOUDNESS_FORCE_UNITY)
+WIDGET_LOUDNESS_FLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS) $(CFLAGS_LOUDNESS_DB_SPL_MAX)
 AUDIO_WIDGET_CFLAGS = $(AUDIO_WIDGET_DEFAULTS) $(WIDGET_LOUDNESS_FLAGS) $(CFLAGS_CONFIGURATION)
 
 WIDGET_MAKE_ENV = CFLAGS="$(AUDIO_WIDGET_CFLAGS)" \
@@ -339,7 +333,6 @@ help:
 	@echo "Loudness / statistics options (all features enabled by default):"
 	@echo "  LOUDNESS_DB_SPL_MAX=N        Peak dB SPL at 0 dBFS gain (default: 105, must be > 80)"
 	@echo "  LOUDNESS_DISABLE=1           Omit loudness filter from firmware"
-	@echo "  LOUDNESS_FORCE_UNITY_STEP=1  Force equalizer step 13 (unity A/B debug build)"
 	@echo "  USBSTATISTICS_DISABLE=1"
 	@echo "                               Omit loudness equalizer-step USB events"
 	@echo "  CONFIGURATION=Release|Debug  App src/*.c optimization level (default: Release)"

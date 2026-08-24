@@ -119,8 +119,10 @@ static volatile Bool loudness_task_ready = FALSE;
 #endif
 
 volatile S16 last_db_spl = LOUDNESS_DB_SPL_MAX;
+volatile S16 last_db_spl_x10 = LOUDNESS_DB_SPL_MAX * 10;
 #ifdef FREERTOS_USED
 volatile S16 target_db_spl = LOUDNESS_DB_SPL_MAX;
+volatile S16 target_db_spl_x10 = LOUDNESS_DB_SPL_MAX * 10;
 #endif
 volatile S16 target_gain_dbfs_q8 = 0;
 
@@ -217,74 +219,34 @@ void loudness_report_equalizer_step_switch(int32_t prev_db_spl, int32_t db_spl,
 #endif
 }
 
-int32_t loudness_internal_current_db_spl(void)
+int32_t loudness_internal_current_db_spl_x10(void)
 {
 #ifdef FREERTOS_USED
-    return (int32_t)target_db_spl;
+    return (int32_t)target_db_spl_x10;
 #else
-    return (int32_t)last_db_spl;
+    return (int32_t)last_db_spl_x10;
 #endif
 }
 
-int loudness_get_equalizer_step(int32_t db_spl)
+int loudness_get_equalizer_step(int32_t db_spl_x10)
 {
-    if (db_spl >= LOUDNESS_REF_PHON) {
-        return LOUDNESS_NEUTRAL_STEP;
-    }
-    if (db_spl < LOUDNESS_MIN_PHON) {
-        return 0;
-    }
-    {
-        int step = (db_spl - LOUDNESS_MIN_PHON) / LOUDNESS_PHON_STEP_DB;
-        if (step >= LOUDNESS_CONTOUR_STEPS) {
-            step = LOUDNESS_CONTOUR_STEPS - 1;
-        }
-        return step;
-    }
+    return (int)((db_spl_x10 - LOUDNESS_MIN_PHON_X10)
+        / LOUDNESS_EQUALIZER_STEP_X10);
 }
 
 #ifdef BUILD_TESTING
-int loudness_test_get_equalizer_step(int32_t db_spl) {
-    return loudness_get_equalizer_step(db_spl);
+int loudness_test_get_equalizer_step(int32_t db_spl_x10) {
+    return loudness_get_equalizer_step(db_spl_x10);
 }
 #endif
 
 static int loudness_get_current_equalizer_step(void) {
-    return loudness_get_equalizer_step((int32_t)last_db_spl);
+    return loudness_get_equalizer_step((int32_t)last_db_spl_x10);
 }
 
 static Bool loudness_should_change_equalizer_step(int32_t db_spl_x10) {
-    int current = loudness_get_current_equalizer_step();
-
-    if (current == LOUDNESS_NEUTRAL_STEP) {
-        return db_spl_x10 < (LOUDNESS_REF_PHON * 10 - 5);
-    }
-
-    if (current == (LOUDNESS_CONTOUR_STEPS - 1)) {
-        if (db_spl_x10 >= (LOUDNESS_REF_PHON * 10)) {
-            return TRUE;
-        }
-        {
-            int band_start = LOUDNESS_MIN_PHON + current * LOUDNESS_PHON_STEP_DB;
-            int32_t lower_x10 = band_start * 10 - 5;
-            return db_spl_x10 < lower_x10;
-        }
-    }
-
-    {
-        int band_start = LOUDNESS_MIN_PHON + current * LOUDNESS_PHON_STEP_DB;
-        int32_t lower_x10 = band_start * 10 - 5;
-        int next_band = band_start + LOUDNESS_PHON_STEP_DB;
-        int32_t upper_x10 = next_band * 10;
-
-        if (db_spl_x10 >= upper_x10) {
-            return TRUE;
-        }
-        if (db_spl_x10 < lower_x10) {
-            return TRUE;
-        }
-        return FALSE;
-    }
+    return loudness_get_equalizer_step(db_spl_x10)
+        != loudness_get_current_equalizer_step();
 }
 
 #ifdef BUILD_TESTING
@@ -293,9 +255,22 @@ Bool loudness_test_should_change_equalizer_step(int32_t db_spl_x10) {
 }
 #endif
 
-static void loudness_select_equalizer_step(int32_t db_spl) {
-    int equalizer_step = loudness_get_equalizer_step(db_spl);
-    loudness_fast_select_equalizer_step(db_spl, equalizer_step);
+static int32_t loudness_usb_channel_db_spl_x10(S16 volume_q8)
+{
+    return (LOUDNESS_DB_SPL_MAX * 10)
+        + loudness_gain_dbfs_q8_to_x10((int32_t)volume_q8 - (int32_t)VOL_MAX);
+}
+
+static void loudness_select_equalizer_step(int32_t db_spl_x10) {
+    int equalizer_step_left = loudness_get_equalizer_step(db_spl_x10);
+    int equalizer_step_right = equalizer_step_left;
+
+    if (loudness_inferred_gain_has_source_volume_control()) {
+        equalizer_step_right = loudness_get_equalizer_step(
+            loudness_usb_channel_db_spl_x10(spk_vol_usb_R));
+    }
+    loudness_fast_select_equalizer_steps(db_spl_x10,
+        equalizer_step_left, equalizer_step_right);
 }
 
 #ifdef FREERTOS_USED
@@ -438,15 +413,7 @@ void loudness_request_frequency_change(uint32_t frequency)
 
 static int32_t loudness_calculate_db_spl_x10(void) {
     int32_t gain_dbfs_x10 = loudness_get_gain_dbfs_x10();
-    int32_t db_spl_x10 = (LOUDNESS_DB_SPL_MAX * 10) + gain_dbfs_x10;
-
-    if (db_spl_x10 < 0) {
-        return 0;
-    }
-    if (db_spl_x10 > (LOUDNESS_DB_SPL_MAX * 10)) {
-        return LOUDNESS_DB_SPL_MAX * 10;
-    }
-    return db_spl_x10;
+    return (LOUDNESS_DB_SPL_MAX * 10) + gain_dbfs_x10;
 }
 
 static int32_t loudness_calculate_db_spl(void) {
@@ -457,21 +424,22 @@ static int32_t loudness_calculate_db_spl(void) {
 static void loudness_publish_equalizer_telemetry(int32_t db_spl)
 {
 #if !defined(USBSTATISTICS_DISABLE)
+    int32_t db_spl_x10 = loudness_calculate_db_spl_x10();
     stats_telemetry_set_gain_dbfs(
         loudness_clamp_s8(loudness_get_gain_dbfs()));
     stats_telemetry_set_source_has_volume_control(
         loudness_inferred_gain_has_source_volume_control() ? 1u : 0u);
     stats_telemetry_set_equalizer_state(
         loudness_clamp_s8(db_spl),
-        (U8)loudness_get_equalizer_step(db_spl));
+        (U8)loudness_get_equalizer_step(db_spl_x10));
 #endif
 }
 
 static Bool loudness_db_spl_step_changed(int32_t db_spl_x10, int32_t db_spl)
 {
 #ifdef BUILD_TESTING
-    (void)db_spl_x10;
-    return db_spl != (int32_t)last_db_spl;
+    (void)db_spl;
+    return db_spl_x10 != (int32_t)last_db_spl_x10;
 #else
     (void)db_spl;
     return loudness_should_change_equalizer_step(db_spl_x10);
@@ -485,10 +453,11 @@ void loudness_apply_equalizer_step_if_needed(void)
 
 #ifdef FREERTOS_USED
     target_db_spl = (int16_t)db_spl;
+    target_db_spl_x10 = (int16_t)db_spl_x10;
 #endif
 
     if (loudness_db_spl_step_changed(db_spl_x10, db_spl)) {
-        loudness_select_equalizer_step(db_spl);
+        loudness_select_equalizer_step(db_spl_x10);
     }
 }
 
@@ -498,11 +467,12 @@ void loudness_update_active_equalizer_step(void) {
 
 #ifdef FREERTOS_USED
     target_db_spl = (int16_t)db_spl;
+    target_db_spl_x10 = (int16_t)db_spl_x10;
 #endif
 
     loudness_publish_equalizer_telemetry(db_spl);
     if (loudness_db_spl_step_changed(db_spl_x10, db_spl)) {
-        loudness_select_equalizer_step(db_spl);
+        loudness_select_equalizer_step(db_spl_x10);
     }
 }
 
@@ -540,6 +510,20 @@ void loudness_usb_volume_changed(S16 volume_q8)
     loudness_update_active_equalizer_step();
 }
 
+void loudness_usb_volume_changed_right(S16 volume_q8)
+{
+    (void)volume_q8;
+    loudness_set_source_has_volume_control();
+
+    if (loudness_rtos_is_ready()) {
+#ifdef FREERTOS_USED
+        loudness_request_volume_apply();
+#endif
+        return;
+    }
+    loudness_update_active_equalizer_step();
+}
+
 int32_t loudness_get_db_spl(void) {
     return loudness_calculate_db_spl();
 }
@@ -570,7 +554,7 @@ void loudness_filter_init(void) {
 
     loudness_fast_reset_states();
 
-    loudness_select_equalizer_step(LOUDNESS_DB_SPL_MAX);
+    loudness_select_equalizer_step(LOUDNESS_DB_SPL_MAX * 10);
     if (current_freq.frequency != 0) {
         loudness_change_frequency(current_freq.frequency);
     }
