@@ -781,7 +781,9 @@ uint8_t dg8saqFunctionSetup(uint8_t type, uint16_t wValue, uint16_t wIndex, U8* 
 #ifdef FREERTOS_USED
 						loudness_request_frequency_change(current_freq.frequency);
 #else
-						loudness_change_frequency(current_freq.frequency);
+						if (current_freq.frequency != 0) {
+							loudness_change_frequency(current_freq.frequency);
+						}
 #endif
 #endif
 					}
@@ -794,7 +796,9 @@ uint8_t dg8saqFunctionSetup(uint8_t type, uint16_t wValue, uint16_t wIndex, U8* 
 #ifdef FREERTOS_USED
 						loudness_request_frequency_change(current_freq.frequency);
 #else
-						loudness_change_frequency(current_freq.frequency);
+						if (current_freq.frequency != 0) {
+							loudness_change_frequency(current_freq.frequency);
+						}
 #endif
 #endif
 					}
@@ -807,7 +811,9 @@ uint8_t dg8saqFunctionSetup(uint8_t type, uint16_t wValue, uint16_t wIndex, U8* 
 #ifdef FREERTOS_USED
 						loudness_request_frequency_change(current_freq.frequency);
 #else
-						loudness_change_frequency(current_freq.frequency);
+						if (current_freq.frequency != 0) {
+							loudness_change_frequency(current_freq.frequency);
+						}
 #endif
 #endif
 					}

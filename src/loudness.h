@@ -51,19 +51,22 @@ void loudness_usb_statistics_init(void);
 void loudness_filter_init(void);
 
 #ifndef LOUDNESS_DISABLE
-#ifdef FREERTOS_USED
 void loudness_rtos_init(void);
 Bool loudness_rtos_is_ready(void);
 void loudness_request_frequency_change(uint32_t frequency);
-#endif
 void loudness_change_frequency_fast(uint32_t frequency);
 #define loudness_change_frequency loudness_change_frequency_fast
 
-#define LOUDNESS_FILTER_FAST_32(sample_32) ((S32)loudness_fast_24bit(sample_32))
-#define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) loudness_filter_16bit_container(sample_32)
+#define LOUDNESS_FILTER_FAST_32(ch, sample_32) ((S32)loudness_fast_24bit((ch), (sample_32)))
+#define LOUDNESS_FILTER_16BIT_CONTAINER(ch, sample_32) \
+    loudness_filter_16bit_container((ch), (sample_32))
 #define LOUDNESS_FILTER_16BIT_STEREO_PACKET(L, R, N) \
     loudness_filter_16bit_stereo_packet((L), (R), (N))
-#define LOUDNESS_FILTER_24BIT_CONTAINER(sample_32) loudness_filter_24bit_container(sample_32)
+#define LOUDNESS_FILTER_24BIT_CONTAINER(ch, sample_32) \
+    loudness_filter_24bit_container((ch), (sample_32))
+
+Bool loudness_filter_is_active(void);
+Bool loudness_channel_filter_is_idle(int channel);
 
 /* Force the active loudness band from an external dBFS estimate (<= 0). */
 void loudness_set_level_dbfs(int32_t db_fs);
@@ -86,9 +89,14 @@ int32_t loudness_get_db_spl(void);
 int16_t loudness_get_last_db_spl(void);
 
 #else /* LOUDNESS_DISABLE */
-#define LOUDNESS_FILTER_FAST_32(sample_32) (sample_32)
-#define LOUDNESS_FILTER_16BIT_CONTAINER(sample_32) (sample_32)
-#define LOUDNESS_FILTER_24BIT_CONTAINER(sample_32) (sample_32)
+#define LOUDNESS_FILTER_FAST_32(ch, sample_32) \
+    ((void)(ch), (S32)(sample_32))
+#define LOUDNESS_FILTER_16BIT_CONTAINER(ch, sample_32) \
+    ((void)(ch), (sample_32))
+#define LOUDNESS_FILTER_16BIT_STEREO_PACKET(L, R, N) \
+    do { (void)(L); (void)(R); (void)(N); } while (0)
+#define LOUDNESS_FILTER_24BIT_CONTAINER(ch, sample_32) \
+    ((void)(ch), (sample_32))
 #endif /* LOUDNESS_DISABLE */
 
 int32_t loudness_apply_noise_shaper_to_output(int32_t sample_32bit, int32_t* noise_shaper_error);

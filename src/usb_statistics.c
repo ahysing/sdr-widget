@@ -115,7 +115,7 @@ static void statistics_build_wire_packet(U8 *wire, const volatile usb_stats_t *s
     wire[32] = s->last_arg1;
     wire[33] = s->last_arg2;
     wire[34] = telemetry->equalizer_step;
-    wire[35] = telemetry->source_volume_control ? 1u : 0u;
+    wire[35] = telemetry->source_has_volume_control ? 1u : 0u;
     wire[3] = statistics_wire_checksum(wire);
 }
 

@@ -138,7 +138,7 @@ void hpsdr_AK5394A_task(void *pvParameters) {
 			// to avoid channel inversion.  Start with left channel - FS goes low
 			// However, the channels are reversed at 192khz
 
-			if (current_freq.frequency == 192000) {
+			if (current_freq.frequency == FREQ_192) {
 				while (gpio_get_pin_value(AK5394_LRCK));
 				while (!gpio_get_pin_value(AK5394_LRCK));	// exit when FS goes high
 			} else {

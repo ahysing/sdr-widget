@@ -54,7 +54,7 @@ PACK(struct usb_stats_packet {
     U8 last_arg1;
     U8 last_arg2;
     U8 equalizer_step;
-    U8 source_volume_control;
+    U8 source_has_volume_control;
 });
 typedef struct usb_stats_packet usb_stats_packet_t;
 

@@ -414,7 +414,7 @@ def parse_stats_payload(payload):
         last_arg1,
         last_arg2,
         equalizer_step,
-        source_volume_control,
+        source_has_volume_control,
     ) = fields
 
     if hid_anchor != USB_STATS_PACKET_HID_ANCHOR:
@@ -437,7 +437,7 @@ def parse_stats_payload(payload):
         "event_count": event_count,
         "last_tag": last_tag,
         "equalizer_step": equalizer_step,
-        "source_volume_control": 1 if source_volume_control else 0,
+        "source_has_volume_control": 1 if source_has_volume_control else 0,
         "last_event": decode_last_event(last_tag, last_arg0, last_arg1, last_arg2),
     }
 

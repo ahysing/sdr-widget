@@ -110,6 +110,7 @@ endif
 
 CFLAGS_OPTIMIZATIONS = -O3 -fno-strict-aliasing -funroll-loops $(CFLAGS_OPT_FP) \
   -ffunction-sections -fdata-sections -mno-pic -mimm-in-const-pool
+CFLAGS_FREERTOS_OPTIMIZATIONS = -O3
 LDFLAGS_APP_OPTIMIZATIONS = -Wl,--gc-sections
 CFLAGS_LOUDNESS_HOT = -O3 -funroll-loops -finline-functions \
   -fno-strict-aliasing
@@ -119,6 +120,7 @@ AUDIO_WIDGET_CFLAGS = $(AUDIO_WIDGET_DEFAULTS) $(WIDGET_LOUDNESS_FLAGS) $(CFLAGS
 
 WIDGET_MAKE_ENV = CFLAGS="$(AUDIO_WIDGET_CFLAGS)" \
 	CFLAGS_APP_OPTIMIZATIONS="$(CFLAGS_OPTIMIZATIONS)" \
+	CFLAGS_FREERTOS_OPTIMIZATIONS="$(CFLAGS_FREERTOS_OPTIMIZATIONS)" \
 	LDFLAGS_APP_OPTIMIZATIONS="$(LDFLAGS_APP_OPTIMIZATIONS)" \
 	CFLAGS_LOUDNESS_HOT="$(CFLAGS_LOUDNESS_HOT)"
 
@@ -272,11 +274,8 @@ $(TEST_BUILD_DIR):
 $(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT): tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c | $(TEST_BUILD_DIR)
 	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUNIT_TEST $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c
 
-$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c tests/loudness_fast_golden_run.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests/pc -I tests $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c tests/loudness_fast_golden_run.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
-
-$(TEST_BUILD_DIR)/golden_print$(EXE_EXT): tests/golden_print.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests/pc -I tests $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/golden_print.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
+$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests/pc -I tests $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
 
 $(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT): tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
 	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c

@@ -20,7 +20,7 @@ S16 spk_vol_usb_L = 0, spk_vol_usb_R = 0;
 volatile U8 spk_bit_resolution = 24;
 
 static int64_t process_sample(int64_t sample) {
-    return loudness_fast_24bit((int32_t)sample);
+    return loudness_fast_24bit(0, (int32_t)sample);
 }
 
 static void reset_usb_stats_buffers(void) {
@@ -141,7 +141,7 @@ static void test_usb_volume_change_updates_telemetry_immediately(void) {
 
     loudness_usb_volume_changed((S16)((84 - LOUDNESS_DB_SPL_MAX) * 256));
     telemetry = stats_telemetry_read_best_effort();
-    assert(telemetry.source_volume_control == 1);
+    assert(telemetry.source_has_volume_control == 1);
     assert(telemetry.gain_dbfs == 84 - LOUDNESS_DB_SPL_MAX);
     assert(telemetry.db_spl == 84);
     assert(telemetry.equalizer_step == 13);

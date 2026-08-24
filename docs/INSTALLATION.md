@@ -101,6 +101,8 @@ make test
 
 Some loudness tests are built with `-DUSBSTATISTICS_DISABLE`; the equalizer-step-switch test (`loudness_equalizer_step_switch_stats_tests.exe`) requires USB statistics events enabled.
 
+`loudness_tests.exe` also covers per-channel biquad state, highres stride-2/4 paths, idle bypass, and exact fixed-point biquad samples. See [LOUDNESS.md](LOUDNESS.md) for architecture.
+
 ## Installing to Device
 
 After a successful build, the firmware binary is located at `Release/widget.elf`.

@@ -4,7 +4,6 @@
 #include "usb_specific_request.h"
 #include "loudness_fast.h"
 #include "loudness_highres.h"
-#include "loudness_fast_golden_vectors.h"
 #include <stdio.h>
 #include <assert.h>
 #include <stdint.h>
@@ -12,6 +11,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 DEFINE_FFF_GLOBALS;
 
@@ -41,7 +41,7 @@ void test_loudness_init() {
 }
 
 int64_t loudness_24bit_wrapper(int64_t sample) {
-    return loudness_fast_24bit((int32_t)sample);
+    return loudness_fast_24bit(0, (int32_t)sample);
 }
 
 void test_loudness_24bit_processing() {
@@ -208,7 +208,7 @@ void test_loudness_16bit_cd_audio_processing(void) {
 
     int32_t usb_container = ((int32_t)(int16_t)-4000) << 16;
 
-    int32_t filtered_container = loudness_filter_16bit_container(usb_container);
+    int32_t filtered_container = loudness_filter_16bit_container(0,usb_container);
 
     assert(filtered_container < 0);
     assert((filtered_container & 0xFFFF) == 0);
@@ -227,10 +227,10 @@ void test_loudness_16bit_container_no_int32_overflow(void) {
     int i;
 
     for (i = 0; i < 4096; i++) {
-        (void)loudness_filter_16bit_container(usb_container);
+        (void)loudness_filter_16bit_container(0,usb_container);
     }
 
-    int32_t filtered_container = loudness_filter_16bit_container(usb_container);
+    int32_t filtered_container = loudness_filter_16bit_container(0,usb_container);
     int32_t amp = (int16_t)(filtered_container >> 16);
 
     assert((filtered_container & 0xFFFF) == 0);
@@ -324,7 +324,7 @@ void test_container_sign_preservation(void) {
     // Eksempel: -1000 i 24-bit er 0xFFFF18. Skiftet opp: 0xFFF18000
     S32 input_negative = (S32)0xFFF18000; 
     
-    S32 output = loudness_filter_24bit_container(input_negative);
+    S32 output = loudness_filter_24bit_container(0,input_negative);
 
     // Siden filteret er flatt (unity), må utgangen være nøyaktig lik inngangen
     if (output != input_negative) {
@@ -356,8 +356,8 @@ void test_full_scale_boundaries(void) {
     // Maks negativ 24-bit i 32-bit container: 0x80000000
     S32 max_neg = (S32)0x80000000;
 
-    S32 out_pos = loudness_filter_24bit_container(max_pos);
-    S32 out_neg = loudness_filter_24bit_container(max_neg);
+    S32 out_pos = loudness_filter_24bit_container(0,max_pos);
+    S32 out_neg = loudness_filter_24bit_container(0,max_neg);
 
     if (out_pos != max_pos) {
         printf("Maks positiv klippet eller endret! Forventet: 0x%08X, Fikk: 0x%08X", 
@@ -389,7 +389,7 @@ void test_dc_silence_response(void) {
 
     // Kjør 1000 sampler med ren stillhet gjennom filteret
     for (int i = 0; i < 1000; i++) {
-        S32 out = loudness_filter_24bit_container(0);
+        S32 out = loudness_filter_24bit_container(0,0);
         if (out != 0) {
             printf("Filteret lekker energi ved stillhet! Sample %d ga: %d", i, out);
             assert(false);
@@ -404,10 +404,10 @@ void test_loudness_24bit_container_round_trip(void) {
     loudness_usb_volume_changed(0);
 
     /* Unity filter at 80 phon: container round-trip must preserve sample words. */
-    assert(loudness_filter_24bit_container(0) == 0);
-    assert(loudness_filter_24bit_container(123456 << 8) == (123456 << 8));
-    assert(loudness_filter_24bit_container((int32_t)((int64_t)INT24_MIN << 8)) == (int32_t)((int64_t)INT24_MIN << 8));
-    assert(loudness_filter_24bit_container((int32_t)((int64_t)INT24_MAX << 8)) == (int32_t)((int64_t)INT24_MAX << 8));
+    assert(loudness_filter_24bit_container(0,0) == 0);
+    assert(loudness_filter_24bit_container(0,123456 << 8) == (123456 << 8));
+    assert(loudness_filter_24bit_container(0,(int32_t)((int64_t)INT24_MIN << 8)) == (int32_t)((int64_t)INT24_MIN << 8));
+    assert(loudness_filter_24bit_container(0,(int32_t)((int64_t)INT24_MAX << 8)) == (int32_t)((int64_t)INT24_MAX << 8));
 
     printf("test_loudness_24bit_container_round_trip passed\n\n");
 }
@@ -418,9 +418,9 @@ void test_loudness_24bit_container_zero_crossing(void) {
     loudness_set_source_has_volume_control();
     loudness_usb_volume_changed(0);
 
-    int32_t prev = loudness_filter_24bit_container(100 << 8);
-    int32_t at_zero = loudness_filter_24bit_container(0);
-    int32_t next = loudness_filter_24bit_container(-100 << 8);
+    int32_t prev = loudness_filter_24bit_container(0,100 << 8);
+    int32_t at_zero = loudness_filter_24bit_container(0,0);
+    int32_t next = loudness_filter_24bit_container(0,-100 << 8);
 
     /* Zero crossings must stay continuous; bypassing the filter at exact zero
      * used to leave stale IIR state and produce single-sample spikes. */
@@ -446,14 +446,14 @@ void test_loudness_df2_step_transition_no_reset(void) {
     assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 10);
 
     for (i = 0; i < 256; i++) {
-        loudness_fast_24bit(sample);
+        loudness_fast_24bit(0, sample);
     }
-    out_before = (int32_t)loudness_fast_24bit(sample);
+    out_before = (int32_t)loudness_fast_24bit(0, sample);
 
     loudness_usb_volume_changed(-20 * 256);
     assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 20);
 
-    out_after = (int32_t)loudness_fast_24bit(sample);
+    out_after = (int32_t)loudness_fast_24bit(0, sample);
     spike = out_after - out_before;
     if (spike < 0) {
         spike = -spike;
@@ -612,7 +612,7 @@ static double measure_fast_50hz_gain_db(
             (double)SINE_TEST_AMPLITUDE * sin(phase));
         int32_t input_container = (int32_t)((uint32_t)input_24 << 8);
         int32_t output_container =
-            loudness_filter_24bit_container(input_container);
+            loudness_filter_24bit_container(0,input_container);
         int32_t output_24 = output_container >> 8;
 
         if (i >= SINE_TEST_SETTLE_SAMPLES) {
@@ -691,13 +691,12 @@ static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
     int step_from, int step_to)
 {
     int i;
-    int section;
+    biquad_state_fast_t state_at_switch;
+    biquad_state_fast_t ref_final_state;
+    biquad_state_fast_t trans_final_state;
 
     int32_t reference_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
     int32_t transition_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
-    biquad_state_fast_t states_at_switch[LOUDNESS_FAST_FILTERS];
-    biquad_state_fast_t ref_final_states[LOUDNESS_FAST_FILTERS];
-    biquad_state_fast_t trans_final_states[LOUDNESS_FAST_FILTERS];
 
     current_freq.frequency = sample_rate_hz;
     loudness_change_frequency_fast(sample_rate_hz);
@@ -711,12 +710,10 @@ static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
         int32_t input_24 = (int32_t)lrint(
             (double)SINE_TEST_AMPLITUDE * sin(phase));
         int32_t input_container = (int32_t)((uint32_t)input_24 << 8);
-        loudness_filter_24bit_container(input_container);
+        loudness_filter_24bit_container(0,input_container);
     }
 
-    for (section = 0; section < LOUDNESS_FAST_FILTERS; section++) {
-        loudness_test_get_fast_section(section, &states_at_switch[section], NULL);
-    }
+    loudness_test_get_fast_channel(0, &state_at_switch, NULL);
 
     loudness_fast_select_equalizer_step(60, step_to);
 
@@ -728,19 +725,15 @@ static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
             (double)SINE_TEST_AMPLITUDE * sin(phase));
         int32_t input_container = (int32_t)((uint32_t)input_24 << 8);
         int32_t output_container =
-            loudness_filter_24bit_container(input_container);
+            loudness_filter_24bit_container(0,input_container);
         transition_outputs[i] = output_container >> 8;
     }
 
-    for (section = 0; section < LOUDNESS_FAST_FILTERS; section++) {
-        loudness_test_get_fast_section(section, &trans_final_states[section], NULL);
-    }
+    loudness_test_get_fast_channel(0, &trans_final_state, NULL);
 
     loudness_fast_reset_states();
     loudness_test_load_active_quotients_fast(step_to);
-    for (section = 0; section < LOUDNESS_FAST_FILTERS; section++) {
-        loudness_test_set_fast_section(section, &states_at_switch[section]);
-    }
+    loudness_test_set_fast_channel(0, &state_at_switch);
 
     for (i = LOUDNESS_TRANSITION_SWITCH_SAMPLE;
         i < LOUDNESS_TRANSITION_TEST_SAMPLES; i++) {
@@ -750,23 +743,19 @@ static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
             (double)SINE_TEST_AMPLITUDE * sin(phase));
         int32_t input_container = (int32_t)((uint32_t)input_24 << 8);
         int32_t output_container =
-            loudness_filter_24bit_container(input_container);
+            loudness_filter_24bit_container(0,input_container);
         reference_outputs[i] = output_container >> 8;
     }
 
-    for (section = 0; section < LOUDNESS_FAST_FILTERS; section++) {
-        loudness_test_get_fast_section(section, &ref_final_states[section], NULL);
-    }
+    loudness_test_get_fast_channel(0, &ref_final_state, NULL);
 
     for (i = LOUDNESS_TRANSITION_SWITCH_SAMPLE + 1;
         i < LOUDNESS_TRANSITION_TEST_SAMPLES; i++) {
         assert(transition_outputs[i] == reference_outputs[i]);
     }
 
-    for (section = 0; section < LOUDNESS_FAST_FILTERS; section++) {
-        assert(trans_final_states[section].w1 == ref_final_states[section].w1);
-        assert(trans_final_states[section].w2 == ref_final_states[section].w2);
-    }
+    assert(trans_final_state.w1 == ref_final_state.w1);
+    assert(trans_final_state.w2 == ref_final_state.w2);
 }
 
 void test_loudness_all_curve_transitions_glitchfree(void)
@@ -795,14 +784,26 @@ void test_loudness_all_curve_transitions_glitchfree(void)
     printf("test_loudness_all_curve_transitions_glitchfree passed\n\n");
 }
 
-void test_loudness_fast_golden_vectors(void)
+/*
+ * Lock exact integer biquad output for step 0 at 48 kHz (zero initial state,
+ * sequential samples on channel 0). Re-capture literals after coefficient or
+ * fixed-point kernel changes by running loudness_fast_24bit(0, ...) in a scratch
+ * program with the same setup below.
+ */
+void test_loudness_fast_biquad_exact_samples(void)
 {
-    int failure;
+    printf("Running test_loudness_fast_biquad_exact_samples...\n");
 
-    printf("Running test_loudness_fast_golden_vectors...\n");
-    failure = loudness_fast_run_golden_selftest();
-    assert(failure == 0);
-    printf("test_loudness_fast_golden_vectors passed\n\n");
+    loudness_init();
+    loudness_change_frequency_fast(48000);
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(0);
+
+    assert(loudness_fast_24bit(0, 2097152) == 2131101);
+    assert(loudness_fast_24bit(0, 2097152) == 2198525);
+    assert(loudness_fast_24bit(0, 0) == 133869);
+
+    printf("test_loudness_fast_biquad_exact_samples passed\n\n");
 }
 
 #define HIRES_HALF_DELTA_PACKET_SAMPLES 49u
@@ -1002,6 +1003,215 @@ void test_loudness_hires_halfrate_delta_near_fullrate(void)
     printf("test_loudness_hires_halfrate_delta_near_fullrate passed\n\n");
 }
 
+#define IDLE_DRAIN_MAX_SAMPLES 96000
+
+static void drain_zeros_24bit_channel(int channel)
+{
+    int i;
+    biquad_state_fast_t st;
+
+    for (i = 0; i < IDLE_DRAIN_MAX_SAMPLES; i++) {
+        (void)loudness_filter_24bit_container(channel, 0);
+        if (loudness_channel_filter_is_idle(channel)) {
+            return;
+        }
+    }
+    loudness_test_get_fast_channel(channel, &st, NULL);
+    (void)st;
+    assert(false && "24-bit channel did not reach idle");
+}
+
+static void drain_zeros_stereo_packet(uint32_t sample_rate_hz)
+{
+    S32 zeros[48];
+    int p;
+    biquad_state_fast_t l_state;
+    biquad_state_fast_t r_state;
+
+    memset(zeros, 0, sizeof(zeros));
+    current_freq.frequency = sample_rate_hz;
+    loudness_change_frequency_fast(sample_rate_hz);
+
+    for (p = 0; p < 2048; p++) {
+        loudness_filter_16bit_stereo_packet(zeros, zeros, 48);
+        if (loudness_channel_filter_is_idle(0)
+            && loudness_channel_filter_is_idle(1)) {
+            return;
+        }
+    }
+    loudness_test_get_fast_channel(0, &l_state, NULL);
+    loudness_test_get_fast_channel(1, &r_state, NULL);
+    (void)l_state;
+    (void)r_state;
+    assert(false && "stereo packet path did not reach idle");
+}
+
+static void drive_stereo_impulse(S32 *packet_L, S32 *packet_R, U16 num_samples)
+{
+    int i;
+
+    for (i = 0; i < num_samples; i++) {
+        packet_L[i] = 0;
+        packet_R[i] = 0;
+    }
+    packet_L[0] = 20000 << 16;
+    packet_R[0] = 20000 << 16;
+    loudness_filter_16bit_stereo_packet(packet_L, packet_R, num_samples);
+}
+
+void test_filter_idle_after_zeros_base(void)
+{
+    printf("Running test_filter_idle_after_zeros_base...\n");
+    fflush(stdout);
+
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    loudness_usb_volume_changed(0);
+
+    current_freq.frequency = 44100;
+    loudness_change_frequency_fast(44100);
+    loudness_fast_reset_states();
+
+    (void)loudness_filter_24bit_container(0, 200000 << 8);
+    drain_zeros_24bit_channel(0);
+
+    assert(loudness_channel_filter_is_idle(0));
+    assert(!loudness_filter_is_active());
+
+    printf("test_filter_idle_after_zeros_base passed\n\n");
+}
+
+void test_filter_active_during_hires_interp(void)
+{
+    S32 packet_L[4];
+    S32 packet_R[4];
+
+    printf("Running test_filter_active_during_hires_interp...\n");
+
+    current_freq.frequency = 88200;
+    loudness_change_frequency_fast(88200);
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(10);
+
+    drive_stereo_impulse(packet_L, packet_R, 4);
+    assert(!loudness_channel_filter_is_idle(0));
+    assert(!loudness_channel_filter_is_idle(1));
+    assert(loudness_filter_is_active());
+
+    printf("test_filter_active_during_hires_interp passed\n\n");
+}
+
+void test_filter_idle_after_zeros_stride2(void)
+{
+    S32 packet_L[8];
+    S32 packet_R[8];
+
+    printf("Running test_filter_idle_after_zeros_stride2...\n");
+
+    current_freq.frequency = 88200;
+    loudness_change_frequency_fast(88200);
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(10);
+
+    drive_stereo_impulse(packet_L, packet_R, 8);
+    drain_zeros_stereo_packet(88200);
+
+    assert(loudness_channel_filter_is_idle(0));
+    assert(loudness_channel_filter_is_idle(1));
+    assert(!loudness_filter_is_active());
+
+    printf("test_filter_idle_after_zeros_stride2 passed\n\n");
+}
+
+void test_filter_idle_after_zeros_stride4(void)
+{
+    S32 packet_L[16];
+    S32 packet_R[16];
+
+    printf("Running test_filter_idle_after_zeros_stride4...\n");
+
+    current_freq.frequency = 192000;
+    loudness_change_frequency_fast(192000);
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(10);
+
+    drive_stereo_impulse(packet_L, packet_R, 16);
+    drain_zeros_stereo_packet(192000);
+
+    assert(loudness_channel_filter_is_idle(0));
+    assert(loudness_channel_filter_is_idle(1));
+    assert(!loudness_filter_is_active());
+
+    printf("test_filter_idle_after_zeros_stride4 passed\n\n");
+}
+
+void test_per_channel_zero_bypass(void)
+{
+    S32 packet_L[8];
+    S32 packet_R[8];
+    biquad_state_fast_t r_state_before;
+    biquad_state_fast_t r_state_after;
+    int i;
+
+    printf("Running test_per_channel_zero_bypass...\n");
+
+    current_freq.frequency = 88200;
+    loudness_change_frequency_fast(88200);
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(10);
+
+    for (i = 0; i < 8; i++) {
+        packet_L[i] = (1000 + i * 100) << 16;
+        packet_R[i] = 0;
+    }
+
+    loudness_test_get_fast_channel(1, &r_state_before, NULL);
+    assert(loudness_channel_filter_is_idle(1));
+
+    loudness_filter_16bit_stereo_packet(packet_L, packet_R, 8);
+    loudness_test_get_fast_channel(1, &r_state_after, NULL);
+
+    assert(r_state_before.w1 == r_state_after.w1);
+    assert(r_state_before.w2 == r_state_after.w2);
+    assert(loudness_highres_test_channel_state(1)->sample_counter == 0);
+    assert(packet_R[0] == 0);
+
+    printf("test_per_channel_zero_bypass passed\n\n");
+}
+
+void test_per_channel_independent_biquad(void)
+{
+    S32 packet_L[32];
+    S32 packet_R[32];
+    biquad_state_fast_t l_state;
+    biquad_state_fast_t r_state;
+    int i;
+
+    printf("Running test_per_channel_independent_biquad...\n");
+
+    current_freq.frequency = 44100;
+    loudness_change_frequency_fast(44100);
+    loudness_fast_reset_states();
+    loudness_test_load_active_quotients_fast(10);
+
+    for (i = 0; i < 32; i++) {
+        double phase = 2.0 * SINE_TEST_PI * 50.0 * (double)i / 44100.0;
+        int32_t s16 = (int32_t)lrint((32767.0 * 0.25) * sin(phase));
+
+        packet_L[i] = s16 << 16;
+        packet_R[i] = 0;
+    }
+
+    loudness_filter_16bit_stereo_packet(packet_L, packet_R, 32);
+    loudness_test_get_fast_channel(0, &l_state, NULL);
+    loudness_test_get_fast_channel(1, &r_state, NULL);
+
+    assert(l_state.w1 != 0 || l_state.w2 != 0);
+    assert(r_state.w1 == 0 && r_state.w2 == 0);
+
+    printf("test_per_channel_independent_biquad passed\n\n");
+}
+
 int main() {
     test_loudness_init();
     test_loudness_24bit_processing();
@@ -1047,7 +1257,13 @@ int main() {
     test_loudness_hires_stride4_counter_phase();
     test_loudness_hires_packet_boundary_continuity();
     test_loudness_hires_halfrate_delta_near_fullrate();
-    test_loudness_fast_golden_vectors();
+    test_filter_idle_after_zeros_base();
+    test_filter_active_during_hires_interp();
+    test_filter_idle_after_zeros_stride2();
+    test_filter_idle_after_zeros_stride4();
+    test_per_channel_zero_bypass();
+    test_per_channel_independent_biquad();
+    test_loudness_fast_biquad_exact_samples();
     test_loudness_dither_and_noise_shaping();
     test_loudness_get_equalizer_step_14_levels();
     test_loudness_80_phon_unity_filter();

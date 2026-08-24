@@ -15,6 +15,14 @@ typedef int64_t  S64;
 
 typedef bool Bool;
 
+#ifdef BUILD_TESTING
+typedef struct avr32_ssc_t avr32_ssc_t;
+typedef struct avr32_pdca_channel_t avr32_pdca_channel_t;
+typedef void *xSemaphoreHandle;
+typedef void *xTaskHandle;
+typedef void *xQueueHandle;
+#endif
+
 #ifndef TRUE
 #define TRUE true
 #endif

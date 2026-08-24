@@ -55,14 +55,34 @@ define AVR32_COMPILE_APP
 endef
 
 define AVR32_COMPILE_FRAMEWORK
-	@echo Compile [framework] $(CFLAGS) $<
+	@echo Compile [framework] $(CFLAGS) $(2) $<
 	@avr32-gcc $(CFLAGS) $(AVR32_APP_INCLUDES) $(AVR32_FRAMEWORK_CFLAGS) \
+		$(2) \
 		-MMD -MP -MF"$(1:%.o=%.d)" -MT"$(1:%.o=%.d)" -o"$(1)" "$<"
 endef
 
-# SOFTWARE_FRAMEWORK / FreeRTOS: fixed -O2, no app-level -O3 (overrides subdir.mk).
+# SOFTWARE_FRAMEWORK defaults to fixed -O2 with no app-level optimizations.
 src/SOFTWARE_FRAMEWORK/%.o: ../src/SOFTWARE_FRAMEWORK/%.c
-	$(call AVR32_COMPILE_FRAMEWORK,$@)
+	$(call AVR32_COMPILE_FRAMEWORK,$@,)
+
+# FreeRTOS C sources use -O3 without app-level inlining or loop unrolling.
+src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/croutine.o: ../src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/croutine.c
+	$(call AVR32_COMPILE_FRAMEWORK,$@,$(CFLAGS_FREERTOS_OPTIMIZATIONS))
+
+src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/list.o: ../src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/list.c
+	$(call AVR32_COMPILE_FRAMEWORK,$@,$(CFLAGS_FREERTOS_OPTIMIZATIONS))
+
+src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/queue.o: ../src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/queue.c
+	$(call AVR32_COMPILE_FRAMEWORK,$@,$(CFLAGS_FREERTOS_OPTIMIZATIONS))
+
+src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/tasks.o: ../src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/tasks.c
+	$(call AVR32_COMPILE_FRAMEWORK,$@,$(CFLAGS_FREERTOS_OPTIMIZATIONS))
+
+src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/portable/MemMang/heap_3.o: ../src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/portable/MemMang/heap_3.c
+	$(call AVR32_COMPILE_FRAMEWORK,$@,$(CFLAGS_FREERTOS_OPTIMIZATIONS))
+
+src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/portable/GCC/AVR32_UC3/port.o: ../src/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/portable/GCC/AVR32_UC3/port.c
+	$(call AVR32_COMPILE_FRAMEWORK,$@,$(CFLAGS_FREERTOS_OPTIMIZATIONS))
 
 # Top-level application sources under src/*.c (not subfolders).
 src/%.o: ../src/%.c

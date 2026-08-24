@@ -34,7 +34,7 @@ Firmware exposes a 1 Hz statistics stream over a vendor HID interface (`usage_pa
 | 32 | `last_arg1` | U8 | Tag-specific payload |
 | 33 | `last_arg2` | U8 | Tag-specific payload |
 | 34 | `equalizer_step` | U8 | Active loudness equalizer step (0–13); telemetry |
-| 35 | `source_volume_control` | U8 | `1` when USB SET_CUR host volume is authoritative; `0` when PCM-inferred gain is used |
+| 35 | `source_has_volume_control` | U8 | `1` when USB SET_CUR host volume is authoritative; `0` when PCM-inferred gain is used |
 
 Python struct format: `"<BBBBIIHHHIHbbbbIBBBBBB"`
 
@@ -50,7 +50,7 @@ Slow telemetry fields live in `stats_telemetry` and are merged into the wire pac
 |-------|--------|----------|---------------------|
 | Period counters | `overruns`, `underruns`, FIFO fields, `deadline_misses`, `event_count` | Audio task / events | Yes, **only after successful HID IN** (`min_fifo` → `0xFFFF`) |
 | Telemetry | `frequency_100hz` | USB sample-rate apply | No |
-| Telemetry | `gain_dbfs`, `source_volume_control` | USB SET_CUR volume handler (immediate) | No |
+| Telemetry | `gain_dbfs`, `source_has_volume_control` | USB SET_CUR volume handler (immediate) | No |
 | Telemetry | `db_spl`, `equalizer_step` | Loudness equalizer selection | No |
 | Last event | `last_tag`, `last_arg0..2` | `audio_stats_record_event()` | Yes → `NONE` / 0 |
 

@@ -186,6 +186,10 @@ void uac2_device_audio_task(void *pvParameters)
 	U8 sample_LSB;
 	S32 sample_L = 0;
 	S32 sample_R = 0; // BSB 20131102 Expanded for skip/insert, 20160322 changed to S32
+	Bool loudness_run_volume_gain = TRUE;
+#ifndef LOUDNESS_DISABLE
+	Bool loudness_filter_active_packet = FALSE;
+#endif
 	const U8 EP_AUDIO_IN = ep_audio_in;
 	const U8 EP_AUDIO_OUT = ep_audio_out;
 	const U8 EP_AUDIO_OUT_FB = ep_audio_out_fb;
@@ -704,6 +708,8 @@ void uac2_device_audio_task(void *pvParameters)
 
 #ifndef LOUDNESS_DISABLE
 					if (loudness_enabled_packet) {
+						loudness_filter_active_packet = loudness_filter_is_active();
+						loudness_run_volume_gain = loudness_filter_active_packet;
 						if (!loudness_inferred_gain_has_source_volume_control()) {
 							for (i = 0; i < num_samples; i++) {
 								loudness_envelope_follower_update_stereo(usb_out_L[i],
@@ -711,9 +717,28 @@ void uac2_device_audio_task(void *pvParameters)
 							}
 						}
 						if (audio_out_alt == ALT2_AS_INTERFACE_INDEX) {
-							LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L,
-								usb_out_R, num_samples);
+							if (loudness_filter_active_packet) {
+								LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L,
+									usb_out_R, num_samples);
+							} else {
+								U16 j;
+								Bool packet_all_zero = TRUE;
+
+								for (j = 0; j < num_samples; j++) {
+									if (usb_out_L[j] != 0 || usb_out_R[j] != 0) {
+										packet_all_zero = FALSE;
+										break;
+									}
+								}
+								if (!packet_all_zero) {
+									LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L,
+										usb_out_R, num_samples);
+								}
+							}
 						}
+					} else {
+						loudness_filter_active_packet = FALSE;
+						loudness_run_volume_gain = FALSE;
 					}
 #endif
 
@@ -767,8 +792,8 @@ void uac2_device_audio_task(void *pvParameters)
 #ifndef LOUDNESS_DISABLE
 						if (loudness_enabled_packet) {
 							if (audio_out_alt == ALT1_AS_INTERFACE_INDEX) {
-								sample_L = LOUDNESS_FILTER_24BIT_CONTAINER(sample_L);
-								sample_R = LOUDNESS_FILTER_24BIT_CONTAINER(sample_R);
+								sample_L = LOUDNESS_FILTER_24BIT_CONTAINER(0, sample_L);
+								sample_R = LOUDNESS_FILTER_24BIT_CONTAINER(1, sample_R);
 							}
 						}
 #endif
@@ -779,7 +804,7 @@ void uac2_device_audio_task(void *pvParameters)
 							sample_L = 0;
 							sample_R = 0;
 						}
-						else {
+						else if (loudness_run_volume_gain) {
 							if (spk_vol_mult_L != VOL_MULT_UNITY) {	// Only touch gain-controlled samples
 								// 32-bit data words volume control
 								sample_L = (S32)( (int64_t)( (int64_t)(sample_L) * (int64_t)spk_vol_mult_L ) >> VOL_MULT_SHIFT) ;
@@ -892,7 +917,7 @@ void uac2_device_audio_task(void *pvParameters)
 							time_to_calculate_gap = SPK_PACKETS_PER_GAP_SKIP - 1;
 						else									// Initially and a while after any skip/insert
 							time_to_calculate_gap = SPK_PACKETS_PER_GAP_CALCULATION - 1;
-						if (usb_alternate_setting_out >= 1) {	// bBitResolution // Used with explicit feedback and not ADC data
+						if (audio_out_alt >= 1) {	// bBitResolution // Used with explicit feedback and not ADC data
 //						if (usb_alternate_setting_out == 1) {	// Used with explicit feedback and not ADC data
 
 							DAC_buf_DMA_read_local = DAC_buf_DMA_read;

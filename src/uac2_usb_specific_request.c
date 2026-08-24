@@ -481,7 +481,7 @@ void uac2_freq_change_handler() {
 				// to avoid channel inversion.  Start with left channel - FS goes low
 				// However, the channels are reversed at 192khz
 
-				if (current_freq.frequency == 192000) {
+				if (current_freq.frequency == FREQ_192) {
 					while (gpio_get_pin_value(AK5394_LRCK))
 						;
 					while (!gpio_get_pin_value(AK5394_LRCK))
@@ -523,7 +523,9 @@ void uac2_freq_change_handler() {
 #ifdef FREERTOS_USED
 		loudness_request_frequency_change(current_freq.frequency);
 #else
-		loudness_change_frequency(current_freq.frequency);
+		if (current_freq.frequency != 0) {
+			loudness_change_frequency(current_freq.frequency);
+		}
 #endif
 #endif
 		// reset freq_changed flag

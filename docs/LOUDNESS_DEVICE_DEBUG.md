@@ -60,7 +60,15 @@ Glitch audible at the same time as a skip/insert line strongly implicates transp
 
 ## Task 6 — Atomic coefficient commit (implemented)
 
-Step changes now use a **double bank** for `active_quotients`: the audio path reads one complete bank per sample while the loudness task publishes the inactive bank with a single index flip. This avoids torn reads during `memcpy` mid-sample.
+Step changes use a **double bank** for active quotients and runtime coefficients: the audio path reads one complete bank per sample while the loudness task publishes the inactive bank with a single index flip. This avoids torn reads during `memcpy` mid-sample. Highres halfrate runtime uses a separate double bank in [`src/loudness_highres.c`](../src/loudness_highres.c).
+
+## Idle bypass (implemented)
+
+When digital silence (`sample == 0`) is streamed with the connection open, per-channel filter steps are skipped if that channel's biquad and highres state are fully idle. Volume multiply is skipped when **both** channels are idle (`loudness_filter_is_active()` false at packet start). Mute handling is unchanged.
+
+This reduces CPU load during long idle periods. After non-unity audio, integer biquad state may not return to exact zero (limit cycle); bypass may not engage until reset, but output stays correct. See [LOUDNESS.md](LOUDNESS.md#idle-bypass-steady-digital-silence).
+
+PC regression: `test_filter_idle_after_zeros_*`, `test_per_channel_zero_bypass`, `test_per_channel_independent_biquad` in `make test`.
 
 ## Task 7 — Re-test normal FAST
 
@@ -70,11 +78,9 @@ After flashing normal FAST (without `LOUDNESS_FORCE_UNITY_STEP`):
 2. Listen at reported steps 13, 11, and 3 (`gain_dbfs` roughly 0, −18, −34 in your earlier capture).
 3. Compare to forced-unity behavior.
 
-## Task 8 — AVR32 golden vectors
+## Task 8 — Fixed-point biquad regression
 
-Shared vectors: [`tests/loudness_fast_golden_vectors.h`](../tests/loudness_fast_golden_vectors.h)
-
-PC regression: `test_loudness_fast_golden_vectors` in `make test`.
+PC regression: `test_loudness_fast_biquad_exact_samples` in `make test` locks three exact `loudness_fast_24bit()` outputs for step 0 at 48 kHz.
 
 Compile check on AVR32 toolchain:
 
@@ -82,7 +88,7 @@ Compile check on AVR32 toolchain:
 make test-avr32
 ```
 
-Boot-time selftest (optional debug firmware): add `-DLOUDNESS_AVR32_SELFTEST` to firmware `CFLAGS` and call `loudness_fast_run_golden_selftest()`; non-zero return indicates `macs.d` / fixed-point mismatch on device.
+Optional on-device parity: duplicate the same three asserts in firmware boot code if `macs.d` vs software FMA drift must be caught on hardware.
 
 ## Task 9 — Step-transition correlation
 
@@ -141,7 +147,7 @@ C3 success criteria:
 
 Conclusions:
 
-1. **Filter CPU** — two `biquad_step_fast_24bit` calls per sample per channel at 48 kHz exceeds AVR32 budget; one section is the pragmatic fix for now.
+1. **Filter CPU** — two biquad steps per sample per channel at 48 kHz exceeded AVR32 budget; **one** runtime section (`LOUDNESS_FAST_FILTERS=1`) is the pragmatic fix. L and R each hold independent `w1`/`w2` (`LOUDNESS_CHANNELS=2`). **Idle bypass** skips filter and volume multiply when both channels are fully idle on zero input (see [LOUDNESS.md](LOUDNESS.md#idle-bypass-steady-digital-silence)).
 2. **Volume slider** — skip/insert and fifo swings to ~3072 happen even with loudness disabled; root cause is USB volume SET_CUR handling + feedback/skip logic, not the biquad.
 3. **`deadline_misses` ~9000/s** with `LOUDNESS_DISABLE` and smooth audio means the counter is a weak glitch predictor when skip/insert stay at zero; trust skip/insert and fifo stability over raw deadline counts.
 
@@ -157,3 +163,4 @@ Conclusions:
 - Smooth loudness decrease with slider
 - Skip/insert not correlated with glitches (or counts greatly reduced)
 - Step changes inaudible or below spike test bound (`test_loudness_df2_step_transition_no_reset`)
+- Idle bypass: sustained digital null does not increase skip/insert or deadline misses vs active filtering

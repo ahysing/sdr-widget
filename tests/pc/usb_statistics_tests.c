@@ -133,7 +133,7 @@ void test_statistics_wire_packet_is_little_endian() {
     stats_telemetry_set_frequency_hz(192000);
     stats_telemetry_set_gain_dbfs((S8)-10);
     stats_telemetry_set_equalizer_state((S8)80, 2);
-    stats_telemetry_set_source_volume_control(1);
+    stats_telemetry_set_source_has_volume_control(1);
 
     statistics_test_build_wire_packet(wire, buf, 7);
 
