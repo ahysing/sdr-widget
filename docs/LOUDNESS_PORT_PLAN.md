@@ -67,13 +67,13 @@ Compile the RTOS deferral path on PC behind a `LOUDNESS_PORT_FAKE_QUEUE` define 
 New tests in `tests/pc/`:
 
 1. `loudness_request_frequency_change(48000)` → drain queue → verify coefficients changed
-2. `loudness_usb_volume_changed()` with port “ready” → drain → verify step switch
+2. `loudness_usb_volume_changed_left()` with port “ready” → drain → verify step switch
 3. Packet-boundary / highres stride state preserved across queued frequency changes
 
 ### 2d. Align step-change detection (optional, separate from BUILD_TESTING)
 
 `loudness_db_spl_step_changed()` uses hysteresis on firmware and a simpler
-`last_db_spl` comparison under `BUILD_TESTING`. Keep `BUILD_TESTING` for static
+`last_db_spl_x10` comparison under `BUILD_TESTING`. Keep `BUILD_TESTING` for static
 exposure, but consider driving hysteresis tests via
 `loudness_test_should_change_equalizer_step()` instead of changing production
 behavior in test builds.
@@ -119,7 +119,7 @@ Files to update:
 - `src/DG8SAQ_cmd.c`
 - Any other direct `loudness_change_frequency` / `loudness_request_frequency_change` callers
 
-### 3c. Unify `target_db_spl` / `last_db_spl` (if profiling allows)
+### 3c. Standardize stored SPL state on `last_db_spl_x10` (completed)
 
 The dual SPL variable exists for ISR/task concurrency on firmware. After Phase 2
 queue tests exist, evaluate whether a single published value plus port-level

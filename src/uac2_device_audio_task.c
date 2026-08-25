@@ -186,9 +186,6 @@ void uac2_device_audio_task(void *pvParameters)
 	U8 sample_LSB;
 	S32 sample_L = 0;
 	S32 sample_R = 0; // BSB 20131102 Expanded for skip/insert, 20160322 changed to S32
-#ifndef LOUDNESS_DISABLE
-	Bool loudness_filter_active_packet = FALSE;
-#endif
 	const U8 EP_AUDIO_IN = ep_audio_in;
 	const U8 EP_AUDIO_OUT = ep_audio_out;
 	const U8 EP_AUDIO_OUT_FB = ep_audio_out_fb;
@@ -515,7 +512,11 @@ void uac2_device_audio_task(void *pvParameters)
 					S32 usb_out_R[UAC2_USB_OUT_MAX_STEREO_SAMPLES];
 					const U8 audio_out_alt = usb_alternate_setting_out;
 #ifndef LOUDNESS_DISABLE
-					const Bool loudness_enabled_packet = uac2_loudness_filter_enabled();
+					// Loudness filter runs for frequences 44.1 KHz and 48 KHz . For higher frequencies the CPU is not able to keep up. All attempt on speeding up and simplifying has failed.
+					const Bool loudness_enabled_packet =
+						uac2_loudness_filter_enabled()
+						&& (current_freq.frequency == FREQ_44
+						 || current_freq.frequency == FREQ_48);
 #endif
 
 #ifdef USB_STATE_MACHINE_GPIO
@@ -707,7 +708,6 @@ void uac2_device_audio_task(void *pvParameters)
 
 #ifndef LOUDNESS_DISABLE
 					if (loudness_enabled_packet) {
-						loudness_filter_active_packet = loudness_filter_is_active();
 						if (!loudness_inferred_gain_has_source_volume_control()) {
 							for (i = 0; i < num_samples; i++) {
 								loudness_envelope_follower_update_stereo(usb_out_L[i],
@@ -715,27 +715,9 @@ void uac2_device_audio_task(void *pvParameters)
 							}
 						}
 						if (audio_out_alt == ALT2_AS_INTERFACE_INDEX) {
-							if (loudness_filter_active_packet) {
-								LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L,
-									usb_out_R, num_samples);
-							} else {
-								U16 j;
-								Bool packet_all_zero = TRUE;
-
-								for (j = 0; j < num_samples; j++) {
-									if (usb_out_L[j] != 0 || usb_out_R[j] != 0) {
-										packet_all_zero = FALSE;
-										break;
-									}
-								}
-								if (!packet_all_zero) {
-									LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L,
-										usb_out_R, num_samples);
-								}
-							}
+							LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L,
+								usb_out_R, num_samples);
 						}
-					} else {
-						loudness_filter_active_packet = FALSE;
 					}
 #endif
 

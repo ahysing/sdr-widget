@@ -36,7 +36,7 @@ static int32_t apply_digital_volume(int32_t sample, S32 mult) {
 void test_loudness_init() {
     printf("Running test_loudness_init...\n");
     loudness_init();
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX);
+    assert(loudness_get_last_db_spl_x10() == LOUDNESS_MIN_PHON_X10);
     printf("test_loudness_init passed\n");
 }
 
@@ -50,7 +50,7 @@ void test_loudness_24bit_processing() {
     loudness_set_source_has_volume_control();
 
     // At 0 dBFS the 95-phon row still runs through the normal biquad.
-    loudness_usb_volume_changed(0);
+    loudness_usb_volume_changed_left(0);
     
     int64_t sample = 1000;
     int64_t result = loudness_24bit_wrapper(sample);
@@ -58,7 +58,7 @@ void test_loudness_24bit_processing() {
     assert(result != 0);
 
     // Switching to the 55 phon equalizer step must boost low frequencies
-    loudness_usb_volume_changed(-25 * 256);
+    loudness_usb_volume_changed_left(-25 * 256);
     int differs = 0;
     for (int i = 0; i < 200; i++) {
         int64_t in = (i & 1) ? 100000 : -100000;
@@ -74,21 +74,21 @@ void test_loudness_update_active_equalizer_step_uncompressed_18dbfs(void) {
     loudness_init();
     loudness_set_source_has_volume_control();
 
-    loudness_usb_volume_changed(0);
-    printf("  [0 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX);
+    loudness_usb_volume_changed_left(0);
+    printf("  [0 dBFS vol] loudness_get_last_db_spl_x10(): %d\n", loudness_get_last_db_spl_x10());
+    assert(loudness_get_last_db_spl_x10() == LOUDNESS_DB_SPL_MAX * 10);
 
-    loudness_usb_volume_changed(-10 * 256);
-    printf("  [-10 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 10);
+    loudness_usb_volume_changed_left(-10 * 256);
+    printf("  [-10 dBFS vol] loudness_get_last_db_spl_x10(): %d\n", loudness_get_last_db_spl_x10());
+    assert(loudness_get_last_db_spl_x10() == (LOUDNESS_DB_SPL_MAX - 10) * 10);
 
-    loudness_usb_volume_changed(-20 * 256);
-    printf("  [-20 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 20);
+    loudness_usb_volume_changed_left(-20 * 256);
+    printf("  [-20 dBFS vol] loudness_get_last_db_spl_x10(): %d\n", loudness_get_last_db_spl_x10());
+    assert(loudness_get_last_db_spl_x10() == (LOUDNESS_DB_SPL_MAX - 20) * 10);
 
-    loudness_usb_volume_changed(-30 * 256);
-    printf("  [-30 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 30);
+    loudness_usb_volume_changed_left(-30 * 256);
+    printf("  [-30 dBFS vol] loudness_get_last_db_spl_x10(): %d\n", loudness_get_last_db_spl_x10());
+    assert(loudness_get_last_db_spl_x10() == (LOUDNESS_DB_SPL_MAX - 30) * 10);
 
     printf("test_loudness_update_active_equalizer_step_uncompressed_18dbfs passed\n\n");
 }
@@ -98,21 +98,21 @@ void test_loudness_update_active_equalizer_step_compressed_6dbfs(void) {
     loudness_init();
     loudness_set_source_has_volume_control();
 
-    loudness_usb_volume_changed(0);
-    printf("  [0 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX);
+    loudness_usb_volume_changed_left(0);
+    printf("  [0 dBFS vol] loudness_get_last_db_spl_x10(): %d\n", loudness_get_last_db_spl_x10());
+    assert(loudness_get_last_db_spl_x10() == LOUDNESS_DB_SPL_MAX * 10);
 
-    loudness_usb_volume_changed(-10 * 256);
-    printf("  [-10 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 10);
+    loudness_usb_volume_changed_left(-10 * 256);
+    printf("  [-10 dBFS vol] loudness_get_last_db_spl_x10(): %d\n", loudness_get_last_db_spl_x10());
+    assert(loudness_get_last_db_spl_x10() == (LOUDNESS_DB_SPL_MAX - 10) * 10);
 
-    loudness_usb_volume_changed(-20 * 256);
-    printf("  [-20 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 20);
+    loudness_usb_volume_changed_left(-20 * 256);
+    printf("  [-20 dBFS vol] loudness_get_last_db_spl_x10(): %d\n", loudness_get_last_db_spl_x10());
+    assert(loudness_get_last_db_spl_x10() == (LOUDNESS_DB_SPL_MAX - 20) * 10);
 
-    loudness_usb_volume_changed(-30 * 256);
-    printf("  [-30 dBFS vol] loudness_get_last_db_spl(): %d\n", loudness_get_last_db_spl());
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 30);
+    loudness_usb_volume_changed_left(-30 * 256);
+    printf("  [-30 dBFS vol] loudness_get_last_db_spl_x10(): %d\n", loudness_get_last_db_spl_x10());
+    assert(loudness_get_last_db_spl_x10() == (LOUDNESS_DB_SPL_MAX - 30) * 10);
 
     printf("test_loudness_update_active_equalizer_step_compressed_6dbfs passed\n\n");
 }
@@ -180,16 +180,16 @@ void test_saturate_16bit_s32_to_s32(void) {
 void test_loudness_get_gain_dbfs() {
     printf("Running test_loudness_get_gain_dbfs...\n");
     loudness_set_source_has_volume_control();
-    loudness_usb_volume_changed(0);
+    loudness_usb_volume_changed_left(0);
     assert(loudness_get_gain_dbfs() == 0);
 
-    loudness_usb_volume_changed(-256 * 10);
+    loudness_usb_volume_changed_left(-256 * 10);
     assert(loudness_get_gain_dbfs() == -10);
 
-    loudness_usb_volume_changed(VOL_MIN);
+    loudness_usb_volume_changed_left(VOL_MIN);
     assert(loudness_get_gain_dbfs() == -60);
 
-    loudness_usb_volume_changed(VOL_MAX);
+    loudness_usb_volume_changed_left(VOL_MAX);
     assert(loudness_get_gain_dbfs() == 0);
     printf("test_loudness_get_gain_dbfs passed\n");
 }
@@ -201,7 +201,7 @@ void test_loudness_16bit_cd_audio_processing(void) {
     printf("Running test_loudness_16bit_cd_audio_processing...\n");
     loudness_init();
 
-    loudness_usb_volume_changed(-20 * 256);
+    loudness_usb_volume_changed_left(-20 * 256);
 
     int32_t usb_container = ((int32_t)(int16_t)-4000) << 16;
 
@@ -382,7 +382,7 @@ void test_loudness_24bit_container_round_trip(void) {
     printf("Running test_loudness_24bit_container_round_trip...\n");
     loudness_init();
     loudness_set_source_has_volume_control();
-    loudness_usb_volume_changed(0);
+    loudness_usb_volume_changed_left(0);
 
     /* The full filter must preserve container alignment and sign. */
     assert(loudness_filter_24bit_container(0,0) == 0);
@@ -403,7 +403,7 @@ void test_loudness_24bit_container_zero_crossing(void) {
     printf("Running test_loudness_24bit_container_zero_crossing...\n");
     loudness_init();
     loudness_set_source_has_volume_control();
-    loudness_usb_volume_changed(0);
+    loudness_usb_volume_changed_left(0);
 
     int32_t prev = loudness_filter_24bit_container(0,100 << 8);
     int32_t at_zero = loudness_filter_24bit_container(0,0);
@@ -428,16 +428,16 @@ void test_loudness_df2_step_transition_no_reset(void) {
     loudness_init();
     loudness_set_source_has_volume_control();
 
-    loudness_usb_volume_changed(-10 * 256);
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 10);
+    loudness_usb_volume_changed_left(-10 * 256);
+    assert(loudness_get_last_db_spl_x10() == (LOUDNESS_DB_SPL_MAX - 10) * 10);
 
     for (i = 0; i < 256; i++) {
         loudness_fast_24bit(0, sample);
     }
     out_before = (int32_t)loudness_fast_24bit(0, sample);
 
-    loudness_usb_volume_changed(-20 * 256);
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 20);
+    loudness_usb_volume_changed_left(-20 * 256);
+    assert(loudness_get_last_db_spl_x10() == (LOUDNESS_DB_SPL_MAX - 20) * 10);
 
     out_after = (int32_t)loudness_fast_24bit(0, sample);
     spike = out_after - out_before;
@@ -523,9 +523,9 @@ void test_loudness_80_phon_baked_volume_filter(void) {
     printf("Running test_loudness_80_phon_baked_volume_filter...\n");
     loudness_init();
     loudness_set_source_has_volume_control();
-    loudness_usb_volume_changed(-15 * 256);
     current_freq.frequency = 48000;
     loudness_change_frequency_fast(48000);
+    loudness_usb_volume_changed_left(-15 * 256);
     loudness_fast_reset_states();
     assert(loudness_test_get_equalizer_step(last_db_spl_x10) == 90);
 
@@ -539,7 +539,6 @@ void test_loudness_80_phon_baked_volume_filter(void) {
 void test_loudness_equalizer_step_half_db_boundaries(void) {
     printf("Running test_loudness_equalizer_step_half_db_boundaries...\n");
     loudness_init();
-    last_db_spl = LOUDNESS_REF_PHON;
     last_db_spl_x10 = LOUDNESS_REF_PHON * 10;
     assert(loudness_test_should_change_equalizer_step(800) == FALSE);
     assert(loudness_test_should_change_equalizer_step(805) == TRUE);
@@ -1066,7 +1065,7 @@ void test_filter_idle_after_zeros_base(void)
 
     loudness_init();
     loudness_set_source_has_volume_control();
-    loudness_usb_volume_changed(0);
+    loudness_usb_volume_changed_left(0);
 
     current_freq.frequency = 44100;
     loudness_change_frequency_fast(44100);
@@ -1224,19 +1223,30 @@ void test_per_channel_baked_volume_policy(void)
     biquad_state_fast_t state;
     biquad_quotients_fast_t left;
     biquad_quotients_fast_t right;
-    const uint32_t independent_rates[] = { 44100, 48000, 88200, 96000 };
-    const uint32_t shared_rates[] = { 176400, 192000 };
+    biquad_quotients_fast_t shared_actual;
+    biquad_quotients_fast_t shared_expected;
+    const uint32_t independent_rates[] = { 44100, 48000 };
+    const uint32_t shared_rates[] = { 88200, 96000, 176400, 192000 };
     size_t i;
 
     printf("Running test_per_channel_baked_volume_policy...\n");
+
+    loudness_test_reset_inferred_gain();
+    current_freq.frequency = 48000;
+    loudness_change_frequency_fast(48000);
+    loudness_update_active_equalizer_step();
+    loudness_test_get_fast_channel(0, &state, &left);
+    loudness_test_get_fast_channel(1, &state, &right);
+    assert(left.b0 == right.b0);
 
     spk_vol_usb_L = -6 * 256;
     spk_vol_usb_R = -20 * 256;
     for (i = 0; i < sizeof(independent_rates) / sizeof(independent_rates[0]); i++) {
         current_freq.frequency = independent_rates[i];
         loudness_change_frequency_fast(independent_rates[i]);
-        loudness_usb_volume_changed(spk_vol_usb_L);
+        loudness_usb_volume_changed_left(spk_vol_usb_L);
         loudness_usb_volume_changed_right(spk_vol_usb_R);
+        assert(loudness_get_last_db_spl_x10() == 890);
         loudness_test_get_fast_channel(0, &state, &left);
         loudness_test_get_fast_channel(1, &state, &right);
         assert(left.b0 != right.b0);
@@ -1245,8 +1255,9 @@ void test_per_channel_baked_volume_policy(void)
     for (i = 0; i < sizeof(shared_rates) / sizeof(shared_rates[0]); i++) {
         current_freq.frequency = shared_rates[i];
         loudness_change_frequency_fast(shared_rates[i]);
-        loudness_usb_volume_changed(spk_vol_usb_L);
+        loudness_usb_volume_changed_left(spk_vol_usb_L);
         loudness_usb_volume_changed_right(spk_vol_usb_R);
+        assert(loudness_get_last_db_spl_x10() == 820);
         loudness_test_get_fast_channel(0, &state, &left);
         loudness_test_get_fast_channel(1, &state, &right);
         assert(left.a1 == right.a1);
@@ -1254,6 +1265,14 @@ void test_per_channel_baked_volume_policy(void)
         assert(left.b0 == right.b0);
         assert(left.b1 == right.b1);
         assert(left.b2 == right.b2);
+        shared_actual = left;
+        loudness_test_load_active_quotients_fast(94);
+        loudness_test_get_fast_channel(0, &state, &shared_expected);
+        assert(shared_actual.a1 == shared_expected.a1);
+        assert(shared_actual.a2 == shared_expected.a2);
+        assert(shared_actual.b0 == shared_expected.b0);
+        assert(shared_actual.b1 == shared_expected.b1);
+        assert(shared_actual.b2 == shared_expected.b2);
     }
 
     printf("test_per_channel_baked_volume_policy passed\n\n");

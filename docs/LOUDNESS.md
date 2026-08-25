@@ -39,31 +39,35 @@ db_spl_x10 = 950 + gain_dbfs_x10;
 row = (db_spl_x10 - 350) / 5;
 ```
 
-The HID `equalizer_step` field reports the left/master row in the range 0..120.
-Human-readable `db_spl` telemetry remains rounded to integer dB.
+The HID v2 fields `equalizer_step_left/right` report independent rows through
+96 kHz and the same shared averaged row above 96 kHz, in the range 0..120.
+The corresponding `gain_dbfs_left/right` and `db_spl_left/right` fields remain
+separate and are rounded to integer dB.
 
 ## Fixed-point kernel
 
-Coefficients use Q4.28. Samples remain signed 24-bit integers. The canonical
-DF-II accumulator remains aligned at bit 29 and stored delay states retain
-13-bit headroom:
+Coefficients and the canonical DF-II accumulator use Q4.28. Samples remain
+signed 24-bit integers, while stored delay states retain 13-bit headroom:
 
 ```c
-PRODUCT_ALIGN_SHIFT = 13 + 29 - 28; /* 14 */
-B0_EXTRA_SHIFT = 29 - 28;           /* 1 */
+acc = (x_n << 28) - (pole_products << 13);
+w = acc >> 28;
+acc = b0 * w + (zero_products << 13);
+y = (acc + (1 << 27)) >> 28;
 ```
 
-This separation is required for PC and AVR32 `macs.d` paths to remain
-mathematically equivalent.
+The PC and AVR32 `macs.d` paths use the same shifts and rounding.
 
 ## Stereo and high-resolution policy
 
 - 44.1/48/88.2/96 kHz: independent left/right coefficient rows and state.
-- 176.4/192 kHz: both channels use the left/master row to minimize work; state
-  and interpolation history remain per channel.
+- 176.4/192 kHz: average the left/right USB gains, load one shared coefficient
+  row, and apply it to both channels. State and interpolation history remain
+  per channel to prevent stereo crosstalk.
 - 88.2/96 kHz run stride 2; 176.4/192 kHz run stride 4.
 
-Hosts should send equal channel volume at 176.4/192 kHz.
+When no source volume control is present, both channels use the same inferred
+gain at every sample rate.
 
 ## USB audio signal chain
 
@@ -98,7 +102,7 @@ zero.
 - baked-volume magnitude
 - coefficient transition equivalence
 - independent channel behavior through 96 kHz
-- shared master-row policy at 176.4/192 kHz
+- shared averaged-row policy at 176.4/192 kHz
 - high-resolution stride continuity
 - saturation, sign, state, and idle behavior
 

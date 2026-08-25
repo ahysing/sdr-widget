@@ -16,9 +16,12 @@ const biquad_quotients_fast_t *loudness_highres_halfrate_quotients(
     const biquad_quotients_fast_t *quotients_44100hz,
     const biquad_quotients_fast_t *quotients_48000hz);
 
-void loudness_highres_staging_fill_halfrate(
+void loudness_highres_staging_fill_halfrate_independent(
     const biquad_quotients_fast_t *halfrate_src_left,
     const biquad_quotients_fast_t *halfrate_src_right,
+    const biquad_runtime_fast_t *main_runtime);
+void loudness_highres_staging_fill_halfrate_shared(
+    const biquad_quotients_fast_t *halfrate_src,
     const biquad_runtime_fast_t *main_runtime);
 
 void loudness_highres_staging_commit(void);
@@ -27,7 +30,11 @@ void loudness_highres_set_stride(uint32_t sample_rate_hz);
 void loudness_highres_reset_states(void);
 Bool loudness_highres_channel_is_idle(int channel);
 
-void loudness_highres_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R,
+void loudness_highres_filter_16bit_stereo_packet_independent(
+    S32 *sample_L, S32 *sample_R,
+    biquad_state_fast_t *stL, biquad_state_fast_t *stR, U16 num_samples);
+void loudness_highres_filter_16bit_stereo_packet_shared(
+    S32 *sample_L, S32 *sample_R,
     biquad_state_fast_t *stL, biquad_state_fast_t *stR, U16 num_samples);
 
 #ifdef BUILD_TESTING

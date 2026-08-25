@@ -64,6 +64,7 @@ S32 loudness_filter_24bit_container(int channel, S32 sample);
 void loudness_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R, U16 num_samples);
 void loudness_change_frequency_fast(uint32_t frequency);
 Bool loudness_channel_biquad_is_idle(int channel);
+Bool loudness_channel_filter_idle_cached(int channel);
 Bool loudness_channel_filter_is_idle(int channel);
 Bool loudness_filter_is_active(void);
 
