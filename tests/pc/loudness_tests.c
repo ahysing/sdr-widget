@@ -573,20 +573,72 @@ void test_loudness_bass_boost_mirror_and_gate(void) {
 
     loudness_bass_boost_set(FALSE);
     assert(loudness_bass_boost_is_enabled() == FALSE);
+    loudness_update_active_equalizer_step();
+    assert(loudness_test_volume_in_biquad() == FALSE);
 
     loudness_usb_volume_changed(-20 * 256);
     loudness_update_active_equalizer_step();
-    assert(loudness_get_last_db_spl() == LOUDNESS_REF_PHON);
-    assert(loudness_test_get_equalizer_step(loudness_get_last_db_spl()) == LOUDNESS_NEUTRAL_STEP);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 20);
 
     loudness_bass_boost_set(TRUE);
     assert(loudness_bass_boost_is_enabled() == TRUE);
     loudness_usb_volume_changed(-20 * 256);
     loudness_update_active_equalizer_step();
+    assert(loudness_test_volume_in_biquad() == TRUE);
     assert(loudness_test_get_equalizer_step(loudness_get_last_db_spl()) < LOUDNESS_NEUTRAL_STEP);
 
     loudness_bass_boost_set(TRUE);
     printf("test_loudness_bass_boost_mirror_and_gate passed\n\n");
+}
+
+void test_loudness_bass_boost_unity_passthrough(void) {
+    printf("Running test_loudness_bass_boost_unity_passthrough...\n");
+    const int32_t test_sample = 1000000;
+    int32_t filtered;
+    double gain_db;
+
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    current_freq.frequency = 48000;
+    loudness_change_frequency(48000);
+
+    loudness_bass_boost_set(FALSE);
+    loudness_update_active_equalizer_step();
+    assert(loudness_test_volume_in_biquad() == FALSE);
+
+    filtered = loudness_fast_24bit(0, test_sample);
+    gain_db = 20.0 * log10(fabs((double)filtered / (double)test_sample));
+    assert(fabs(gain_db) < 0.1);
+
+    printf("test_loudness_bass_boost_unity_passthrough passed\n\n");
+}
+
+void test_loudness_bass_boost_reenable_resets_states(void) {
+    printf("Running test_loudness_bass_boost_reenable_resets_states...\n");
+    biquad_state_fast_t state;
+
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    current_freq.frequency = 48000;
+    loudness_change_frequency(48000);
+
+    loudness_bass_boost_set(FALSE);
+    loudness_update_active_equalizer_step();
+
+    loudness_test_get_fast_channel(0, &state, NULL);
+    state.w1 = 100000000;
+    state.w2 = 100000000;
+    loudness_test_set_fast_channel(0, &state);
+
+    loudness_bass_boost_set(TRUE);
+    loudness_update_active_equalizer_step();
+
+    loudness_test_get_fast_channel(0, &state, NULL);
+    assert(state.w1 == 0);
+    assert(state.w2 == 0);
+    assert(loudness_test_volume_in_biquad() == TRUE);
+
+    printf("test_loudness_bass_boost_reenable_resets_states passed\n\n");
 }
 
 void test_loudness_bass_boost_facade_ignores_filter_activity(void) {
@@ -1319,6 +1371,8 @@ int main() {
     test_loudness_equalizer_step_hysteresis_79_80();
     test_loudness_bass_boost_default_enabled();
     test_loudness_bass_boost_mirror_and_gate();
+    test_loudness_bass_boost_unity_passthrough();
+    test_loudness_bass_boost_reenable_resets_states();
     test_loudness_bass_boost_facade_ignores_filter_activity();
     printf("\nAll tests completed!\n");
     return 0;

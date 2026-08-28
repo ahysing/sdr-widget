@@ -4,6 +4,7 @@
 #include "loudness_highres.h"
 #if defined(BUILD_TESTING)
 #include "../tests/pc/usb_specific_request.h"
+#include "../tests/pc/device_audio_volume.h"
 extern S16 spk_vol_usb_L, spk_vol_usb_R;
 #else
 #include "usb_specific_request.h"
@@ -124,10 +125,26 @@ volatile S16 target_db_spl = LOUDNESS_DB_SPL_MAX;
 #endif
 volatile S16 target_gain_dbfs_q8 = 0;
 static volatile Bool loudness_bass_boost_enabled = TRUE;
+static Bool loudness_external_volume_active = FALSE;
+
+static void loudness_update_filter_mode(void);
 
 static Bool loudness_bass_boost_allows_contour(void)
 {
     return loudness_bass_boost_enabled;
+}
+
+#if defined(BUILD_TESTING)
+Bool loudness_test_volume_in_biquad(void);
+#endif
+
+static void loudness_set_volume_in_biquad(Bool volume_in_biquad)
+{
+#ifdef FEATURE_VOLUME_CTRL
+	device_audio_set_volume_in_biquad(volume_in_biquad);
+#else
+	(void)volume_in_biquad;
+#endif
 }
 
 int32_t loudness_clamp_gain_dbfs_q8(int32_t gain_dbfs_q8)
@@ -352,7 +369,7 @@ static void loudness_update_filter_by_volume_or_frequency(void *pvParameters)
                     loudness_apply_equalizer_step_if_needed();
                 }
             }
-            loudness_update_active_equalizer_step();
+            loudness_update_filter_mode();
         } else {
             if (xQueueReceive(xLoudnessFreqQueue, &request, portMAX_DELAY) == pdPASS) {
                 if (request.type == LOUDNESS_REQUEST_FREQUENCY) {
@@ -363,6 +380,7 @@ static void loudness_update_filter_by_volume_or_frequency(void *pvParameters)
                     loudness_apply_equalizer_step_if_needed();
                 }
             }
+            loudness_set_volume_in_biquad(FALSE);
         }
     }
 }
@@ -484,6 +502,50 @@ static Bool loudness_db_spl_step_changed(int32_t db_spl_x10, int32_t db_spl)
 #endif
 }
 
+static void loudness_select_equalizer_step_for_current_volume(void)
+{
+    int32_t db_spl_x10 = loudness_calculate_db_spl_x10();
+    int32_t db_spl = (db_spl_x10 + 5) / 10;
+
+#ifdef FREERTOS_USED
+    target_db_spl = (int16_t)db_spl;
+#endif
+
+    loudness_publish_equalizer_telemetry(db_spl);
+    if (loudness_db_spl_step_changed(db_spl_x10, db_spl)) {
+        loudness_select_equalizer_step(db_spl);
+    }
+}
+
+static void loudness_update_filter_mode(void)
+{
+	if (!loudness_bass_boost_allows_contour()) {
+		int32_t db_spl = loudness_calculate_db_spl();
+
+		loudness_fast_select_unity_passthrough();
+		loudness_set_volume_in_biquad(FALSE);
+		loudness_external_volume_active = TRUE;
+		loudness_publish_equalizer_step(db_spl);
+		loudness_publish_equalizer_telemetry(db_spl);
+		return;
+	}
+
+	if (loudness_external_volume_active) {
+		loudness_fast_reset_states();
+		loudness_external_volume_active = FALSE;
+	}
+	loudness_set_volume_in_biquad(TRUE);
+	loudness_select_equalizer_step_for_current_volume();
+}
+
+#if defined(BUILD_TESTING)
+Bool loudness_test_volume_in_biquad(void)
+{
+	return !loudness_external_volume_active
+		&& loudness_bass_boost_allows_contour();
+}
+#endif
+
 void loudness_apply_equalizer_step_if_needed(void)
 {
     int32_t db_spl_x10;
@@ -506,38 +568,19 @@ void loudness_apply_equalizer_step_if_needed(void)
 }
 
 void loudness_update_active_equalizer_step(void) {
-    int32_t db_spl_x10;
-    int32_t db_spl;
-
-    if (!loudness_bass_boost_allows_contour()) {
-        loudness_publish_equalizer_telemetry(LOUDNESS_REF_PHON);
-        loudness_select_equalizer_step(LOUDNESS_REF_PHON);
-        return;
-    }
-
-    db_spl_x10 = loudness_calculate_db_spl_x10();
-    db_spl = (db_spl_x10 + 5) / 10;
-
-#ifdef FREERTOS_USED
-    target_db_spl = (int16_t)db_spl;
-#endif
-
-    loudness_publish_equalizer_telemetry(db_spl);
-    if (loudness_db_spl_step_changed(db_spl_x10, db_spl)) {
-        loudness_select_equalizer_step(db_spl);
-    }
+    loudness_update_filter_mode();
 }
 
 void loudness_bass_boost_set(Bool enabled)
 {
-    Bool was_enabled = loudness_bass_boost_enabled;
-
     loudness_bass_boost_enabled = enabled;
-    if (!enabled) {
-        loudness_select_equalizer_step(LOUDNESS_REF_PHON);
-    } else if (!was_enabled) {
-        loudness_update_active_equalizer_step();
+    if (loudness_rtos_is_ready()) {
+#ifdef FREERTOS_USED
+        loudness_request_volume_apply();
+#endif
+        return;
     }
+    loudness_update_filter_mode();
 }
 
 Bool loudness_bass_boost_is_enabled(void)
@@ -609,7 +652,13 @@ void loudness_filter_init(void) {
 
     loudness_fast_reset_states();
 
-    loudness_select_equalizer_step(LOUDNESS_DB_SPL_MAX);
+    if (!loudness_bass_boost_allows_contour()) {
+        loudness_update_filter_mode();
+    } else {
+        loudness_set_volume_in_biquad(TRUE);
+        loudness_external_volume_active = FALSE;
+        loudness_select_equalizer_step(LOUDNESS_DB_SPL_MAX);
+    }
     if (current_freq.frequency != 0) {
         loudness_change_frequency(current_freq.frequency);
     }
