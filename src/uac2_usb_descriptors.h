@@ -217,7 +217,8 @@
 // AC interface descriptor Audio specific
 #define AUDIO_CLASS_REVISION_2          0x0200
 #define MIC_CATEGORY					AUDIO_FUNCTION_SUBCLASS_MICROPHONE
-#define HEADSET_CATEGORY 				AUDIO_FUNCTION_SUBCLASS_IO_BOX // Was: AUDIO_FUNCTION_SUBCLASS_HEADSET // Was hard-coded 0x04
+#define SPEAKER_CATEGORY				AUDIO_FUNCTION_SUBCLASS_DESKTOP_SPEAKER
+#define HEADSET_CATEGORY 				AUDIO_FUNCTION_SUBCLASS_IO_BOX // Legacy; use SPEAKER_CATEGORY for Windows Bass Boost
 #define MIC_LATENCY_CONTROL				0b00000000
 
 // Clock Source descriptor - not used
@@ -276,14 +277,17 @@
 #ifdef FEATURE_VOLUME_CTRL				// Only if volume control is compiled in do we expose it in the feature unit
 #define SPK_FEATURE_UNIT_ID          	0x14	// Was 0x12
 #define SPK_FEATURE_UNIT_SOURCE_ID   	SPK_INPUT_TERMINAL_ID
-#define SPK_BMA_CONTROLS           	0x00000003 	// Mute master channel. [Readable and writable ?]
-#define SPK_BMA_CONTROLS_CH_1		0x0000000C	// Volume control L
-#define SPK_BMA_CONTROLS_CH_2		0x0000000C	// Volume control R
+#define SPK_BMA_CONTROLS_MUTE			0x00000003u	/* Bit 0-1: Mute (R/W) */
+#define SPK_BMA_CONTROLS_VOLUME			0x0000000Cu	/* Bit 2-3: Volume (R/W) */
+#define SPK_BMA_CONTROLS_BASS_BOOST		0x00030000u   /* Bits 20-21 for Bass Boost R/W i UAC2 */
+#define SPK_BMA_CONTROLS				(SPK_BMA_CONTROLS_MUTE | SPK_BMA_CONTROLS_BASS_BOOST)
+#define SPK_BMA_CONTROLS_CH_1			(SPK_BMA_CONTROLS_VOLUME)
+#define SPK_BMA_CONTROLS_CH_2			(SPK_BMA_CONTROLS_VOLUME)
 #endif
 
 // SPK Output Terminal descriptor
 #define SPK_OUTPUT_TERMINAL_ID			0x13
-#define SPK_OUTPUT_TERMINAL_TYPE		AUDIO_TE_TYPE_EXTERNAL_LINE_CONNECTOR // AUDIO_TE_TYPE_OUTPUT_SPEAKER // Speakers. Was: 0x0603 // Analog line out. Was: 0x0602	// 0x0302 for Headphones. Alternatively, 0x0602, "Digital Audio Interface" }Headphones or AUDIO_TE_TYPE_EXTERNAL_DIGITAL_AUDIO_INTERFACE
+#define SPK_OUTPUT_TERMINAL_TYPE		AUDIO_TE_TYPE_OUTPUT_SPEAKER
 #define SPK_OUTPUT_TERMINAL_ASSOCIATION	0x00   	// No association
 #ifdef FEATURE_VOLUME_CTRL				// Only if volume control is compiled in do we expose it in the feature unit
 	#define SPK_OUTPUT_TERMINAL_SOURCE_ID	SPK_FEATURE_UNIT_ID

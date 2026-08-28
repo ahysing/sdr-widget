@@ -559,6 +559,55 @@ void test_loudness_equalizer_step_hysteresis_79_80(void) {
     printf("test_loudness_equalizer_step_hysteresis_79_80 passed\n\n");
 }
 
+void test_loudness_bass_boost_default_enabled(void) {
+    printf("Running test_loudness_bass_boost_default_enabled...\n");
+    loudness_init();
+    assert(loudness_bass_boost_is_enabled() == TRUE);
+    printf("test_loudness_bass_boost_default_enabled passed\n\n");
+}
+
+void test_loudness_bass_boost_mirror_and_gate(void) {
+    printf("Running test_loudness_bass_boost_mirror_and_gate...\n");
+    loudness_init();
+    loudness_set_source_has_volume_control();
+
+    loudness_bass_boost_set(FALSE);
+    assert(loudness_bass_boost_is_enabled() == FALSE);
+
+    loudness_usb_volume_changed(-20 * 256);
+    loudness_update_active_equalizer_step();
+    assert(loudness_get_last_db_spl() == LOUDNESS_REF_PHON);
+    assert(loudness_test_get_equalizer_step(loudness_get_last_db_spl()) == LOUDNESS_NEUTRAL_STEP);
+
+    loudness_bass_boost_set(TRUE);
+    assert(loudness_bass_boost_is_enabled() == TRUE);
+    loudness_usb_volume_changed(-20 * 256);
+    loudness_update_active_equalizer_step();
+    assert(loudness_test_get_equalizer_step(loudness_get_last_db_spl()) < LOUDNESS_NEUTRAL_STEP);
+
+    loudness_bass_boost_set(TRUE);
+    printf("test_loudness_bass_boost_mirror_and_gate passed\n\n");
+}
+
+void test_loudness_bass_boost_facade_ignores_filter_activity(void) {
+    printf("Running test_loudness_bass_boost_facade_ignores_filter_activity...\n");
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    loudness_bass_boost_set(TRUE);
+
+    loudness_usb_volume_changed(0);
+    loudness_update_active_equalizer_step();
+    assert(loudness_test_get_equalizer_step(loudness_get_last_db_spl()) == LOUDNESS_NEUTRAL_STEP);
+    assert(loudness_fast_is_unity_step() == TRUE);
+    assert(loudness_bass_boost_is_enabled() == TRUE);
+
+    loudness_bass_boost_set(FALSE);
+    assert(loudness_bass_boost_is_enabled() == FALSE);
+
+    loudness_bass_boost_set(TRUE);
+    printf("test_loudness_bass_boost_facade_ignores_filter_activity passed\n\n");
+}
+
 #define SINE_TEST_SAMPLE_COUNT   48000
 #define SINE_TEST_SETTLE_SAMPLES 2000
 #define SINE_TEST_AMPLITUDE      2097152
@@ -1268,6 +1317,9 @@ int main() {
     test_loudness_get_equalizer_step_14_levels();
     test_loudness_80_phon_unity_filter();
     test_loudness_equalizer_step_hysteresis_79_80();
+    test_loudness_bass_boost_default_enabled();
+    test_loudness_bass_boost_mirror_and_gate();
+    test_loudness_bass_boost_facade_ignores_filter_activity();
     printf("\nAll tests completed!\n");
     return 0;
 }
