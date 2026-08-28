@@ -44,8 +44,8 @@ USB_STATS_HID_REPORT_ID = 1
 USB_STATS_HID_TRANSFER_SIZE = 64
 USB_STATS_PACKET_HID_ANCHOR = 0x53
 USB_STATS_PACKET_MAGIC = USB_STATS_PACKET_HID_ANCHOR  # backward-compatible alias
-USB_STATS_PACKET_VERSION = 1
-USB_STATS_PACKET_FORMAT = "<BBBBIIHHHIHbbIBBBBBB"
+USB_STATS_PACKET_VERSION = 2
+USB_STATS_PACKET_FORMAT = "<BBBBIIHHHIHbbbbIBBBBBBB"
 USB_STATS_PACKET_SIZE = struct.calcsize(USB_STATS_PACKET_FORMAT)
 USB_STATS_PACKET_CHECKSUM_INDEX = 3
 USB_STATS_HID_REPORT_SIZE = 63
@@ -345,6 +345,10 @@ def is_plausible_stats_packet(stats):
         return False
     if stats["overruns"] > 1000000 or stats["underruns"] > 1000000:
         return False
+    if stats["equalizer_step_left"] >= LOUDNESS_NUM_EQUALIZER_STEPS:
+        return False
+    if stats["equalizer_step_right"] >= LOUDNESS_NUM_EQUALIZER_STEPS:
+        return False
 
     if fifo_period_was_idle(stats):
         if stats["max_fifo"] != 0 or stats["fifo_level"] != 0:
@@ -399,14 +403,17 @@ def parse_stats_payload(payload):
         min_fifo,
         deadline_misses,
         frequency_100hz,
-        gain_dbfs,
-        db_spl,
+        gain_dbfs_left,
+        gain_dbfs_right,
+        db_spl_left,
+        db_spl_right,
         event_count,
         last_tag,
         last_arg0,
         last_arg1,
         last_arg2,
-        equalizer_step,
+        equalizer_step_left,
+        equalizer_step_right,
         source_has_volume_control,
     ) = fields
 
@@ -425,11 +432,14 @@ def parse_stats_payload(payload):
         "min_fifo": min_fifo,
         "deadline_misses": deadline_misses,
         "frequency_hz": frequency_hz,
-        "gain_dbfs": gain_dbfs,
-        "db_spl": db_spl,
+        "gain_dbfs_left": gain_dbfs_left,
+        "gain_dbfs_right": gain_dbfs_right,
+        "db_spl_left": db_spl_left,
+        "db_spl_right": db_spl_right,
         "event_count": event_count,
         "last_tag": last_tag,
-        "equalizer_step": equalizer_step,
+        "equalizer_step_left": equalizer_step_left,
+        "equalizer_step_right": equalizer_step_right,
         "source_has_volume_control": 1 if source_has_volume_control else 0,
         "last_event": decode_last_event(last_tag, last_arg0, last_arg1, last_arg2),
     }
@@ -457,12 +467,20 @@ def format_stats_deltas(prev_stats, stats):
         f"d_deadline={delta('deadline_misses'):+d}",
         f"d_overrun={delta('overruns'):+d}",
         f"d_underrun={delta('underruns'):+d}",
-        f"gain={stats['gain_dbfs']}dB",
-        f"step={stats['equalizer_step']}",
+        f"gain_L={stats['gain_dbfs_left']}dB",
+        f"gain_R={stats['gain_dbfs_right']}dB",
+        f"step_L={stats['equalizer_step_left']}",
+        f"step_R={stats['equalizer_step_right']}",
     ]
-    if stats["equalizer_step"] != prev_stats["equalizer_step"]:
+    if stats["equalizer_step_left"] != prev_stats["equalizer_step_left"]:
         parts.append(
-            f"STEP_CHANGE {prev_stats['equalizer_step']}->{stats['equalizer_step']}"
+            "STEP_L_CHANGE "
+            f"{prev_stats['equalizer_step_left']}->{stats['equalizer_step_left']}"
+        )
+    if stats["equalizer_step_right"] != prev_stats["equalizer_step_right"]:
+        parts.append(
+            "STEP_R_CHANGE "
+            f"{prev_stats['equalizer_step_right']}->{stats['equalizer_step_right']}"
         )
     tag = stats["last_tag"]
     if tag == USB_STATS_TAG_SKIP:

@@ -107,15 +107,18 @@ static void statistics_build_wire_packet(U8 *wire, const volatile usb_stats_t *s
     statistics_write_le16(&wire[16], s->min_fifo);
     statistics_write_le32(&wire[18], s->deadline_misses);
     statistics_write_le16(&wire[22], telemetry->frequency_100hz);
-    wire[24] = (U8)telemetry->gain_dbfs;
-    wire[25] = (U8)telemetry->db_spl;
-    statistics_write_le32(&wire[26], s->event_count);
-    wire[30] = s->last_tag;
-    wire[31] = s->last_arg0;
-    wire[32] = s->last_arg1;
-    wire[33] = s->last_arg2;
-    wire[34] = telemetry->equalizer_step;
-    wire[35] = telemetry->source_has_volume_control ? 1u : 0u;
+    wire[24] = (U8)telemetry->gain_dbfs_left;
+    wire[25] = (U8)telemetry->gain_dbfs_right;
+    wire[26] = (U8)telemetry->db_spl_left;
+    wire[27] = (U8)telemetry->db_spl_right;
+    statistics_write_le32(&wire[28], s->event_count);
+    wire[32] = s->last_tag;
+    wire[33] = s->last_arg0;
+    wire[34] = s->last_arg1;
+    wire[35] = s->last_arg2;
+    wire[36] = telemetry->equalizer_step_left;
+    wire[37] = telemetry->equalizer_step_right;
+    wire[38] = telemetry->source_has_volume_control ? 1u : 0u;
     wire[3] = statistics_wire_checksum(wire);
 }
 

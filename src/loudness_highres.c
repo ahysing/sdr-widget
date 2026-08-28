@@ -92,7 +92,7 @@ const biquad_quotients_fast_t *loudness_highres_halfrate_quotients(
     return NULL;
 }
 
-void loudness_highres_staging_fill_halfrate(
+void loudness_highres_staging_fill_halfrate_independent(
     const biquad_quotients_fast_t *halfrate_src_left,
     const biquad_quotients_fast_t *halfrate_src_right,
     const biquad_runtime_fast_t *main_runtime)
@@ -107,6 +107,18 @@ void loudness_highres_staging_fill_halfrate(
         } else {
             staging_hires_halfrate_runtime[channel] = main_runtime[channel];
         }
+    }
+}
+
+void loudness_highres_staging_fill_halfrate_shared(
+    const biquad_quotients_fast_t *halfrate_src,
+    const biquad_runtime_fast_t *main_runtime)
+{
+    if (halfrate_src != NULL) {
+        loudness_highres_runtime_from_quotients(halfrate_src,
+            &staging_hires_halfrate_runtime[0]);
+    } else {
+        staging_hires_halfrate_runtime[0] = main_runtime[0];
     }
 }
 
@@ -135,11 +147,14 @@ Bool loudness_highres_channel_is_idle(int channel)
  * At 88.2/96 kHz (stride 2) and 176.4/192 kHz (stride 4), run one biquad per
  * channel with delta-interpolated output between anchor samples.
  */
-void loudness_highres_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R,
-    biquad_state_fast_t *stL, biquad_state_fast_t *stR, U16 num_samples)
+static void loudness_highres_filter_16bit_stereo_packet_with_runtime(
+    S32 *sample_L, S32 *sample_R,
+    biquad_state_fast_t *stL, biquad_state_fast_t *stR,
+    const biquad_runtime_fast_t *runtime_left,
+    const biquad_runtime_fast_t *runtime_right, U16 num_samples)
 {
-    const biquad_runtime_fast_t *runtime = loudness_highres_active_runtime();
     loudness_fast_biquad1_step_runtime_stride_fn step = loudness_fast_biquad1_stride_step;
+    Bool idle_L = loudness_channel_filter_idle_cached(0);
     int i;
     for (i = 0; i < num_samples; i++) {
         int32_t xL = loudness_highres_s16_to_24bit(sample_L[i]);
@@ -147,20 +162,43 @@ void loudness_highres_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R,
         int32_t yL;
         int32_t yR;
 
-        if (sample_L[i] == 0 && loudness_channel_filter_is_idle(0)) {
+        if (sample_L[i] == 0 && idle_L) {
             yL = 0;
         } else {
-            yL = step(xL, stL, &loudness_highres_ch[0], &runtime[0]);
+            yL = step(xL, stL, &loudness_highres_ch[0], runtime_left);
+            idle_L = loudness_channel_biquad_is_idle(0)
+                && loudness_highres_channel_is_idle(0);
         }
+        /*
+        TODO: Uncomment this when performance is acceptable
         if (sample_R[i] == 0 && loudness_channel_filter_is_idle(1)) {
             yR = 0;
         } else {
-            yR = step(xR, stR, &loudness_highres_ch[1], &runtime[1]);
+            yR = step(xR, stR, &loudness_highres_ch[1], runtime_right);
         }
-
+        */
+        yR = yL;
         sample_L[i] = loudness_highres_y24_to_container(yL);
         sample_R[i] = loudness_highres_y24_to_container(yR);
     }
+}
+
+void loudness_highres_filter_16bit_stereo_packet_independent(
+    S32 *sample_L, S32 *sample_R,
+    biquad_state_fast_t *stL, biquad_state_fast_t *stR, U16 num_samples)
+{
+    const biquad_runtime_fast_t *runtime = loudness_highres_active_runtime();
+    loudness_highres_filter_16bit_stereo_packet_with_runtime(
+        sample_L, sample_R, stL, stR, &runtime[0], &runtime[1], num_samples);
+}
+
+void loudness_highres_filter_16bit_stereo_packet_shared(
+    S32 *sample_L, S32 *sample_R,
+    biquad_state_fast_t *stL, biquad_state_fast_t *stR, U16 num_samples)
+{
+    const biquad_runtime_fast_t *runtime = loudness_highres_active_runtime();
+    loudness_highres_filter_16bit_stereo_packet_with_runtime(
+        sample_L, sample_R, stL, stR, &runtime[0], &runtime[0], num_samples);
 }
 
 #ifdef BUILD_TESTING

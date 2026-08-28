@@ -17,7 +17,7 @@ With host gain at 0 dBFS and track clamped to -18, the blend in [`loudness_calcu
 `track_dbfs` and `db_spl` are written only inside:
 
 ```c
-if (db_spl != (int32_t)last_db_spl) {
+if (db_spl_x10 != (int32_t)last_db_spl_x10) {
     loudness_select_equalizer_step(...);
     statistics_with_active_buffer(loudness_record_stats_snapshots, ...);
 }
@@ -62,7 +62,7 @@ In [`loudness_update_active_equalizer_step()`](../src/loudness.c) (~20 ms loudne
 1. Compute `db_spl` as today.
 2. Read `gain_dbfs = loudness_get_gain_dbfs()` (cheap: volume register math, no sqrt).
 3. Snapshot when **either** condition is true:
-   - `db_spl != last_db_spl` (existing)
+   - `db_spl_x10 != last_db_spl_x10`
    - `gain_dbfs != last_snapshot_gain_dbfs` (new static in `loudness.c`)
 
 On snapshot, write all three loudness fields in [`loudness_record_stats_snapshots()`](../src/loudness.c):

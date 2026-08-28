@@ -5,20 +5,20 @@ Firmware exposes a 1 Hz statistics stream over a vendor HID interface (`usage_pa
 ## Transport
 
 - **Report ID:** `1`
-- **HID transfer size:** 64 bytes (38-byte wire payload + zero padding to 63 bytes after report ID)
+- **HID transfer size:** 64 bytes (39-byte wire payload + zero padding to 63 bytes after report ID)
 - **Rate:** one report per second (`statistics_task`, FreeRTOS priority `tskIDLE_PRIORITY + 2`)
 - **HID send wait:** up to 50 ms per report for EP6 IN ready; counters are preserved and retried on the next tick if send fails
 - **Endianness:** little-endian for multi-byte fields
 - **Checksum:** byte index 3 is XOR of all other wire bytes
 
-## Wire layout (version 3, 38 bytes)
+## Wire layout (version 2, 39 bytes)
 
 | Offset | Field | Type | Semantics |
 |--------|-------|------|-----------|
 | 0 | `hid_anchor` | U8 | `0x53` — locates stats payload inside the 64-byte HID report |
-| 1 | `version` | U8 | `3` |
+| 1 | `version` | U8 | `2` |
 | 2 | `report_seq` | U8 | Monotonic sequence (advanced only after successful HID IN) |
-| 3 | `checksum` | U8 | XOR of bytes 0–37 except this byte |
+| 3 | `checksum` | U8 | XOR of bytes 0–38 except this byte |
 | 4–7 | `overruns` | U32 LE | FIFO gap ≥ 2× buffer size (per period) |
 | 8–11 | `underruns` | U32 LE | FIFO gap == 0 (per period) |
 | 12–13 | `fifo_level` | U16 LE | Last sampled gap at end of period |
@@ -26,17 +26,20 @@ Firmware exposes a 1 Hz statistics stream over a vendor HID interface (`usage_pa
 | 16–17 | `min_fifo` | U16 LE | Minimum gap; `0xFFFF` = idle sentinel |
 | 18–21 | `deadline_misses` | U32 LE | Audio-task scheduler slips > 10 ms |
 | 22–23 | `frequency_100hz` | U16 LE | USB sample rate divided by 100; Python exposes `frequency_hz` |
-| 24 | `gain_dbfs` | S8 | Host volume dBFS from USB SET_CUR; telemetry |
-| 25 | `db_spl` | S8 | Listening level (dB SPL); telemetry |
-| 26–29 | `event_count` | U32 LE | Tagged events in this 1 s period |
-| 30 | `last_tag` | U8 | Tag of the most recent event |
-| 31 | `last_arg0` | U8 | Tag-specific payload |
-| 32 | `last_arg1` | U8 | Tag-specific payload |
-| 33 | `last_arg2` | U8 | Tag-specific payload |
-| 34 | `equalizer_step` | U8 | Active loudness equalizer step (0–13); telemetry |
-| 35 | `source_has_volume_control` | U8 | `1` when USB SET_CUR host volume is authoritative; `0` when PCM-inferred gain is used |
+| 24 | `gain_dbfs_left` | S8 | Effective left-channel gain |
+| 25 | `gain_dbfs_right` | S8 | Effective right-channel gain |
+| 26 | `db_spl_left` | S8 | Left listening level (dB SPL) |
+| 27 | `db_spl_right` | S8 | Right listening level (dB SPL) |
+| 28–31 | `event_count` | U32 LE | Tagged events in this 1 s period |
+| 32 | `last_tag` | U8 | Tag of the most recent event |
+| 33 | `last_arg0` | U8 | Tag-specific payload |
+| 34 | `last_arg1` | U8 | Tag-specific payload |
+| 35 | `last_arg2` | U8 | Tag-specific payload |
+| 36 | `equalizer_step_left` | U8 | Left active loudness row (0–120) |
+| 37 | `equalizer_step_right` | U8 | Right active loudness row (0–120) |
+| 38 | `source_has_volume_control` | U8 | `1` when USB SET_CUR host volume is authoritative; `0` when PCM-inferred gain is used |
 
-Python struct format: `"<BBBBIIHHHIHbbbbIBBBBBB"`
+Python struct format: `"<BBBBIIHHHIHbbbbIBBBBBBB"`
 
 See [LOUDNESS.md](LOUDNESS.md) for how loudness fields relate to the equalizer.
 
@@ -50,8 +53,8 @@ Slow telemetry fields live in `stats_telemetry` and are merged into the wire pac
 |-------|--------|----------|---------------------|
 | Period counters | `overruns`, `underruns`, FIFO fields, `deadline_misses`, `event_count` | Audio task / events | Yes, **only after successful HID IN** (`min_fifo` → `0xFFFF`) |
 | Telemetry | `frequency_100hz` | USB sample-rate apply | No |
-| Telemetry | `gain_dbfs`, `source_has_volume_control` | USB SET_CUR volume handler (immediate) | No |
-| Telemetry | `db_spl`, `equalizer_step` | Loudness equalizer selection | No |
+| Telemetry | `gain_dbfs_left/right`, `source_has_volume_control` | USB SET_CUR volume handler (immediate) | No |
+| Telemetry | `db_spl_left/right`, `equalizer_step_left/right` | Loudness equalizer selection | No |
 | Last event | `last_tag`, `last_arg0..2` | `audio_stats_record_event()` | Yes → `NONE` / 0 |
 
 USBB FIFO access for HID IN and audio endpoints is serialized with `usb_fifo_hw_lock` (global interrupt disable) so stats and audio tasks cannot interleave `Usb_reset_endpoint_fifo_access`.

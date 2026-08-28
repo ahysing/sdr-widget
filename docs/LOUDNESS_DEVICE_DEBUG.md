@@ -23,20 +23,21 @@ python usbstatistics/usbstatistics.py --verbose --deltas
 ```
 
 4. Sweep Windows volume from 0 to -60 dB in 0.5 dB increments where practical.
-5. Check that `equalizer_step` moves from 120 to 0, audio level changes once
+5. Check that `equalizer_step_left/right` move from 120 to 0, audio level changes once
    (no double attenuation), and pitch remains stable.
 
 At 44.1/48/88.2/96 kHz, left and right channels may use independent rows. At
-176.4/192 kHz, both channels use the left/master row and should receive equal
-host volume settings.
+176.4/192 kHz, both channels use one row selected from the average host volume.
 
 ## What to monitor
 
 - `skip` / `insert`: direct transport failures.
 - FIFO minimum/maximum: stability around the target fill.
 - `deadline_misses`: useful only together with transport events.
-- `equalizer_step`: the active left/master row, 0..120.
-- `gain_dbfs`: host gain, 0..-60 dB.
+- `equalizer_step_left/right`: active per-channel rows, or the shared averaged
+  row above 96 kHz.
+- `gain_dbfs_left/right`: effective per-channel gains, 0..-60 dB.
+- `db_spl_left/right`: effective per-channel listening levels.
 
 ## Coefficient publication
 
@@ -69,6 +70,6 @@ state independence, and telemetry.
 - Volume is applied exactly once.
 - No identity/unity shortcut symbols remain.
 - Left/right balance works through 96 kHz.
-- 176.4/192 kHz use the shared master row.
+- 176.4/192 kHz use the shared averaged row.
 - No pitch wander, new clipping, or coefficient-transition spikes.
 - Skip/insert counts and FIFO stability are no worse than the transport baseline.
