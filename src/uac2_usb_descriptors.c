@@ -159,7 +159,7 @@ S_usb_user_configuration_descriptor uac2_usb_conf_desc_fs =
     ,  CS_INTERFACE
     ,  HEADER_SUB_TYPE
     ,  Usb_format_mcu_to_usb_data(16, AUDIO_CLASS_REVISION_2)
-    ,  HEADSET_CATEGORY
+    ,  SPEAKER_CATEGORY
     ,  Usb_format_mcu_to_usb_data(16, sizeof(S_usb_ac_interface_descriptor_2)
 			+ /*2* */sizeof(S_usb_clock_source_descriptor)
 #ifdef FEATURE_CLOCK_SELECTOR				// Only if clock selector is compiled in do we expose it in the feature unit
@@ -534,7 +534,7 @@ S_usb_user_configuration_descriptor uac2_usb_conf_desc_hs =
    ,  CS_INTERFACE
    ,  HEADER_SUB_TYPE
    ,  Usb_format_mcu_to_usb_data(16, AUDIO_CLASS_REVISION_2)
-   ,  HEADSET_CATEGORY
+   ,  SPEAKER_CATEGORY
    ,  Usb_format_mcu_to_usb_data(16, sizeof(S_usb_ac_interface_descriptor_2)
    		+ /*2* */sizeof(S_usb_clock_source_descriptor)
 #ifdef FEATURE_CLOCK_SELECTOR				// Only if clock selector is compiled in do we expose it in the feature unit
