@@ -562,6 +562,9 @@ void loudness_update_active_equalizer_step(void)
 void loudness_bass_boost_set(Bool enabled)
 {
     loudness_bass_boost_enabled = enabled;
+#if !defined(USBSTATISTICS_DISABLE)
+    stats_telemetry_set_bass_boost_enabled(enabled ? 1u : 0u);
+#endif
     if (loudness_rtos_is_ready()) {
 #ifdef FREERTOS_USED
         loudness_request_volume_apply();

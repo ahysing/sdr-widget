@@ -5,6 +5,16 @@
 #ifndef SDR_WIDGET_USB_STATISTICS_DESCRIPTORS_H
 #define SDR_WIDGET_USB_STATISTICS_DESCRIPTORS_H
 
+/*
+ * HID statistics wire payload (report ID 1, little-endian).
+ * Keep usbstatistics/usbstatistics.py in sync.
+ */
+#define USB_STATS_PACKET_HID_ANCHOR              0x53u
+#define USB_STATS_PACKET_VERSION                 3u
+#define USB_STATS_PACKET_WIRE_SIZE               40u
+#define USB_STATS_PACKET_CHECKSUM_OFFSET         3u
+#define USB_STATS_WIRE_OFFSET_BASS_BOOST_ENABLED 39u
+
 #ifndef USBSTATISTICS_DISABLE
 
 #include "usb_task.h"

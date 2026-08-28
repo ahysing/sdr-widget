@@ -92,7 +92,7 @@ PROD_TEST_DEFAULTS=-DFEATURE_BOARD_DEFAULT=feature_board_usbi2s \
 	-DHW_GEN_AB1X \
 	-DFEATURE_PRODUCT_AMB
 
-all:: Release/widget.elf widget-control
+all:: Release/widget.elf widget-control henryctl
 
 Release/widget.elf::
 	rm -f Release/widget.elf Release/src/features.o
@@ -113,7 +113,10 @@ sdr-widget::
 widget-control: widget-control.c src/features.h
 	gcc $(AUDIO_WIDGET_DEFAULTS) -o widget-control widget-control.c -lusb-1.0
 
+henryctl: henryctl.c src/features.h src/widget_control_usb_ids.h
+	gcc $(AUDIO_WIDGET_DEFAULTS) -o henryctl henryctl.c -lusb-1.0
+
 clean::
-	rm -f widget-control widget-control.exe
+	rm -f widget-control widget-control.exe henryctl henryctl.exe
 	cd Release && make clean
-	rm -f widget-control
+	rm -f widget-control henryctl

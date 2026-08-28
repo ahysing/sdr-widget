@@ -62,6 +62,7 @@ AUDIO_WIDGET_DEFAULTS=-DFEATURE_BOARD_DEFAULT=feature_board_usbi2s \
 	-DFEATURE_FILTER_DEFAULT=feature_filter_fir \
 	-DFEATURE_QUIRK_DEFAULT=feature_quirk_none \
 	-DFEATURE_PRODUCT_AB1x \
+	-DFEATURE_CFG_INTERFACE \
 	-DVDD_SENSE \
 	-DUSB_STATE_MACHINE_GPIO \
 	-DFEATURE_VOLUME_CTRL \
@@ -112,11 +113,15 @@ CFLAGS_LOUDNESS_HOT = -O3 -funroll-loops -finline-functions \
 WIDGET_LOUDNESS_FLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS) $(CFLAGS_LOUDNESS_DB_SPL_MAX)
 AUDIO_WIDGET_CFLAGS = $(AUDIO_WIDGET_DEFAULTS) $(WIDGET_LOUDNESS_FLAGS) $(CFLAGS_CONFIGURATION)
 
+# Host tool feature set — must match the firmware you flash (default: Henry Audio / AB-1.x).
+WIDGET_DEFAULTS ?= $(AUDIO_WIDGET_DEFAULTS)
+
 WIDGET_MAKE_ENV = CFLAGS="$(AUDIO_WIDGET_CFLAGS)" \
 	CFLAGS_APP_OPTIMIZATIONS="$(CFLAGS_OPTIMIZATIONS)" \
 	CFLAGS_FREERTOS_OPTIMIZATIONS="$(CFLAGS_FREERTOS_OPTIMIZATIONS)" \
 	LDFLAGS_APP_OPTIMIZATIONS="$(LDFLAGS_APP_OPTIMIZATIONS)" \
 	CFLAGS_LOUDNESS_HOT="$(CFLAGS_LOUDNESS_HOT)"
+
 
 # Choose wisely:
 #   -DFEATURE_PRODUCT_AMB
@@ -156,20 +161,43 @@ WIDGET_MAKE_ENV = CFLAGS="$(AUDIO_WIDGET_CFLAGS)" \
 # ---------------------------------------------------------------------------
 # PC unit test / host tool settings
 # ---------------------------------------------------------------------------
+ifdef MSYSTEM
+  IS_MSYS = 1
+endif
+
 ifeq ($(OS),Windows_NT)
   EXE_EXT = .exe
   VCPKG_DIR ?= C:/Users/AHysing/code/vcpkg
-  VCPKG_INSTALLED = $(VCPKG_DIR)/installed/x64-windows
-  ifeq ($(origin CC),default)
-    CC = cl
+  VCPKG_INSTALLED ?= $(VCPKG_DIR)/installed/x64-windows
+  ifdef IS_MSYS
+    # MSYS2/UCRT64: use MinGW gcc + libusb from pacman, not MSVC.
+    CC ?= gcc
+  else
+    ifeq ($(origin CC),default)
+      CC = cl
+    endif
+    CC ?= cl
   endif
-  CC ?= cl
   USE_MSVC = $(findstring cl,$(CC))
 else
   EXE_EXT =
   CC ?= gcc
   USE_MSVC =
 endif
+
+# libusb include root: must contain libusb-1.0/libusb.h
+ifneq ($(USE_MSVC),)
+  LIBUSB_INCLUDE ?= $(VCPKG_INSTALLED)/include
+  LIBUSB_LIBDIR ?= $(VCPKG_INSTALLED)/lib
+else ifdef IS_MSYS
+  MSYS_TOOLCHAIN_ROOT := $(shell dirname $$(dirname $$(which $(CC) 2>/dev/null)))
+  LIBUSB_INCLUDE ?= $(MSYS_TOOLCHAIN_ROOT)/include
+  LIBUSB_LIBDIR ?= $(MSYS_TOOLCHAIN_ROOT)/lib
+else
+  LIBUSB_INCLUDE ?= /usr/include
+  LIBUSB_LIBDIR ?= /usr/lib
+endif
+LIBUSB_HEADER = $(LIBUSB_INCLUDE)/libusb-1.0/libusb.h
 
 CFLAGS_TEST = -DBUILD_TESTING
 TEST_BUILD_DIR = Release/tests/pc
@@ -182,10 +210,6 @@ else
 endif
 
 TEST_CFLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS) $(CFLAGS_LOUDNESS_DB_SPL_MAX)
-
-ifdef MSYSTEM
-  IS_MSYS = 1
-endif
 
 ifeq ($(OS),Windows_NT)
 ifndef IS_MSYS
@@ -203,13 +227,13 @@ endif
 ifneq ($(USE_MSVC),)
   OUT_FLAG = /Fe:
   OBJ_DIR_FLAG = /Fo$(TEST_BUILD_DIR)/
-  LINK_USB = /link /LIBPATH:"$(VCPKG_INSTALLED)/lib" libusb-1.0.lib
-  CFLAGS_COMMON = /nologo /I. /Isrc /Isrc/CONFIG /I"$(VCPKG_INSTALLED)/include" $(TEST_CFLAGS)
+  LINK_USB = /link /LIBPATH:"$(LIBUSB_LIBDIR)" libusb-1.0.lib
+  CFLAGS_COMMON = /nologo /I. /Isrc /Isrc/CONFIG /I"$(LIBUSB_INCLUDE)" $(TEST_CFLAGS)
 else
   OUT_FLAG = -o 
   OBJ_DIR_FLAG =
-  LINK_USB = -L$(VCPKG_INSTALLED)/lib -lusb-1.0
-  CFLAGS_COMMON = -I. -Isrc -I$(VCPKG_INSTALLED)/include $(TEST_CFLAGS)
+  LINK_USB = -L$(LIBUSB_LIBDIR) -lusb-1.0
+  CFLAGS_COMMON = -I. -Isrc -I$(LIBUSB_INCLUDE) $(TEST_CFLAGS)
 endif
 
 ifeq ($(OS),Windows_NT)
@@ -224,10 +248,11 @@ ifdef IS_MSYS
   WIN_CURDIR = $(shell cygpath -m '$(CURDIR)')
 endif
 
-.PHONY: all test run-test clean clean-test help \
-	audio-widget sdr-widget build-audio-widget build-sdr-widget test-avr32
+.PHONY: all test run-test clean clean-test help check-libusb \
+	audio-widget sdr-widget build-audio-widget build-sdr-widget test-avr32 \
+	widget-control henryctl
 
-all:: Release/widget.elf widget-control$(EXE_EXT)
+all:: Release/widget.elf widget-control$(EXE_EXT) henryctl$(EXE_EXT)
 
 Release/widget.elf::
 	@echo $(CONFIGURATION_MSG)
@@ -243,11 +268,35 @@ audio-widget::
 #	rm -f Release/widget.elf Release/src/features.o
 #	CFLAGS="$(SDR_WIDGET_DEFAULTS)" ./make-widget
 
-widget-control$(EXE_EXT): widget-control.c src/features.h
-	$(CC) $(CFLAGS_COMMON) $(OUT_FLAG)$@ widget-control.c $(LINK_USB)
+widget-control: widget-control$(EXE_EXT)
+
+henryctl: henryctl$(EXE_EXT)
+
+check-libusb:
+ifeq ($(wildcard $(LIBUSB_HEADER)),)
+	@echo "libusb headers not found at $(LIBUSB_HEADER)"
+ifdef IS_MSYS
+	@echo "MSYS2: install libusb, then rebuild:"
+	@echo "  pacman -S --needed mingw-w64-ucrt-x86_64-libusb make"
+	@echo "  make widget-control"
+else ifdef USE_MSVC
+	@echo "MSVC: install libusb via vcpkg, then rebuild:"
+	@echo "  vcpkg install libusb:x64-windows"
+	@echo "  make widget-control VCPKG_DIR=<path-to-vcpkg>"
+else
+	@echo "Install libusb development package for your platform."
+endif
+	@exit 1
+endif
+
+widget-control$(EXE_EXT): widget-control.c src/features.h | check-libusb
+	$(CC) $(WIDGET_DEFAULTS) $(CFLAGS_COMMON) $(OUT_FLAG)$@ widget-control.c $(LINK_USB)
+
+henryctl$(EXE_EXT): henryctl.c src/features.h src/widget_control_usb_ids.h | check-libusb
+	$(CC) $(WIDGET_DEFAULTS) $(CFLAGS_COMMON) $(OUT_FLAG)$@ henryctl.c $(LINK_USB)
 
 clean:: clean-test
-	rm -f widget-control widget-control.exe
+	rm -f widget-control widget-control.exe henryctl henryctl.exe
 	cd Release && make clean
 
 clean-test:
@@ -327,7 +376,7 @@ tests/avr32/loudness_fast_avr32.o: src/loudness_fast.c
 help:
 	@echo "Firmware targets:"
 	@echo "  make audio-widget              Build Release/widget.elf (AB1x defaults)"
-	@echo "  make all                       widget.elf + widget-control.exe"
+	@echo "  make all                       widget.elf + widget-control.exe + henryctl.exe"
 	@echo "  make clean                     Remove firmware and test build artifacts"
 	@echo ""
 	@echo "Loudness / statistics options (all features enabled by default):"
@@ -343,6 +392,14 @@ help:
 	@echo "  make audio-widget USBSTATISTICS_DISABLE=1"
 	@echo "  make test LOUDNESS_DISABLE=1"
 	@echo "  make test USBSTATISTICS_DISABLE=1"
+	@echo ""
+	@echo "Host tool widget-control:"
+	@echo "  make widget-control            Build widget-control$(EXE_EXT) (SDR-Widget features API)"
+	@echo "  make henryctl                  Build henryctl$(EXE_EXT) (bass boost / loudness gate)"
+	@echo "  MSYS2/UCRT64: pacman -S mingw-w64-ucrt-x86_64-libusb make"
+	@echo "  MSVC:         vcpkg install libusb:x64-windows, run vcvars64, then make"
+	@echo "  Override:     make henryctl VCPKG_DIR=C:/path/to/vcpkg"
+	@echo "  Other board:  make henryctl WIDGET_DEFAULTS=\"\$$(SDR_WIDGET_DEFAULTS)\""
 	@echo ""
 	@echo "PC unit tests (MSVC on Windows):"
 	@echo "  make test                      Build and run applicable test suites"

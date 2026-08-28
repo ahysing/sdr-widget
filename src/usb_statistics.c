@@ -119,6 +119,8 @@ static void statistics_build_wire_packet(U8 *wire, const volatile usb_stats_t *s
     wire[36] = telemetry->equalizer_step_left;
     wire[37] = telemetry->equalizer_step_right;
     wire[38] = telemetry->source_has_volume_control ? 1u : 0u;
+    wire[USB_STATS_WIRE_OFFSET_BASS_BOOST_ENABLED] =
+        telemetry->bass_boost_enabled ? 1u : 0u;
     wire[3] = statistics_wire_checksum(wire);
 }
 

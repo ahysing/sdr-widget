@@ -130,6 +130,14 @@ void dg8saqFunctionWrite(uint8_t type, uint16_t wValue, uint16_t wIndex, U8 *Buf
 					cdata.SmoothTunePPM = *Buf16;
 					flashc_memset16((void *)&nvram_cdata.SmoothTunePPM, *Buf16, sizeof(uint16_t), TRUE);
 				}
+				break;
+
+#ifndef LOUDNESS_DISABLE
+			case DG8SAQ_SET_BASS_BOOST:
+				if (len >= 1)
+					loudness_bass_boost_set(Buffer[0] != 0);
+				break;
+#endif
 	}
 }
 
@@ -155,6 +163,12 @@ uint8_t dg8saqFunctionSetup(uint8_t type, uint16_t wValue, uint16_t wIndex, U8* 
 	case 0x00:								// Return software version number
 		*Buf16 = (VERSION_MAJOR<<8)|(VERSION_MINOR);
 		return sizeof(uint16_t);
+
+#ifndef LOUDNESS_DISABLE
+	case DG8SAQ_SET_BASS_BOOST:
+		Buffer[0] = loudness_bass_boost_is_enabled() ? 1 : 0;
+		return sizeof(uint8_t);
+#endif
 
 
 	// Todo -- may all go:
