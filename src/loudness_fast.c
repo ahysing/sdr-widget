@@ -507,6 +507,28 @@ void loudness_test_set_fast_channel(int channel,
 
 #endif
 
+void loudness_fast_select_unity_passthrough(void)
+{
+    biquad_quotients_fast_t unity;
+    int i;
+
+    unity.b0 = LOUDNESS_Q29_ONE;
+    unity.b1 = 0;
+    unity.b2 = 0;
+    unity.a1 = 0;
+    unity.a2 = 0;
+
+    for (i = 0; i < LOUDNESS_FILTERS; i++) {
+        staging_quotients[i] = unity;
+        loudness_runtime_from_quotients(&staging_quotients[i], &staging_runtime[i]);
+    }
+    loudness_highres_staging_fill_halfrate(&unity, staging_runtime);
+    taskENTER_CRITICAL();
+    loudness_commit_staging_quotients_fast();
+    taskEXIT_CRITICAL();
+    loudness_fast_committed_step = 0xFFu;
+}
+
 void loudness_fast_select_equalizer_step(int32_t db_spl, int equalizer_step) {
     int32_t prev_db_spl = (int32_t)last_db_spl;
     int prev_step = loudness_get_equalizer_step(prev_db_spl);

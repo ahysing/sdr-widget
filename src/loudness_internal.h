@@ -29,6 +29,7 @@ void loudness_report_equalizer_step_switch(int32_t prev_db_spl, int32_t db_spl,
 void loudness_apply_equalizer_step_if_needed(void);
 
 void loudness_fast_select_equalizer_step(int32_t db_spl, int equalizer_step);
+void loudness_fast_select_unity_passthrough(void);
 void loudness_fast_reset_states(void);
 
 #endif /* LOUDNESS_INTERNAL_H_ */
