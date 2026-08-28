@@ -88,6 +88,19 @@
 #include "device_audio_task.h"
 #include "uac2_device_audio_task.h"
 #include "taskAK5394A.h"
+#include "loudness.h"
+#ifndef USBSTATISTICS_DISABLE
+#include "usb_statistics_descriptors.h"
+#include "usb_stats_hid_report_descriptor.h"
+#include "usb_statistics.h"
+#include "audio_stats_logic.h"
+#include "stats_telemetry.h"
+#endif
+#include "usb_fifo_hw_lock.h"
+#ifdef FREERTOS_USED
+#include "FreeRTOS.h"
+#include "task.h"
+#endif
 
 //_____ M A C R O S ________________________________________________________
 
@@ -97,15 +110,37 @@
 
 //_____ P R I V A T E   D E C L A R A T I O N S ____________________________
 
-
 static U8 wValue_msb;
 static U8 wValue_lsb;
 static U16 wIndex;
 static U16 wLength;
 
+Bool Mic_freq_valid = FALSE;
+S_freq Mic_freq;
+
 extern const void *pbuffer;
 extern U16 data_to_transfer;
 
+#ifdef FREERTOS_USED
+static void uac2_wait_control_out_received(void)
+{
+	while (!Is_usb_control_out_received()) {
+		taskYIELD();
+	}
+}
+
+static void uac2_wait_control_in_ready(void)
+{
+	while (!Is_usb_control_in_ready()) {
+		taskYIELD();
+	}
+}
+#else
+#define uac2_wait_control_out_received() \
+	do { while (!Is_usb_control_out_received()) { } } while (0)
+#define uac2_wait_control_in_ready() \
+	do { while (!Is_usb_control_in_ready()) { } } while (0)
+#endif
 
 // Send a descriptor to the Host, if needed by means of multiple fillings of EP0
 void send_descriptor(U16 wLength, Bool zlp) {
@@ -151,64 +186,79 @@ void send_descriptor(U16 wLength, Bool zlp) {
 // This will cause the ASIO driver to not see the 196ksps definition.
 // To fix -that- search for "triplets" in the ASIO driver code and change the array size from 64 to 128.
 //const U8 Speedx[38] = { // 74
-	
-#ifdef HW_GEN_FMADC				// Hardware is fixed to 96ksps. We could use mobo_srd() and enumerate accordingly, but that messes with the whole USB transmit structure
-	const U8 Speedx_hs[14] = {	// sample rate samplerate descriptor speed_hs speed_fs <- Comments to find this place more easily
-		0x01, 0x00, // Number of sample rate triplets with UAC2 over USB 1.1 (not tested!)
+#ifndef HW_GEN_FMADC
+const U8 Speedx_hs[74] = {
+	0x06, 0x00, // Number of sample rate triplets with UAC2 over USB 2.0
 
-		0x00,0x77,0x01,0x00,	//96k Min
-		0x00,0x77,0x01,0x00,	//96k Max
-		0x00,0x00,0x00,0x00,	// 0 Res
-	};
-	const U8 Speedx_fs[14] = {
-		0x01, 0x00, // Number of sample rate triplets with UAC2 over USB 1.1 (not very well tested!)
+	0x44,0xac,0x00,0x00,	//44.1k Min
+	0x44,0xac,0x00,0x00,	//44.1k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
 
-		0x00,0x77,0x01,0x00,	//96k Min
-		0x00,0x77,0x01,0x00,	//96k Max
-		0x00,0x00,0x00,0x00,	// 0 Res
-	};
-#else // Conventional sample rates for UAC2
-	const U8 Speedx_hs[74] = {
-		0x06, 0x00, // Number of sample rate tripl|ets with UAC2 over USB 2.0
+	0x80,0xbb,0x00,0x00,	//48k Min
+	0x80,0xbb,0x00,0x00,	//48k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
 
-		0x44,0xac,0x00,0x00,	//44.1k Min
-		0x44,0xac,0x00,0x00,	//44.1k Max
-		0x00,0x00,0x00,0x00,	// 0 Res
+	0x88,0x58,0x01,0x00,	//88.2k Min
+	0x88,0x58,0x01,0x00,	//88.2k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
 
-		0x80,0xbb,0x00,0x00,	//48k Min
-		0x80,0xbb,0x00,0x00,	//48k Max
-		0x00,0x00,0x00,0x00,	// 0 Res
+	0x00,0x77,0x01,0x00,	//96k Min
+	0x00,0x77,0x01,0x00,	//96k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
 
-		0x88,0x58,0x01,0x00,	//88.2k Min
-		0x88,0x58,0x01,0x00,	//88.2k Max
-		0x00,0x00,0x00,0x00,	// 0 Res
+	0x10,0xb1,0x02,0x00,	//176.4k Min
+	0x10,0xb1,0x02,0x00,	//176.4k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
 
-		0x00,0x77,0x01,0x00,	//96k Min
-		0x00,0x77,0x01,0x00,	//96k Max
-		0x00,0x00,0x00,0x00,	// 0 Res
+	0x00,0xee,0x02,0x00,	//192k Min
+	0x00,0xee,0x02,0x00,	//192k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
+};
 
-		0x10,0xb1,0x02,0x00,	//176.4k Min
-		0x10,0xb1,0x02,0x00,	//176.4k Max
-		0x00,0x00,0x00,0x00,	// 0 Res
+const U8 Speedx_fs[26] = {
+	0x02, 0x00, // Number of sample rate triplets with UAC2 over USB 1.1
 
-		0x00,0xee,0x02,0x00,	//192k Min
-		0x00,0xee,0x02,0x00,	//192k Max
-		0x00,0x00,0x00,0x00,	// 0 Res
-	};
+	0x44,0xac,0x00,0x00,	//44.1k Min
+	0x44,0xac,0x00,0x00,	//44.1k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
 
-	const U8 Speedx_fs[26] = {
-		0x02, 0x00, // Number of sample rate triplets with UAC2 over USB 1.1 (not very well tested!)
+	0x80,0xbb,0x00,0x00,	//48k Min
+	0x80,0xbb,0x00,0x00,	//48k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
+};
+#else
+const U8 Speedx_hs[14] = {
+	0x01, 0x00,
 
-		0x44,0xac,0x00,0x00,	//44.1k Min
-		0x44,0xac,0x00,0x00,	//44.1k Max
-		0x00,0x00,0x00,0x00,	// 0 Res
+	0x00,0x77,0x01,0x00,	//96k Min
+	0x00,0x77,0x01,0x00,	//96k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
+};
 
-		0x80,0xbb,0x00,0x00,	//48k Min
-		0x80,0xbb,0x00,0x00,	//48k Max
-		0x00,0x00,0x00,0x00,	// 0 Res
-	};
-#endif // End of sample rate definitions for UAC2
+const U8 Speedx_fs[14] = {
+	0x01, 0x00,
 
+	0x00,0x77,0x01,0x00,	//96k Min
+	0x00,0x77,0x01,0x00,	//96k Max
+	0x00,0x00,0x00,0x00,	// 0 Res
+};
+#endif
+
+static Bool uac2_sample_rate_is_supported(U32 frequency)
+{
+	return (frequency == FREQ_44) || (frequency == FREQ_48) ||
+	       (frequency == FREQ_88) || (frequency == FREQ_96) ||
+	       (frequency == FREQ_176) || (frequency == FREQ_192);
+}
+
+static void uac2_reject_unsupported_sample_rate(void)
+{
+	spk_current_freq.frequency = FREQ_48;
+	spk_current_freq.freq_bytes[3] = 0x00;
+	spk_current_freq.freq_bytes[2] = 0xbb;
+	spk_current_freq.freq_bytes[1] = 0x80;
+	spk_current_freq.freq_bytes[0] = 0x00;
+}
 
 
 
@@ -229,7 +279,7 @@ const U8 Speedx[38] = {
 	0x00,0xee,0x02,0x00,	//192k Max
 	0xf0,0x3c,0x00,0x00,	//192-176.4 Res
 };
-*/ 
+*/
 
 
 //_____ D E C L A R A T I O N S ____________________________________________
@@ -237,145 +287,251 @@ const U8 Speedx[38] = {
 
 void uac2_freq_change_handler() {
 
-#if ( (defined HW_GEN_SPRX) || (defined HW_GEN_AB1X) )
-	if (input_select == MOBO_SRC_UAC2) { // Only mute if appropriate. Perhaps input has changed to NONE before this can execute
+	if (freq_changed) {
+
+#if (defined HW_GEN_DIN10) || (defined HW_GEN_DIN20)
+		if (input_select == MOBO_SRC_UAC2) { // Only mute if appropriate. Perhaps input has changed to NONE before this can execute
+			spk_mute = TRUE; // mute speaker while changing frequency and oscillator
+		}
+		if ( (input_select == MOBO_SRC_UAC2) || (input_select == MOBO_SRC_NONE) ) {	// Only change I2S settings if appropriate
+			mobo_xo_select(spk_current_freq.frequency, MOBO_SRC_UAC2);	// Give USB the I2S control with proper MCLK
+			mobo_clock_division(spk_current_freq.frequency);	// Re-configure correct USB sample rate
+
+			// Will this work if we go from SPDIF to USB already playing at different sample rate?
+
+		}
+//		if (input_select == MOBO_SRC_UAC2) {	// Only change I2S settings if appropriate
+//			mobo_led_select(spk_current_freq.frequency, MOBO_SRC_UAC2); // GPIO frequency indication on front RGB LED
+//		}
+#else
 		spk_mute = TRUE; // mute speaker while changing frequency and oscillator
-		mobo_clear_dac_channel();
-	}
-	if ( (input_select == MOBO_SRC_UAC2) || (input_select == MOBO_SRC_NONE) ) {	// Only change I2S settings if appropriate
-//		mobo_xo_select(spk_current_freq.frequency, input_select);			// Give USB the I2S control with proper MCLK
-//		mobo_clock_division(spk_current_freq.frequency);	// Re-configure correct USB sample rate
-		samples_per_package_min = (spk_current_freq.frequency >> 12) - (spk_current_freq.frequency >> 14);
-		samples_per_package_max = (spk_current_freq.frequency >> 12) + (spk_current_freq.frequency >> 14);
-		must_init_xo = TRUE;
-//		must_init_spk_index = TRUE;							// New frequency setting means resync DAC DMA
-//		print_dbg_char('V');		
-	}
-#else
-	spk_mute = TRUE; // mute speaker while changing frequency and oscillator
-//	print_dbg_char_char('=');
-	mobo_clear_dac_channel();
+		#ifdef USB_STATE_MACHINE_DEBUG
+			print_dbg_char_char('=');
+		#endif
 
-	samples_per_package_min = (spk_current_freq.frequency >> 12) - (spk_current_freq.frequency >> 14);
-	samples_per_package_max = (spk_current_freq.frequency >> 12) + (spk_current_freq.frequency >> 14);
-	mobo_xo_select(spk_current_freq.frequency, input_select);				// GPIO XO control and frequency indication
-	mobo_clock_division(spk_current_freq.frequency);
-	must_init_spk_index = TRUE;								// New frequency setting means resync DAC DMA
-//	print_dbg_char('W');
+		mobo_xo_select(spk_current_freq.frequency, MOBO_SRC_UAC2); // GPIO XO control and frequency indication
+		mobo_clock_division(spk_current_freq.frequency);
 #endif
 
-	/*
-		poolingFreq = 8000 / (1 << (EP_INTERVAL_2_HS - 1));
-		FB_rate_int = spk_current_freq.frequency / poolingFreq;
-		FB_rate_frac = spk_current_freq.frequency % poolingFreq;
-		FB_rate = (FB_rate_int << 16) | (FB_rate_frac << 4);
-		*/
-	if (spk_current_freq.frequency == FREQ_96) {
-
-#if (defined HW_GEN_SPRX) || (defined HW_GEN_FMADC) // FMADC_site
-			// Avoid when using SSC_RX for SPDIF buffering? 
-#else
-		pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
-		pdca_disable(PDCA_CHANNEL_SSC_RX);
-#endif
+		audio_playback_request_reset();
 
 		/*
-			if (FEATURE_LINUX_QUIRK_ON)
-			FB_rate = (96) << 15;
-			else
-			*/
-
-		//				FB_rate = (96) << 14; // Generic OS, supported by linux OS patch...
-		FB_rate = (99) << 14; // Needed by Linux, linux-quirk replacement, in initial, not in nominal
-		FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
-		FB_rate_nominal = ((96) << 14) + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system
-	}
-
-	else if (spk_current_freq.frequency == FREQ_88) {
-
-#if (defined HW_GEN_SPRX) || (defined HW_GEN_FMADC) // FMADC_site
-		// Avoid when using SSC_RX for SPDIF buffering?
-#else
-		pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
-		pdca_disable(PDCA_CHANNEL_SSC_RX);
+		 poolingFreq = 8000 / (1 << (EP_INTERVAL_2_HS - 1));
+		 FB_rate_int = spk_current_freq.frequency / poolingFreq;
+		 FB_rate_frac = spk_current_freq.frequency % poolingFreq;
+		 FB_rate = (FB_rate_int << 16) | (FB_rate_frac << 4);
+		 */
+		if (spk_current_freq.frequency == FREQ_96) {
+#ifdef USB_STATE_MACHINE_DEBUG
+			print_dbg_char('4'); // BSB debug 20121212
 #endif
 
-		/*
-			if (FEATURE_LINUX_QUIRK_ON)
-			FB_rate = (88 << 15) + (1<<15)/5;
-			else
-			*/
-
-		//				FB_rate = (88 << 14) + (1<<14)/5; // Generic code, supported by linux OS patch
-		FB_rate = (99 << 14); // Needed by Linux, Linux-quirk replacement, in initial, not in nominal
-		FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
-		FB_rate_nominal = ((88 << 14) + (1 << 14) / 5) + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system
-	}
-
-	else if (spk_current_freq.frequency == FREQ_176) {
-
-#if (defined HW_GEN_SPRX) || (defined HW_GEN_FMADC) // FMADC_site
-		// Avoid when using SSC_RX for SPDIF buffering?
+#if (defined HW_GEN_DIN10) || (defined HW_GEN_DIN20)
+			// Avoid when using SSC_RX for SPDIF buffering?
 #else
-		pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
-		pdca_disable(PDCA_CHANNEL_SSC_RX);
+			pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
+			pdca_disable(PDCA_CHANNEL_SSC_RX);
 #endif
 
-		FB_rate = (176 << 14) + ((1 << 14) * 4) / 10;
-		FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
-		FB_rate_nominal = FB_rate + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system;
-	}
+			if (FEATURE_ADC_AK5394A) {
+				gpio_set_gpio_pin(AK5394_DFS0); // L H  -> 96khz
+				gpio_clr_gpio_pin(AK5394_DFS1);
+			}
 
-	else if (spk_current_freq.frequency == FREQ_192) {
+			/*
+			 if (FEATURE_LINUX_QUIRK_ON)
+			 FB_rate = (96) << 15;
+			 else
+			 */
 
-#if (defined HW_GEN_SPRX) || (defined HW_GEN_FMADC) // FMADC_site
-		// Avoid when using SSC_RX for SPDIF buffering?
-#else
-		pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
-		pdca_disable(PDCA_CHANNEL_SSC_RX);
+			//				FB_rate = (96) << 14; // Generic OS, supported by linux OS patch...
+			if (FEATURE_LINUX_QUIRK_ON) {
+				FB_rate = (99) << 14; // Linux quirk: initial overshoot before nominal
+			} else {
+				FB_rate = (96) << 14;
+			}
+			FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
+			FB_rate_nominal = ((96) << 14) + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system
+		}
+
+		else if (spk_current_freq.frequency == FREQ_88) {
+#ifdef USB_STATE_MACHINE_DEBUG
+			print_dbg_char('3'); // BSB debug 20121212
 #endif
 
-		FB_rate = (192) << 14;
-		FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
-		FB_rate_nominal = FB_rate + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system;
-	}
-
-	else if (spk_current_freq.frequency == FREQ_48) {
-
-#if (defined HW_GEN_SPRX) || (defined HW_GEN_FMADC) // FMADC_site
-		// Avoid when using SSC_RX for SPDIF buffering?
+#if (defined HW_GEN_DIN10) || (defined HW_GEN_DIN20)
+			// Avoid when using SSC_RX for SPDIF buffering?
 #else
-		pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
-		pdca_disable(PDCA_CHANNEL_SSC_RX);
+			pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
+			pdca_disable(PDCA_CHANNEL_SSC_RX);
 #endif
 
-		FB_rate = (48) << 14;
-		FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
-		FB_rate_nominal = FB_rate + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system;
-	}
+			if (FEATURE_ADC_AK5394A) {
+				gpio_set_gpio_pin(AK5394_DFS0); // L H  -> 96khz
+				gpio_clr_gpio_pin(AK5394_DFS1);
+			}
 
-	else if (spk_current_freq.frequency == FREQ_44) {
+			/*
+			 if (FEATURE_LINUX_QUIRK_ON)
+			 FB_rate = (88 << 15) + (1<<15)/5;
+			 else
+			 */
 
-#if (defined HW_GEN_SPRX) || (defined HW_GEN_FMADC) // FMADC_site
-		// Avoid when using SSC_RX for SPDIF buffering?
-#else
-		pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
-		pdca_disable(PDCA_CHANNEL_SSC_RX);
+			//				FB_rate = (88 << 14) + (1<<14)/5; // Generic code, supported by linux OS patch
+			if (FEATURE_LINUX_QUIRK_ON) {
+				FB_rate = (99) << 14; // Linux quirk: initial overshoot before nominal
+			} else {
+				FB_rate = (88 << 14) + (1 << 14) / 5;
+			}
+			FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
+			FB_rate_nominal = ((88 << 14) + (1 << 14) / 5) + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system
+		}
+
+		else if (spk_current_freq.frequency == FREQ_176) {
+#ifdef USB_STATE_MACHINE_DEBUG
+			print_dbg_char('5'); // BSB debug 20121212
 #endif
 
-		FB_rate = (44 << 14) + (1 << 14) / 10;
-		FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
-		FB_rate_nominal = FB_rate + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system;
+#if (defined HW_GEN_DIN10) || (defined HW_GEN_DIN20)
+			// Avoid when using SSC_RX for SPDIF buffering?
+#else
+			pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
+			pdca_disable(PDCA_CHANNEL_SSC_RX);
+#endif
+
+			gpio_clr_gpio_pin(AK5394_DFS0); // H L -> 192khz
+			gpio_set_gpio_pin(AK5394_DFS1);
+
+			FB_rate = (176 << 14) + ((1 << 14) * 4) / 10;
+			FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
+			FB_rate_nominal = FB_rate + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system;
+		}
+
+		else if (spk_current_freq.frequency == FREQ_192) {
+#ifdef USB_STATE_MACHINE_DEBUG
+			print_dbg_char('6'); // BSB debug 20121212
+#endif
+
+#if (defined HW_GEN_DIN10) || (defined HW_GEN_DIN20)
+			// Avoid when using SSC_RX for SPDIF buffering?
+#else
+			pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
+			pdca_disable(PDCA_CHANNEL_SSC_RX);
+#endif
+
+			if (FEATURE_ADC_AK5394A) {
+				gpio_clr_gpio_pin(AK5394_DFS0); // H L -> 192khz
+				gpio_set_gpio_pin(AK5394_DFS1);
+			}
+
+			FB_rate = (192) << 14;
+			FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
+			FB_rate_nominal = FB_rate + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system;
+		}
+
+		else if (spk_current_freq.frequency == FREQ_48) {
+#ifdef USB_STATE_MACHINE_DEBUG
+			print_dbg_char('2'); // BSB debug 20121212
+#endif
+
+#if (defined HW_GEN_DIN10) || (defined HW_GEN_DIN20)
+			// Avoid when using SSC_RX for SPDIF buffering?
+#else
+			pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
+			pdca_disable(PDCA_CHANNEL_SSC_RX);
+#endif
+
+			if (FEATURE_ADC_AK5394A) {
+				gpio_clr_gpio_pin(AK5394_DFS0); // L H  -> 96khz L L  -> 48khz
+				gpio_clr_gpio_pin(AK5394_DFS1);
+			}
+
+			FB_rate = (48) << 14;
+			FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
+			FB_rate_nominal = FB_rate + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system;
+		}
+
+		else if (spk_current_freq.frequency == FREQ_44) {
+#ifdef USB_STATE_MACHINE_DEBUG
+			print_dbg_char('1'); // BSB debug 20121212
+#endif
+
+#if (defined HW_GEN_DIN10) || (defined HW_GEN_DIN20)
+			// Avoid when using SSC_RX for SPDIF buffering?
+#else
+			pdca_disable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
+			pdca_disable(PDCA_CHANNEL_SSC_RX);
+#endif
+
+			if (FEATURE_ADC_AK5394A) {
+				gpio_clr_gpio_pin(AK5394_DFS0); // L H  -> 96khz L L  -> 48khz
+				gpio_clr_gpio_pin(AK5394_DFS1);
+			}
+
+			FB_rate = (44 << 14) + (1 << 14) / 10;
+			FB_rate_initial = FB_rate; // BSB 20131031 Record FB_rate as it was set by control system
+			FB_rate_nominal = FB_rate + FB_NOMINAL_OFFSET; // BSB 20131115 Record FB_rate as it was set by control system;
+		}
+
+		if (FEATURE_ADC_AK5394A) {
+			#if ((defined HW_GEN_DIN10) || (defined HW_GEN_DIN20)) // Just to be on the safe side
+			#else
+				// re-sync SSC to LRCK
+				// Wait for the next frame synchronization event
+				// to avoid channel inversion.  Start with left channel - FS goes low
+				// However, the channels are reversed at 192khz
+
+				if (spk_current_freq.frequency == FREQ_192) {
+					while (gpio_get_pin_value(AK5394_LRCK))
+						;
+					while (!gpio_get_pin_value(AK5394_LRCK))
+						; // exit when FS goes high
+				} else {
+					while (!gpio_get_pin_value(AK5394_LRCK))
+						;
+					while (gpio_get_pin_value(AK5394_LRCK))
+						; // exit when FS goes low
+				}
+				// Enable now the transfer.
+				pdca_enable(PDCA_CHANNEL_SSC_RX);
+
+				// Init PDCA channel with the pdca_options.
+				AK5394A_pdca_enable();
+			#endif
+		}
+
+		spk_mute = FALSE;
+#ifndef USBSTATISTICS_DISABLE
+		{
+			static uint32_t stats_last_sample_rate_khz;
+			uint32_t new_hz = spk_current_freq.frequency;
+			uint32_t new_khz = new_hz / 1000U;
+			Bool stats_full_mode = TRUE;
+			Bool prev_full_mode = (stats_last_sample_rate_khz != 0U);
+
+			stats_telemetry_set_frequency_hz(new_hz);
+			statistics_runtime_set_active(stats_full_mode);
+			if (stats_last_sample_rate_khz != 0U && stats_last_sample_rate_khz != new_khz &&
+				(stats_full_mode || prev_full_mode)) {
+				audio_stats_record_event(get_usb_stats(), USB_STATS_TAG_FREQ_CHANGE,
+					(U8)stats_last_sample_rate_khz, (U8)new_khz, 0);
+			}
+			stats_last_sample_rate_khz = new_khz;
+		}
+#endif
+#ifndef LOUDNESS_DISABLE
+#ifdef FREERTOS_USED
+		loudness_request_frequency_change(spk_current_freq.frequency);
+#else
+		if (spk_current_freq.frequency != 0) {
+			loudness_change_frequency(spk_current_freq.frequency);
+		}
+#endif
+#endif
+		// reset freq_changed flag
+		freq_changed = FALSE;
 	}
-
-	spk_mute = FALSE;
-		
-		
-	// Record incoming frequency request from USB control system
-//	print_dbg_char('W');
-//	mobo_print_selected_frequency(spk_current_freq.frequency);
-} // uac2_freq_change_handler
-
+}
 
 //! @brief This function configures the endpoints of the device application.
 //! This function is called when the set configuration request has been received.
@@ -384,31 +540,29 @@ void uac2_user_endpoint_init(U8 conf_nb) {
 	if (Is_usb_full_speed_mode()) {
 		(void) Usb_configure_endpoint(UAC2_EP_AUDIO_OUT_FB, EP_ATTRIBUTES_3, DIRECTION_IN, EP_SIZE_3_FS, DOUBLE_BANK, 0);
 		(void) Usb_configure_endpoint(UAC2_EP_AUDIO_OUT, EP_ATTRIBUTES_2, DIRECTION_OUT, EP_SIZE_2_FS, DOUBLE_BANK, 0);
-		
-		#ifdef FEATURE_ADC_EXPERIMENTAL
-			(void)Usb_configure_endpoint(UAC2_EP_AUDIO_IN, EP_ATTRIBUTES_1, DIRECTION_IN, EP_SIZE_1_FS, DOUBLE_BANK, 0);
-		#endif
-		
+		//(void)Usb_configure_endpoint(UAC2_EP_AUDIO_IN, EP_ATTRIBUTES_1, DIRECTION_IN, EP_SIZE_1_FS, DOUBLE_BANK, 0);
 		// BSB 20120720 HID insert attempt begin
 		#ifdef FEATURE_HID
 			(void) Usb_configure_endpoint(UAC2_EP_HID_TX, EP_ATTRIBUTES_4, DIRECTION_IN, EP_SIZE_4_FS, SINGLE_BANK, 0);
 //			(void) Usb_configure_endpoint(UAC2_EP_HID_RX, EP_ATTRIBUTES_5, DIRECTION_OUT, EP_SIZE_5_FS, SINGLE_BANK, 0);
 		#endif
 		// BSB 20120720 HID insert attempt end
+#ifndef USBSTATISTICS_DISABLE
+		(void) Usb_configure_endpoint(EP_STATS_HID_TX, EP_ATTRIBUTES_STATS_HID, DIRECTION_IN, EP_SIZE_STATS_HID_FS, SINGLE_BANK, 0);
+#endif
 	} else {
 		(void) Usb_configure_endpoint(UAC2_EP_AUDIO_OUT_FB, EP_ATTRIBUTES_3, DIRECTION_IN, EP_SIZE_3_HS, DOUBLE_BANK, 0);
 		(void) Usb_configure_endpoint(UAC2_EP_AUDIO_OUT, EP_ATTRIBUTES_2, DIRECTION_OUT, EP_SIZE_2_HS, DOUBLE_BANK, 0);
-
-		#ifdef FEATURE_ADC_EXPERIMENTAL
-			(void)Usb_configure_endpoint(UAC2_EP_AUDIO_IN, EP_ATTRIBUTES_1, DIRECTION_IN, EP_SIZE_1_HS, DOUBLE_BANK, 0);
-		#endif
-
+		//(void)Usb_configure_endpoint(UAC2_EP_AUDIO_IN, EP_ATTRIBUTES_1, DIRECTION_IN, EP_SIZE_1_HS, DOUBLE_BANK, 0);
 		// BSB 20120720 HID insert attempt begin
 		#ifdef FEATURE_HID
 			(void) Usb_configure_endpoint(UAC2_EP_HID_TX, EP_ATTRIBUTES_4, DIRECTION_IN, EP_SIZE_4_HS, SINGLE_BANK, 0);
 //			(void) Usb_configure_endpoint(UAC2_EP_HID_RX, EP_ATTRIBUTES_5, DIRECTION_OUT, EP_SIZE_5_HS, SINGLE_BANK, 0);
 		#endif
 		// BSB 20120720 HID insert attempt end
+#ifndef USBSTATISTICS_DISABLE
+		(void) Usb_configure_endpoint(EP_STATS_HID_TX, EP_ATTRIBUTES_STATS_HID, DIRECTION_IN, EP_SIZE_STATS_HID_HS, SINGLE_BANK, 0);
+#endif
 	}
 }
 
@@ -418,50 +572,97 @@ void uac2_user_endpoint_init(U8 conf_nb) {
 void uac2_user_set_interface(U8 wIndex, U8 wValue) {
 	//* Check whether it is the audio streaming interface and Alternate Setting that is being set
 	usb_interface_nb = wIndex;
+	//   if (usb_interface_nb == STD_AS_INTERFACE_IN) {
+	//	   usb_alternate_setting = wValue;
+	//	   usb_alternate_setting_changed = TRUE;
+	//   } else if (usb_interface_nb == STD_AS_INTERFACE_OUT) {
 	if (usb_interface_nb == STD_AS_INTERFACE_OUT) {
 		usb_alternate_setting_out = wValue;
 		usb_alternate_setting_out_changed = TRUE;
-//		print_dbg_char('o');
-//		print_dbg_char_hex(wValue);
 	}
 
-	#ifdef FEATURE_ADC_EXPERIMENTAL
-		else if (usb_interface_nb == STD_AS_INTERFACE_IN) {
-			usb_alternate_setting = wValue;
-			usb_alternate_setting_changed = TRUE;
-//			print_dbg_char('i');
-//			print_dbg_char_hex(wValue);
-		}
-	#endif
+	// BSB 20130604 disabling UAC1 IN
+	/*
+	else if (usb_interface_nb == STD_AS_INTERFACE_IN) {
+		usb_alternate_setting = wValue;
+		usb_alternate_setting_changed = TRUE;
+	} */
+
 }
 
 // BSB 20120720 copy from uac1_usb_specific_request.c insert
 
-static Bool uac2_user_get_interface_descriptor() {
+#ifndef USBSTATISTICS_DISABLE
+static Bool uac2_user_get_stats_hid_descriptor(U8 string_type, U8 descriptor_type, U16 wInterface, U16 wLength)
+{
+	Bool zlp = FALSE;
 
-#ifdef FEATURE_HID		// This function relates only to HID reports
-	Bool zlp;
-	U16 wLength;
-	U16 wIndex;
-	U8 descriptor_type;
-	U8 string_type;
-	U16 wInterface;
+	(void)string_type;
+	if (wInterface != DSC_INTERFACE_STATISTICS) {
+		return FALSE;
+	}
 
-//	print_dbg_char('a'); // xperia
-	zlp = FALSE; /* no zero length packet */
-	string_type = Usb_read_endpoint_data(EP_CONTROL, 8); /* read LSB of wValue    */
-	descriptor_type = Usb_read_endpoint_data(EP_CONTROL, 8); /* read MSB of wValue    */
-	wInterface = usb_format_usb_to_mcu_data(16,Usb_read_endpoint_data(EP_CONTROL, 16));
+	switch (descriptor_type) {
+	case HID_DESCRIPTOR:
+#if (USB_HIGH_SPEED_SUPPORT==DISABLED)
+		data_to_transfer = sizeof(uac2_usb_conf_desc_fs.hid_stats);
+		pbuffer = (const U8*)&uac2_usb_conf_desc_fs.hid_stats;
+#else
+		if (Is_usb_full_speed_mode()) {
+			data_to_transfer = sizeof(uac2_usb_conf_desc_fs.hid_stats);
+			pbuffer = (const U8*)&uac2_usb_conf_desc_fs.hid_stats;
+		} else {
+			data_to_transfer = sizeof(uac2_usb_conf_desc_hs.hid_stats);
+			pbuffer = (const U8*)&uac2_usb_conf_desc_hs.hid_stats;
+		}
+#endif
+		break;
+	case HID_REPORT_DESCRIPTOR:
+		data_to_transfer = sizeof(usb_stats_hid_report_descriptor);
+		pbuffer = usb_stats_hid_report_descriptor;
+		break;
+	default:
+		return FALSE;
+	}
+
+	Usb_ack_setup_received_free();
+	send_descriptor(wLength, zlp);
+	return TRUE;
+}
+#endif
+
+#ifdef FEATURE_HID
+static Bool uac2_user_get_interface_descriptor(U8 string_type, U8 descriptor_type, U16 wInterface, U16 wLength)
+{
+	Bool zlp = FALSE;
+
+#ifdef USB_STATE_MACHINE_DEBUG
+	print_dbg_char('a'); // xperia
+#endif
 
 	switch (descriptor_type) {
 	case HID_DESCRIPTOR:
 
+#ifdef USB_STATE_MACHINE_DEBUG
+		print_dbg_char('b'); // xperia
+#endif
+
 		if (wInterface == DSC_INTERFACE_HID) {
 #if (USB_HIGH_SPEED_SUPPORT==DISABLED)
+
+#ifdef USB_STATE_MACHINE_DEBUG
+			print_dbg_char('c'); // xperia
+#endif
+
 			data_to_transfer = sizeof(uac2_usb_conf_desc_fs.hid);
 			pbuffer = (const U8*)&uac2_usb_conf_desc_fs.hid;
 			break;
 #else
+
+#ifdef USB_STATE_MACHINE_DEBUG
+			print_dbg_char('d'); // xperia
+#endif
+
 			if (Is_usb_full_speed_mode()) {
 				data_to_transfer = sizeof(uac2_usb_conf_desc_fs.hid);
 				pbuffer = (const U8*) &uac2_usb_conf_desc_fs.hid;
@@ -475,49 +676,43 @@ static Bool uac2_user_get_interface_descriptor() {
 		return FALSE;
 	case HID_REPORT_DESCRIPTOR:
 
-		//? Why doesn't this test for wInterface == DSC_INTERFACE_HID ?
+#ifdef USB_STATE_MACHINE_DEBUG
+		print_dbg_char('e'); // xperia
+#endif
+
+		(void)wInterface;
+		(void)string_type;
 		data_to_transfer = sizeof(usb_hid_report_descriptor);
 		pbuffer = usb_hid_report_descriptor;
 		break;
 	case HID_PHYSICAL_DESCRIPTOR:
 
-		// TODO
+#ifdef USB_STATE_MACHINE_DEBUG
+		print_dbg_char('f'); // xperia
+#endif
+		(void)string_type;
+		(void)wInterface;
+		(void)wLength;
 		return FALSE;
 	default:
+
+#ifdef USB_STATE_MACHINE_DEBUG
+		print_dbg_char('g'); // xperia
+#endif
+
 		return FALSE;
 	}
-	
-	/*
-	Claude analysis not implemented:
-		
-	**A2  `uac2_usb_specific_request.c:490-492` ?verified [LIVE][Confirmed] High**
-	In the HID GET_DESCRIPTOR handler, the SETUP fields left in EP0 after the standard layer
-	are `wValue(2) + wIndex(2) + wLength(2)`. The code reads `wValue` (`string_type` +
-	`descriptor_type`) and `wIndex` (`wInterface`)  then reads **two** more 16-bit words:
-	```c
-	wIndex  = usb_format_usb_to_mcu_data(16, Usb_read_endpoint_data(EP_CONTROL,16)); // = real wLength
-	wLength = usb_format_usb_to_mcu_data(16, Usb_read_endpoint_data(EP_CONTROL,16)); // reads PAST the packet
-	send_descriptor(wLength, zlp);                                                    // uses garbage
-	```
-	The real `wLength` lands in the variable named `wIndex`; `wLength` gets whatever an
-	over-read of the FIFO yields. HID enumerates today (impact is masked by whatever the empty
-	FIFO returns), but the read sequence is wrong. **Fix:** delete the redundant `wIndex`
-	re-read; read `wLength` once.
 
-	*/
+	Usb_ack_setup_received_free();
+	send_descriptor(wLength, zlp);
 
-	wIndex = Usb_read_endpoint_data(EP_CONTROL, 16);
-	wIndex = usb_format_usb_to_mcu_data(16, wIndex);
-	wLength = Usb_read_endpoint_data(EP_CONTROL, 16);
-	wLength = usb_format_usb_to_mcu_data(16, wLength);
-	Usb_ack_setup_received_free(); //!< clear the setup received flag
-	send_descriptor(wLength, zlp); // Send the descriptor. pbuffer and data_to_transfer are global variables which must be set up by code
+#ifdef USB_STATE_MACHINE_DEBUG
+	print_dbg_char('h'); // xperia
+#endif
 
 	return TRUE;
-#else
-	return TRUE;
-#endif // FEATURE_HID
 }
+#endif // FEATURE_HID
 
 
 
@@ -571,13 +766,13 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 	uint8_t temp1 = 0;
 	uint8_t temp2 = 0;
 
-	// BSB 20120720 added
-	// this should vector to specified interface handler
-	if (type == IN_INTERFACE && request == GET_DESCRIPTOR)
-		return uac2_user_get_interface_descriptor();
+#ifdef USB_STATE_MACHINE_DEBUG
+	print_dbg_char('t'); // xperia
+	print_dbg_char_hex(type); // xperia
+	print_dbg_char_hex(request); // xperia
+#endif
 
-	// Read wValue
-	// why are these file statics?
+	// Read the setup packet once; all handlers share these fields.
 	wValue_lsb = Usb_read_endpoint_data(EP_CONTROL, 8);
 	wValue_msb = Usb_read_endpoint_data(EP_CONTROL, 8);
 	wIndex
@@ -585,6 +780,33 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 	wLength
 			= usb_format_usb_to_mcu_data(16, Usb_read_endpoint_data(EP_CONTROL, 16));
 
+#ifdef USB_STATE_MACHINE_DEBUG
+	print_dbg_char('w'); // xperia
+	print_dbg_char_hex(wValue_lsb); // xperia
+	print_dbg_char_hex(wValue_msb); // xperia
+	print_dbg_char('v'); // xperia
+	print_dbg_char_hex(wIndex / 256); // xperia MSB
+	print_dbg_char_hex(wIndex % 256); // xperia LSB
+	print_dbg_char_hex(wLength); // xperia
+	print_dbg_char('\n'); // xperia
+#endif
+
+	if (type == IN_INTERFACE && request == GET_DESCRIPTOR) {
+#ifndef USBSTATISTICS_DISABLE
+		if (uac2_user_get_stats_hid_descriptor(wValue_lsb, wValue_msb, wIndex, wLength)) {
+			return TRUE;
+		}
+#endif
+#ifdef FEATURE_HID
+		if (uac2_user_get_interface_descriptor(wValue_lsb, wValue_msb, wIndex, wLength)) {
+			return TRUE;
+		}
+#endif
+		return FALSE;
+	}
+
+	// BSB 20120720 added
+	// this should vector to specified interface handler
 
 	// Mute button push
 	// R2101.0114 type=OUT_CL_INTERFACE request=1 wIndex = 0x1401
@@ -705,70 +927,61 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 
 		//  request for AUDIO interfaces
 
-		#ifdef FEATURE_ADC_EXPERIMENTAL // Bringingn ADC back from main branch...
-		if (wIndex == DSC_INTERFACE_AS) {				// Audio Streaming Interface
-			if (type == IN_CL_INTERFACE) {			// get controls
+		/*
+		 if (wIndex == DSC_INTERFACE_AS) {				// Audio Streaming Interface
+		 if (type == IN_CL_INTERFACE) {			// get controls
 
-				if (wValue_msb == AUDIO_AS_VAL_ALT_SETTINGS && wValue_lsb == 0
-						&& request == AUDIO_CS_REQUEST_CUR) {
-					Usb_ack_setup_received_free();
+		 if (wValue_msb == AUDIO_AS_VAL_ALT_SETTINGS && wValue_lsb == 0
+		 && request == AUDIO_CS_REQUEST_CUR) {
+		 Usb_ack_setup_received_free();
 
-					Usb_reset_endpoint_fifo_access(EP_CONTROL);
-					Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
-					Usb_write_endpoint_data(EP_CONTROL, 8, 0b00000011); // alt 0 and 1 valid
-					Usb_ack_control_in_ready_send();
+		 Usb_reset_endpoint_fifo_access(EP_CONTROL);
+		 Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
+		 Usb_write_endpoint_data(EP_CONTROL, 8, 0b00000011); // alt 0 and 1 valid
+		 Usb_ack_control_in_ready_send();
 
-					while (!Is_usb_control_out_received())
-						;
-					Usb_ack_control_out_received_free();
-					return TRUE;
-				} 
-				else if (wValue_msb == AUDIO_AS_ACT_ALT_SETTINGS 
-						&& wValue_lsb == 0 && request == AUDIO_CS_REQUEST_CUR) {
-					Usb_ack_setup_received_free();
-					Usb_reset_endpoint_fifo_access(EP_CONTROL);
-					Usb_write_endpoint_data(EP_CONTROL, 8, usb_alternate_setting);
-					Usb_ack_control_in_ready_send();
-					while (!Is_usb_control_out_received())
-						;
-					Usb_ack_control_out_received_free();
-					return TRUE;
-				} 
-				else if (wValue_msb == AUDIO_AS_AUDIO_DATA_FORMAT 
-						&& wValue_lsb == 0 && request == AUDIO_CS_REQUEST_CUR) {
-					Usb_ack_setup_received_free();
-					Usb_reset_endpoint_fifo_access(EP_CONTROL);
-					Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
-					Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
-					Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
-					Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);	// only PCM format
-					Usb_ack_control_in_ready_send();
-					while (!Is_usb_control_out_received())
-						;
-					Usb_ack_control_out_received_free();
-					return TRUE;
-				} 
-				else 
-					return FALSE;
-			 } 
-			 else if (type == OUT_CL_INTERFACE) {		// set controls
-				if (wValue_msb == AUDIO_AS_ACT_ALT_SETTINGS
-						&& request == AUDIO_CS_REQUEST_CUR) {
-					Usb_ack_setup_received_free();
-					while (!Is_usb_control_out_received())
-						;
-					Usb_reset_endpoint_fifo_access(EP_CONTROL);
-					usb_alternate_setting = Usb_read_endpoint_data(EP_CONTROL, 8);
-					usb_alternate_setting_changed = TRUE;
-					Usb_ack_control_out_received_free();
-					Usb_ack_control_in_ready_send();    //!< send a ZLP for STATUS phase
-					while (!Is_usb_control_in_ready())
-						; //!< waits for status phase done
-					return FALSE;
-				}
-			} // end OUT_CL_INTERFACE
-		} // end DSC_INTERFACE_AS
-		#endif // ADC code brought back
+		 while (!Is_usb_control_out_received());
+		 Usb_ack_control_out_received_free();
+		 return TRUE;
+		 } else if (wValue_msb == AUDIO_AS_ACT_ALT_SETTINGS && wValue_lsb == 0
+		 && request == AUDIO_CS_REQUEST_CUR) {
+		 Usb_ack_setup_received_free();
+		 Usb_reset_endpoint_fifo_access(EP_CONTROL);
+		 Usb_write_endpoint_data(EP_CONTROL, 8, usb_alternate_setting);
+		 Usb_ack_control_in_ready_send();
+		 while (!Is_usb_control_out_received());
+		 Usb_ack_control_out_received_free();
+		 return TRUE;
+		 } else if (wValue_msb == AUDIO_AS_AUDIO_DATA_FORMAT && wValue_lsb == 0
+		 && request == AUDIO_CS_REQUEST_CUR) {
+		 Usb_ack_setup_received_free();
+		 Usb_reset_endpoint_fifo_access(EP_CONTROL);
+		 Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
+		 Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
+		 Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
+		 Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);	// only PCM format
+		 Usb_ack_control_in_ready_send();
+		 while (!Is_usb_control_out_received());
+		 Usb_ack_control_out_received_free();
+		 return TRUE;
+		 } else return FALSE;
+
+		 } else if (type == OUT_CL_INTERFACE) {		// set controls
+		 if (wValue_msb == AUDIO_AS_ACT_ALT_SETTINGS
+		 && request == AUDIO_CS_REQUEST_CUR) {
+		 Usb_ack_setup_received_free();
+		 while (!Is_usb_control_out_received());
+		 Usb_reset_endpoint_fifo_access(EP_CONTROL);
+		 usb_alternate_setting = Usb_read_endpoint_data(EP_CONTROL, 8);
+		 usb_alternate_setting_changed = TRUE;
+		 Usb_ack_control_out_received_free();
+		 Usb_ack_control_in_ready_send();    //!< send a ZLP for STATUS phase
+		 while (!Is_usb_control_in_ready()); //!< waits for status phase done
+		 return FALSE;
+		 }
+		 } // end OUT_CL_INTERFACE
+		 } // end DSC_INTERFACE_AS
+		 */
 
 		if (wIndex == DSC_INTERFACE_AS_OUT) { // Playback Audio Streaming Interface
 
@@ -780,15 +993,14 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 
 					Usb_reset_endpoint_fifo_access(EP_CONTROL);
 					Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
-					Usb_write_endpoint_data(EP_CONTROL, 8, 0b00000011); // alt 0 and 1 valid
+					Usb_write_endpoint_data(EP_CONTROL, 8, 0b00000111); // alt 0, 1, and 2 valid
 					Usb_ack_control_in_ready_send();
 
 					while (!Is_usb_control_out_received())
 						;
 					Usb_ack_control_out_received_free();
 					return TRUE;
-				} 
-				else if (wValue_msb == AUDIO_AS_ACT_ALT_SETTINGS
+				} else if (wValue_msb == AUDIO_AS_ACT_ALT_SETTINGS
 						&& wValue_lsb == 0 && request == AUDIO_CS_REQUEST_CUR) {
 					Usb_ack_setup_received_free();
 					Usb_reset_endpoint_fifo_access(EP_CONTROL);
@@ -798,8 +1010,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						;
 					Usb_ack_control_out_received_free();
 					return TRUE;
-				} 
-				else if (wValue_msb == AUDIO_AS_AUDIO_DATA_FORMAT
+				} else if (wValue_msb == AUDIO_AS_AUDIO_DATA_FORMAT
 						&& wValue_lsb == 0 && request == AUDIO_CS_REQUEST_CUR) {
 					Usb_ack_setup_received_free();
 					Usb_reset_endpoint_fifo_access(EP_CONTROL);
@@ -814,10 +1025,10 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 					return TRUE;
 				} else
 					return FALSE;
-			} 
-			else if (type == OUT_CL_INTERFACE) { // set controls
-				if (wValue_msb == AUDIO_AS_ACT_ALT_SETTINGS 
-						&& request == AUDIO_CS_REQUEST_CUR) {
+
+			} else if (type == OUT_CL_INTERFACE) { // set controls
+				if (wValue_msb == AUDIO_AS_ACT_ALT_SETTINGS && request
+						== AUDIO_CS_REQUEST_CUR) {
 					Usb_ack_setup_received_free();
 					while (!Is_usb_control_out_received())
 						;
@@ -884,6 +1095,8 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 							send_descriptor(wLength, FALSE); // Send the descriptor. pbuffer and data_to_transfer are global variables which must be set up by code
 						}
 
+						/* send_descriptor() already acks IN and waits for the STATUS
+						 * phase (see send_descriptor()); kept for historical parity. */
 						Usb_ack_control_in_ready_send();
 
 						while (!Is_usb_control_out_received())
@@ -897,6 +1110,10 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 				case CSD_ID_2:
 					if (wValue_msb == AUDIO_CS_CONTROL_SAM_FREQ //&& wValue_lsb == 0
 							&& request == AUDIO_CS_REQUEST_CUR) {
+
+#ifdef USB_STATE_MACHINE_DEBUG
+						print_dbg_char('k'); // BSB debug 20120910 Xperia
+#endif
 
 						Usb_ack_setup_received_free();
 						Usb_reset_endpoint_fifo_access(EP_CONTROL);
@@ -912,6 +1129,10 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 					} else if (wValue_msb == AUDIO_CS_CONTROL_CLOCK_VALID //&& wValue_lsb == 0
 							&& request == AUDIO_CS_REQUEST_CUR) {
 
+#ifdef USB_STATE_MACHINE_DEBUG
+						print_dbg_char('i'); // BSB debug 20120910 Xperia
+#endif
+
 						Usb_ack_setup_received_free();
 						Usb_reset_endpoint_fifo_access(EP_CONTROL);
 						Usb_write_endpoint_data(EP_CONTROL, 8, TRUE); // always valid
@@ -926,6 +1147,10 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						return TRUE;
 					} else if (wValue_msb == AUDIO_CS_CONTROL_SAM_FREQ //&& wValue_lsb == 0
 							&& request == AUDIO_CS_REQUEST_RANGE) {
+
+#ifdef USB_STATE_MACHINE_DEBUG
+						print_dbg_char('j'); // BSB debug 20120910 Xperia
+#endif
 
 						Usb_ack_setup_received_free();
 						Usb_reset_endpoint_fifo_access(EP_CONTROL);
@@ -945,7 +1170,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 					} else
 						return FALSE;
 
-#ifdef	FEATURE_CLOCK_SELECTOR
+#ifdef FEATURE_CLOCK_SELECTOR
 				case CSX_ID:
 					if (wValue_msb == AUDIO_CX_CLOCK_SELECTOR //&& wValue_lsb == 0
 							&& request == AUDIO_CS_REQUEST_CUR) {
@@ -962,10 +1187,8 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						return TRUE;
 					} else
 						return FALSE;
-#endif						
+#endif
 
-/*
-// mic_feature_unit removed from code here
 				case MIC_FEATURE_UNIT_ID:
 					if ((wValue_msb == AUDIO_FU_CONTROL_CS_MUTE) && (request
 							== AUDIO_CS_REQUEST_CUR)) {
@@ -984,8 +1207,6 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						return TRUE;
 					} else
 						return FALSE;
-*/
-
 #ifdef FEATURE_VOLUME_CTRL
 				case SPK_FEATURE_UNIT_ID:
 
@@ -1002,7 +1223,14 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 								Usb_write_endpoint_data(EP_CONTROL, 8, usb_spk_mute); // or 0
 						}
 
-//						print_dbg_char('m'); // bBitResolution
+						print_dbg_char('m'); // bBitResolution
+
+#ifdef USB_STATE_MACHINE_DEBUG
+						// Trying to catch mute event
+						print_dbg_char('m');
+						print_dbg_char_hex(usb_spk_mute);
+						print_dbg_char(' ');
+#endif
 
 						Usb_ack_control_in_ready_send();
 						while (!Is_usb_control_out_received())
@@ -1011,7 +1239,6 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						return TRUE;
 					}
 
-					// this is like audio_get_cur() for volume but on UAC2
 					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_VOLUME)
 							&& (request == AUDIO_CS_REQUEST_CUR)) {
 						Usb_ack_setup_received_free();
@@ -1030,6 +1257,14 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 								}
 								Usb_write_endpoint_data(EP_CONTROL, 16, Usb_format_mcu_to_usb_data(16, spk_vol_usb_L));
 
+#ifdef USB_STATE_MACHINE_DEBUG
+								print_dbg_char('g');
+								print_dbg_char('L');
+								print_dbg_char_hex(((spk_vol_usb_L >> 8) & 0xff));
+								print_dbg_char_hex(((spk_vol_usb_L >> 0) & 0xff));
+								print_dbg_char('\n');
+#endif
+
 							} else if (wValue_lsb == CH_RIGHT) {
 								// Be on the safe side here, even though fetch is done in uac1_device_audio_task.c init
 								if (spk_vol_usb_R == VOL_INVALID) {
@@ -1044,6 +1279,50 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 							}
 						}
 
+#ifndef LOUDNESS_DISABLE
+						loudness_set_source_has_volume_control();
+#endif
+
+						Usb_ack_control_in_ready_send();
+						while (!Is_usb_control_out_received())
+							;
+						Usb_ack_control_out_received_free();
+						return TRUE;
+					}
+
+					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_BASS_BOOST)
+							&& (request == AUDIO_CS_REQUEST_CUR)) {
+						Usb_ack_setup_received_free();
+						Usb_reset_endpoint_fifo_access(EP_CONTROL);
+
+#ifndef LOUDNESS_DISABLE
+						Usb_write_endpoint_data(EP_CONTROL, 8,
+							(U8)loudness_bass_boost_is_enabled());
+#else
+						Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
+#endif
+						for (i = 0; i < (wLength - 1); i++)
+							Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
+
+						Usb_ack_control_in_ready_send();
+						while (!Is_usb_control_out_received())
+							;
+						Usb_ack_control_out_received_free();
+						return TRUE;
+					}
+
+					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_BASS_BOOST)
+							&& (request == AUDIO_CS_REQUEST_RANGE)) {
+						Usb_ack_setup_received_free();
+						Usb_reset_endpoint_fifo_access(EP_CONTROL);
+
+						if (wLength >= 2) {
+							Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
+							Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
+						}
+						for (i = 2; i < wLength; i++)
+							Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
+
 						Usb_ack_control_in_ready_send();
 						while (!Is_usb_control_out_received())
 							;
@@ -1056,6 +1335,12 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 							== AUDIO_CS_REQUEST_RANGE)) {
 						Usb_ack_setup_received_free();
 						Usb_reset_endpoint_fifo_access(EP_CONTROL);
+
+#ifdef USB_STATE_MACHINE_DEBUG
+	print_dbg_char_char('x');
+	print_dbg_char_hex(wLength);
+#endif
+
 
 						if (wLength == 8) {
 //							Usb_write_endpoint_data(EP_CONTROL, 16, Usb_format_mcu_to_usb_data(16, VOL_RES));
@@ -1095,7 +1380,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 
 					else
 						return FALSE;
-#endif 
+#endif
 
 				case INPUT_TERMINAL_ID:
 					if (wValue_msb == AUDIO_TE_CONTROL_CS_CLUSTER //&& wValue_lsb == 0
@@ -1161,9 +1446,14 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 			}
 			else if (type == OUT_CL_INTERFACE) { // set controls
 				switch (wIndex / 256) {
-				case CSD_ID_1: // set CUR freq of Mic - UNUSED clock generator!
+				case CSD_ID_1: // set CUR freq of Mic
+#ifdef USB_STATE_MACHINE_DEBUG
+//					print_dbg_char('f'); // BSB debug 20121212
+#endif
+
 					if (wValue_msb == AUDIO_CS_CONTROL_SAM_FREQ && wValue_lsb
 							== 0 && request == AUDIO_CS_REQUEST_CUR) {
+						freq_changed = TRUE;
 						Usb_ack_setup_received_free();
 						while (!Is_usb_control_out_received())
 							;
@@ -1177,7 +1467,15 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 								=Usb_read_endpoint_data(EP_CONTROL, 8);
 						spk_current_freq.freq_bytes[0]
 								=Usb_read_endpoint_data(EP_CONTROL, 8);
+						if (!uac2_sample_rate_is_supported(spk_current_freq.frequency)) {
+							uac2_reject_unsupported_sample_rate();
+						}
+						Mic_freq.freq_bytes[3] = spk_current_freq.freq_bytes[3];
+						Mic_freq.freq_bytes[2] = spk_current_freq.freq_bytes[2];
+						Mic_freq.freq_bytes[1] = spk_current_freq.freq_bytes[1];
+						Mic_freq.freq_bytes[0] = spk_current_freq.freq_bytes[0];
 						uac2_freq_change_handler();
+						Mic_freq_valid = TRUE;
 
 						Usb_ack_control_out_received_free();
 						Usb_ack_control_in_ready_send(); //!< send a ZLP for STATUS phase
@@ -1187,9 +1485,14 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 					} else
 						return FALSE;
 
-				case CSD_ID_2: // set CUR freq - Actual clock generator, merge with above code! ADC_site
+				case CSD_ID_2: // set CUR freq
+#ifdef USB_STATE_MACHINE_DEBUG
+//					print_dbg_char('K'); // BSB debug 20121212
+#endif
+
 					if (wValue_msb == AUDIO_CS_CONTROL_SAM_FREQ && wValue_lsb
 							== 0 && request == AUDIO_CS_REQUEST_CUR) {
+						freq_changed = TRUE;
 						Usb_ack_setup_received_free();
 						while (!Is_usb_control_out_received())
 							;
@@ -1202,8 +1505,18 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 								=Usb_read_endpoint_data(EP_CONTROL, 8);
 						spk_current_freq.freq_bytes[0]
 								=Usb_read_endpoint_data(EP_CONTROL, 8);
+						if (!uac2_sample_rate_is_supported(spk_current_freq.frequency)) {
+							uac2_reject_unsupported_sample_rate();
+						}
 						uac2_freq_change_handler();
-						
+
+						// some freq only applies to playback
+						// may need better checking algorithm
+						if (spk_current_freq.frequency == Mic_freq.frequency)
+							Mic_freq_valid = TRUE;
+						else
+							Mic_freq_valid = FALSE;
+
 						Usb_ack_control_out_received_free();
 						Usb_ack_control_in_ready_send(); //!< send a ZLP for STATUS phase
 						while (!Is_usb_control_in_ready())
@@ -1211,7 +1524,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						return TRUE;
 					} else
 						return FALSE;
-						
+
 #ifdef FEATURE_CLOCK_SELECTOR
 				case CSX_ID:
 					if ((wValue_msb == AUDIO_CX_CLOCK_SELECTOR) && (wValue_lsb
@@ -1231,10 +1544,8 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						return TRUE;
 					} else
 						return FALSE;
-#endif						
+#endif
 
-/*
-// mic_feature_unit removed from code here
 				case MIC_FEATURE_UNIT_ID:
 					if ((wValue_msb == AUDIO_FU_CONTROL_CS_MUTE) && (request
 							== AUDIO_CS_REQUEST_CUR)) {
@@ -1250,7 +1561,6 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						return TRUE;
 					} else
 						return FALSE;
-*/						
 
 #ifdef FEATURE_VOLUME_CTRL
 				case SPK_FEATURE_UNIT_ID:
@@ -1259,8 +1569,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 							== AUDIO_CS_REQUEST_CUR)) {
 
 						Usb_ack_setup_received_free();
-						while (!Is_usb_control_out_received())
-							;
+						uac2_wait_control_out_received();
 						Usb_reset_endpoint_fifo_access(EP_CONTROL);
 
 						if (wLength == 1) {
@@ -1274,24 +1583,30 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 
 						print_dbg_char('M'); // bBitResolution
 
+
+#ifdef USB_STATE_MACHINE_DEBUG
 						// Trying to catch Win10 mute event
 						print_dbg_char('M');
 						print_dbg_char_hex(usb_spk_mute);
 						print_dbg_char(' ');
+#endif
+
 
 						Usb_ack_control_out_received_free();
 						Usb_ack_control_in_ready_send(); //!< send a ZLP for STATUS phase
-						while (!Is_usb_control_in_ready())
-							; //!< waits for status phase done
+						uac2_wait_control_in_ready();
 						return TRUE;
 					}
 
 					// This is like audio_set_cur for volume but on UAC2
 					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_VOLUME)
 							&& (request == AUDIO_CS_REQUEST_CUR)) {
+						usb_fifo_hw_lock_t usb_lock;
+
 						Usb_ack_setup_received_free();
-						while (!Is_usb_control_out_received())
-							;
+						uac2_wait_control_out_received();
+
+						usb_fifo_hw_lock(&usb_lock);
 						Usb_reset_endpoint_fifo_access(EP_CONTROL);
 
 						if (wLength == 2) {
@@ -1300,26 +1615,68 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 							if (wValue_lsb == CH_LEFT) {
 								LSB( spk_vol_usb_L) = temp1;
 								MSB( spk_vol_usb_L) = temp2;
-								spk_vol_mult_L = usb_volume_format(
-										spk_vol_usb_L);
+
+#ifdef FEATURE_VOLUME_CTRL
+								device_audio_volume_update_mult_left();
+#endif
+
+#ifdef USB_STATE_MACHINE_DEBUG
+								print_dbg_char('s');
+								print_dbg_char('L');
+								print_dbg_char_hex(((spk_vol_usb_L >> 8) & 0xff));
+								print_dbg_char_hex(((spk_vol_usb_L >> 0) & 0xff));
+								print_dbg_char('\n');
+#endif
+
 							} else if (wValue_lsb == CH_RIGHT) {
 								LSB( spk_vol_usb_R) = temp1;
 								MSB( spk_vol_usb_R) = temp2;
-								spk_vol_mult_R = usb_volume_format(
-										spk_vol_usb_R);
+
+#ifdef FEATURE_VOLUME_CTRL
+								device_audio_volume_update_mult_right();
+#endif
 							}
 						}
 
 						Usb_ack_control_out_received_free();
+						usb_fifo_hw_unlock(&usb_lock);
+
+#ifndef LOUDNESS_DISABLE
+						if (wLength == 2 && wValue_lsb == CH_LEFT) {
+							loudness_usb_volume_changed(spk_vol_usb_L);
+						} else {
+							loudness_set_source_has_volume_control();
+						}
+#endif
+
 						Usb_ack_control_in_ready_send(); //!< send a ZLP for STATUS phase
-						while (!Is_usb_control_in_ready())
-							; //!< waits for status phase done
+						uac2_wait_control_in_ready();
+						return TRUE;
+					}
+
+					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_BASS_BOOST)
+							&& (request == AUDIO_CS_REQUEST_CUR)) {
+						Usb_ack_setup_received_free();
+						uac2_wait_control_out_received();
+						Usb_reset_endpoint_fifo_access(EP_CONTROL);
+
+						temp1 = 0;
+						if (wLength >= 1)
+							temp1 = Usb_read_endpoint_data(EP_CONTROL, 8);
+
+#ifndef LOUDNESS_DISABLE
+						loudness_bass_boost_set(temp1 == 0x01);
+#endif
+
+						Usb_ack_control_out_received_free();
+						Usb_ack_control_in_ready_send();
+						uac2_wait_control_in_ready();
 						return TRUE;
 					}
 
 					else
 						return FALSE;
-#endif // #ifdef FEATURE_VOLUME_CTRL
+#endif
 
 				default:
 					return FALSE;
