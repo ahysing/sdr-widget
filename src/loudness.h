@@ -74,6 +74,10 @@ void loudness_set_level_dbfs(int32_t db_fs);
 /* Publish a host USB volume change (signed Q8.8 dB) to loudness and telemetry. */
 void loudness_usb_volume_changed(S16 volume_q8);
 
+/* Windows Bass Boost preference mirror (UAC Feature Unit CS 0x09). */
+void loudness_bass_boost_set(Bool enabled);
+Bool loudness_bass_boost_is_enabled(void);
+
 /* Update the active equalizer step based on current host gain level. */
 void loudness_update_active_equalizer_step(void);
 

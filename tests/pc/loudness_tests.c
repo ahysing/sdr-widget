@@ -431,6 +431,38 @@ void test_loudness_24bit_container_zero_crossing(void) {
     printf("test_loudness_24bit_container_zero_crossing passed\n\n");
 }
 
+void test_loudness_df2_step_transition_no_reset(void) {
+    printf("Running test_loudness_df2_step_transition_no_reset...\n");
+    int i;
+    int32_t sample = 200000;
+    int32_t out_before;
+    int32_t out_after;
+    int32_t spike;
+
+    loudness_init();
+    loudness_set_source_has_volume_control();
+
+    loudness_usb_volume_changed(-10 * 256);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 10);
+
+    for (i = 0; i < 256; i++) {
+        loudness_fast_24bit(0, sample);
+    }
+    out_before = (int32_t)loudness_fast_24bit(0, sample);
+
+    loudness_usb_volume_changed(-20 * 256);
+    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 20);
+
+    out_after = (int32_t)loudness_fast_24bit(0, sample);
+    spike = out_after - out_before;
+    if (spike < 0) {
+        spike = -spike;
+    }
+    assert(spike < (sample >> 2));
+
+    printf("test_loudness_df2_step_transition_no_reset passed\n\n");
+}
+
 
 /**
  * @brief Test for Use Case B: Quantization Noise & Dither Verification
@@ -525,6 +557,55 @@ void test_loudness_equalizer_step_hysteresis_79_80(void) {
     assert(loudness_test_should_change_equalizer_step(LOUDNESS_REF_PHON * 10 - 1) == FALSE);
     assert(loudness_test_should_change_equalizer_step(LOUDNESS_REF_PHON * 10) == TRUE);
     printf("test_loudness_equalizer_step_hysteresis_79_80 passed\n\n");
+}
+
+void test_loudness_bass_boost_default_enabled(void) {
+    printf("Running test_loudness_bass_boost_default_enabled...\n");
+    loudness_init();
+    assert(loudness_bass_boost_is_enabled() == TRUE);
+    printf("test_loudness_bass_boost_default_enabled passed\n\n");
+}
+
+void test_loudness_bass_boost_mirror_and_gate(void) {
+    printf("Running test_loudness_bass_boost_mirror_and_gate...\n");
+    loudness_init();
+    loudness_set_source_has_volume_control();
+
+    loudness_bass_boost_set(FALSE);
+    assert(loudness_bass_boost_is_enabled() == FALSE);
+
+    loudness_usb_volume_changed(-20 * 256);
+    loudness_update_active_equalizer_step();
+    assert(loudness_get_last_db_spl() == LOUDNESS_REF_PHON);
+    assert(loudness_test_get_equalizer_step(loudness_get_last_db_spl()) == LOUDNESS_NEUTRAL_STEP);
+
+    loudness_bass_boost_set(TRUE);
+    assert(loudness_bass_boost_is_enabled() == TRUE);
+    loudness_usb_volume_changed(-20 * 256);
+    loudness_update_active_equalizer_step();
+    assert(loudness_test_get_equalizer_step(loudness_get_last_db_spl()) < LOUDNESS_NEUTRAL_STEP);
+
+    loudness_bass_boost_set(TRUE);
+    printf("test_loudness_bass_boost_mirror_and_gate passed\n\n");
+}
+
+void test_loudness_bass_boost_facade_ignores_filter_activity(void) {
+    printf("Running test_loudness_bass_boost_facade_ignores_filter_activity...\n");
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    loudness_bass_boost_set(TRUE);
+
+    loudness_usb_volume_changed(0);
+    loudness_update_active_equalizer_step();
+    assert(loudness_test_get_equalizer_step(loudness_get_last_db_spl()) == LOUDNESS_NEUTRAL_STEP);
+    assert(loudness_fast_is_unity_step() == TRUE);
+    assert(loudness_bass_boost_is_enabled() == TRUE);
+
+    loudness_bass_boost_set(FALSE);
+    assert(loudness_bass_boost_is_enabled() == FALSE);
+
+    loudness_bass_boost_set(TRUE);
+    printf("test_loudness_bass_boost_facade_ignores_filter_activity passed\n\n");
 }
 
 #define SINE_TEST_SAMPLE_COUNT   48000
@@ -1201,6 +1282,7 @@ int main() {
     test_loudness_24bit_sign_extension();
     test_loudness_24bit_container_round_trip();
     test_loudness_24bit_container_zero_crossing();
+    test_loudness_df2_step_transition_no_reset();
 
     test_container_sign_preservation();
     test_full_scale_boundaries();
@@ -1235,6 +1317,9 @@ int main() {
     test_loudness_get_equalizer_step_14_levels();
     test_loudness_80_phon_unity_filter();
     test_loudness_equalizer_step_hysteresis_79_80();
+    test_loudness_bass_boost_default_enabled();
+    test_loudness_bass_boost_mirror_and_gate();
+    test_loudness_bass_boost_facade_ignores_filter_activity();
     printf("\nAll tests completed!\n");
     return 0;
 }
