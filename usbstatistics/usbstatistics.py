@@ -68,17 +68,17 @@ HID_READ_SIZES = (
 )
 
 # Match LOUDNESS_NUM_EQUALIZER_STEPS / phon mapping in src/loudness.h.
-LOUDNESS_NUM_EQUALIZER_STEPS = 14
-LOUDNESS_MIN_PHON = 55
-LOUDNESS_PHON_STEP_DB = 2
-LOUDNESS_NEUTRAL_PHON = 80
+LOUDNESS_NUM_EQUALIZER_STEPS = 121
+LOUDNESS_MIN_PHON_X10 = 350
+LOUDNESS_PHON_STEP_X10 = 5
 
-# Step indices 0-12: 55, 57, ... 79 phon; step 13: 80 phon unity.
+# Step indices 0-120: 35.0, 35.5, ... 95.0 phon.
 EQUALIZER_STEP_PHON = tuple(
-    range(LOUDNESS_MIN_PHON, LOUDNESS_NEUTRAL_PHON, LOUDNESS_PHON_STEP_DB)
-) + (LOUDNESS_NEUTRAL_PHON,)
+    (LOUDNESS_MIN_PHON_X10 + i * LOUDNESS_PHON_STEP_X10) / 10.0
+    for i in range(LOUDNESS_NUM_EQUALIZER_STEPS)
+)
 
-# Upper phon bound for each step band; None for the unity step.
+# Upper phon bound for each row; None for the final row.
 EQUALIZER_STEP_PHON_END = tuple(
     EQUALIZER_STEP_PHON[i + 1] for i in range(LOUDNESS_NUM_EQUALIZER_STEPS - 1)
 ) + (None,)
@@ -203,15 +203,8 @@ def close_device(dev):
 
 
 def equalizer_step_from_db_spl(db_spl):
-    if db_spl >= LOUDNESS_NEUTRAL_PHON:
-        return LOUDNESS_NUM_EQUALIZER_STEPS - 1
-    if db_spl < LOUDNESS_MIN_PHON:
-        return 0
-    step = (db_spl - LOUDNESS_MIN_PHON) // LOUDNESS_PHON_STEP_DB
-    max_contour_step = LOUDNESS_NUM_EQUALIZER_STEPS - 2
-    if step > max_contour_step:
-        step = max_contour_step
-    return step
+    db_spl_x10 = int(round(float(db_spl) * 10.0))
+    return (db_spl_x10 - LOUDNESS_MIN_PHON_X10) // LOUDNESS_PHON_STEP_X10
 
 
 def phon_range_for_step(step):

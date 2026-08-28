@@ -7,8 +7,8 @@ ROOT = Path(__file__).resolve().parent.parent
 FILES = [
     ("tmp_lut_precise_44100.txt", "LOUDNESS_Q61_ONE", "gen_precise_44100.c"),
     ("tmp_lut_precise_48000.txt", "LOUDNESS_Q61_ONE", "gen_precise_48000.c"),
-    ("tmp_lut_fast_44100.txt", "LOUDNESS_Q29_ONE", "gen_fast_44100.c"),
-    ("tmp_lut_fast_48000.txt", "LOUDNESS_Q29_ONE", "gen_fast_48000.c"),
+    ("tmp_lut_fast_44100.txt", "LOUDNESS_Q28_ONE", "gen_fast_44100.c"),
+    ("tmp_lut_fast_48000.txt", "LOUDNESS_Q28_ONE", "gen_fast_48000.c"),
 ]
 
 

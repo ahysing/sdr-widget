@@ -1644,6 +1644,8 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 #ifndef LOUDNESS_DISABLE
 						if (wLength == 2 && wValue_lsb == CH_LEFT) {
 							loudness_usb_volume_changed(spk_vol_usb_L);
+						} else if (wLength == 2 && wValue_lsb == CH_RIGHT) {
+							loudness_usb_volume_changed_right(spk_vol_usb_R);
 						} else {
 							loudness_set_source_has_volume_control();
 						}

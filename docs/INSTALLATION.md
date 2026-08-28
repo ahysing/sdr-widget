@@ -47,7 +47,6 @@ avr32-gcc -nostartfiles -Wl,--gc-sections -Wl,-e,_trampoline -mpart=uc3a3256 \
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `LOUDNESS_DISABLE` | `0` | Set to `1` to compile out the loudness filter entirely |
-| `LOUDNESS_FORCE_UNITY_STEP` | `0` | Set to `1` to lock equalizer step 13 for on-device A/B debug |
 
 Examples:
 
@@ -57,9 +56,6 @@ make audio-widget
 
 # Build without loudness filter
 make audio-widget LOUDNESS_DISABLE=1
-
-# Force unity biquads (debug pitch/glitch on hardware — see docs/LOUDNESS_DEVICE_DEBUG.md)
-make audio-widget LOUDNESS_FORCE_UNITY_STEP=1
 ```
 
 ### USB statistics

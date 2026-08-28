@@ -33,7 +33,7 @@ typedef struct {
 } biquad_quotients_fast_t;
 
 /*
- * Hot-path coefficients: same Q29 b0/a1/a2 as quotients; b1/b2/a1/a2 products
+ * Hot-path coefficients use Q4.28; b1/b2/a1/a2 products
  * use stored headroom states w' so only two <<M shifts remain (pole sum, zero sum).
  */
 typedef struct {
@@ -56,15 +56,12 @@ int32_t loudness_fast_biquad1_step_runtime_stride2(int32_t x_24,
 int32_t loudness_fast_biquad1_step_runtime_stride4(int32_t x_24,
     biquad_state_fast_t *st, loudness_highres_channel_state_t *ch,
     const biquad_runtime_fast_t *rt);
-void loudness_fast_biquad1_unity_advance_state_24bit(int32_t x_n,
-    biquad_state_fast_t *st);
 int32_t loudness_fast_24bit(int channel, int32_t sample);
 int32_t biquad_step_fast_32bit(int32_t sample, biquad_state_fast_t* biquad_states,
     const biquad_quotients_fast_t* q);
 S32 loudness_filter_16bit_container(int channel, S32 sample);
 S32 loudness_filter_24bit_container(int channel, S32 sample);
 void loudness_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R, U16 num_samples);
-Bool loudness_fast_is_unity_step(void);
 void loudness_change_frequency_fast(uint32_t frequency);
 Bool loudness_channel_biquad_is_idle(int channel);
 Bool loudness_channel_filter_is_idle(int channel);

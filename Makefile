@@ -87,12 +87,6 @@ else
   CFLAGS_LOUDNESS_USB_STATS_EVENTS =
 endif
 
-ifeq ($(LOUDNESS_FORCE_UNITY_STEP),1)
-  CFLAGS_LOUDNESS_FORCE_UNITY = -DLOUDNESS_FORCE_UNITY_STEP
-else
-  CFLAGS_LOUDNESS_FORCE_UNITY =
-endif
-
 ifeq ($(CONFIGURATION),Release)
   CFLAGS_CONFIGURATION = -DRELEASE
   CONFIGURATION_MSG = Release configuration: configDBG is 0. Deactivating debug trace.
@@ -115,7 +109,7 @@ LDFLAGS_APP_OPTIMIZATIONS = -Wl,--gc-sections
 CFLAGS_LOUDNESS_HOT = -O3 -funroll-loops -finline-functions \
   -fno-strict-aliasing
 
-WIDGET_LOUDNESS_FLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS) $(CFLAGS_LOUDNESS_DB_SPL_MAX) $(CFLAGS_LOUDNESS_FORCE_UNITY)
+WIDGET_LOUDNESS_FLAGS = $(CFLAGS_LOUDNESS) $(CFLAGS_LOUDNESS_DISABLE) $(CFLAGS_LOUDNESS_USB_STATS_EVENTS) $(CFLAGS_LOUDNESS_DB_SPL_MAX)
 AUDIO_WIDGET_CFLAGS = $(AUDIO_WIDGET_DEFAULTS) $(WIDGET_LOUDNESS_FLAGS) $(CFLAGS_CONFIGURATION)
 
 WIDGET_MAKE_ENV = CFLAGS="$(AUDIO_WIDGET_CFLAGS)" \
@@ -274,11 +268,11 @@ $(TEST_BUILD_DIR):
 $(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT): tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c | $(TEST_BUILD_DIR)
 	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUNIT_TEST $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c
 
-$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests/pc -I tests $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE -DFEATURE_VOLUME_CTRL $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c
+$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests/pc -I tests $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
 
-$(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT): tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE -DFEATURE_VOLUME_CTRL $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c
+$(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT): tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests/pc $(CFLAGS_COMMON) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
 
 $(TEST_BUILD_DIR)/usb_statistics_tests$(EXE_EXT): tests/pc/usb_statistics_tests.c src/usb_statistics.c src/stats_telemetry.c | $(TEST_BUILD_DIR)
 	$(CC) $(TEST_PREAMBLE) $(CFLAGS_COMMON) $(CFLAGS_TEST) -I tests/pc -DUNIT_TEST $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/usb_statistics_tests.c src/usb_statistics.c src/stats_telemetry.c
@@ -339,7 +333,6 @@ help:
 	@echo "Loudness / statistics options (all features enabled by default):"
 	@echo "  LOUDNESS_DB_SPL_MAX=N        Peak dB SPL at 0 dBFS gain (default: 105, must be > 80)"
 	@echo "  LOUDNESS_DISABLE=1           Omit loudness filter from firmware"
-	@echo "  LOUDNESS_FORCE_UNITY_STEP=1  Force equalizer step 13 (unity A/B debug build)"
 	@echo "  USBSTATISTICS_DISABLE=1"
 	@echo "                               Omit loudness equalizer-step USB events"
 	@echo "  CONFIGURATION=Release|Debug  App src/*.c optimization level (default: Release)"

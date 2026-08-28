@@ -19,16 +19,12 @@ typedef enum {
     LOUDNESS_FILTER_HIGH_SHELF = 1
 } biquad_type_t;
 
-/* Equal-loudness equalizer steps (contour reference 80 phon at 0 dBFS gain):
- *   index  0 -> 55 phon, index 1 -> 57 phon, ... index 12 -> 79 phon
- *   index 13 -> 80 phon (neutral unity biquads)
- */
-#define LOUDNESS_NUM_EQUALIZER_STEPS    14
-#define LOUDNESS_MIN_PHON               55
-#define LOUDNESS_PHON_STEP_DB           2
-#define LOUDNESS_NEUTRAL_STEP           (LOUDNESS_NUM_EQUALIZER_STEPS - 1)
-#define LOUDNESS_CONTOUR_STEPS          (LOUDNESS_NEUTRAL_STEP)
-#define LOUDNESS_REF_PHON     80   /* ISO contour reference at 0 dBFS host gain */
+/* One baked loudness+volume row every 0.5 dB from 35 to 95 phon. */
+#define LOUDNESS_MIN_PHON_X10           350
+#define LOUDNESS_MAX_PHON_X10           950
+#define LOUDNESS_EQUALIZER_STEP_X10       5
+#define LOUDNESS_NUM_EQUALIZER_STEPS    121
+#define LOUDNESS_REF_PHON     80   /* ISO contour shape reference */
 #ifndef LOUDNESS_DB_SPL_MAX
 /* A dB SPL max decides where on the volume know the loudness filters starts.
  * 95 db SPL max is common for sonos and other consumer devices.
@@ -41,8 +37,7 @@ typedef enum {
 #endif
 #define LOUDNESS_GAIN_DBFS_MIN  (-60) /* AK5394A / USB volume floor (dBFS) */
 #define LOUDNESS_GAIN_DBFS_MAX  0     /* Windows volume 100; matches VOL_MAX */
-/* Reported dB SPL equals phon for equalizer contour selection in [LOUDNESS_MIN_PHON, LOUDNESS_REF_PHON]. */
-#define LOUDNESS_EQUALIZER_STEP_DB LOUDNESS_PHON_STEP_DB
+/* Reported dB SPL equals phon for equalizer contour selection. */
 
 /* --- Public API --- */
 
@@ -73,6 +68,7 @@ void loudness_set_level_dbfs(int32_t db_fs);
 
 /* Publish a host USB volume change (signed Q8.8 dB) to loudness and telemetry. */
 void loudness_usb_volume_changed(S16 volume_q8);
+void loudness_usb_volume_changed_right(S16 volume_q8);
 
 /* Windows Bass Boost preference mirror (UAC Feature Unit CS 0x09). */
 void loudness_bass_boost_set(Bool enabled);
