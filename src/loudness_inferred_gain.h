@@ -20,6 +20,7 @@ Bool loudness_inferred_gain_has_source_volume_control(void);
 void loudness_set_source_has_volume_control(void);
 void loudness_envelope_follower_update_stereo(int32_t sample_L, int32_t sample_R);
 int32_t loudness_inferred_gain_dbfs(void);
+int32_t loudness_inferred_gain_dbfs_channel(int channel);
 
 #ifdef BUILD_TESTING
 void loudness_test_reset_inferred_gain(void);

@@ -39,6 +39,31 @@ class LoudnessVolumeGeneratorTests(unittest.TestCase):
         self.assertEqual(GENERATOR.float_to_q4_28(8.0), 2147483647)
         self.assertEqual(GENERATOR.float_to_q4_28(-9.0), -2147483648)
 
+    def test_filter_mode_leaves_numerator_unscaled(self):
+        params = [120.0, 0.5, 12.0]
+        raw = GENERATOR.biquad_low_shelf(*params, 48000.0)
+        filtered, volume_db = GENERATOR.filter_coefficients(
+            params, 48000.0, 89.0
+        )
+
+        self.assertEqual(volume_db, -6.0)
+        for index in range(5):
+            self.assertTrue(math.isclose(filtered[index], raw[index]))
+
+    def test_filter_and_volume_modes_share_phon_grid(self):
+        params = [120.0, 0.5, 12.0]
+        for phon in GENERATOR.PHON_LEVELS:
+            baked, baked_volume_db = GENERATOR.baked_coefficients(
+                params, 44100.0, phon
+            )
+            filtered, filter_volume_db = GENERATOR.filter_coefficients(
+                params, 44100.0, phon
+            )
+            self.assertEqual(baked_volume_db, filter_volume_db)
+            self.assertEqual(baked_volume_db, phon - GENERATOR.MAXIMUM_PHON)
+            self.assertEqual(baked[3], filtered[3])
+            self.assertEqual(baked[4], filtered[4])
+
 
 if __name__ == "__main__":
     unittest.main()

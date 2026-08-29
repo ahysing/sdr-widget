@@ -121,6 +121,10 @@ static void statistics_build_wire_packet(U8 *wire, const volatile usb_stats_t *s
     wire[38] = telemetry->source_has_volume_control ? 1u : 0u;
     wire[USB_STATS_WIRE_OFFSET_BASS_BOOST_ENABLED] =
         telemetry->bass_boost_enabled ? 1u : 0u;
+    wire[USB_STATS_WIRE_OFFSET_GAIN_INFERRED_LEFT] =
+        (U8)telemetry->gain_inferred_dbfs_left;
+    wire[USB_STATS_WIRE_OFFSET_GAIN_INFERRED_RIGHT] =
+        (U8)telemetry->gain_inferred_dbfs_right;
     wire[3] = statistics_wire_checksum(wire);
 }
 

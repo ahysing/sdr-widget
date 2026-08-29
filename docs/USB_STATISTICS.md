@@ -11,7 +11,7 @@ Firmware exposes a 1 Hz statistics stream over a vendor HID interface (`usage_pa
 - **Endianness:** little-endian for multi-byte fields
 - **Checksum:** byte index 3 is XOR of all other wire bytes
 
-## Wire layout (version 3, 40 bytes)
+## Wire layout (version 3, 42 bytes)
 
 | Offset | Field | Type | Semantics |
 |--------|-------|------|-----------|
@@ -39,8 +39,10 @@ Firmware exposes a 1 Hz statistics stream over a vendor HID interface (`usage_pa
 | 37 | `equalizer_step_right` | U8 | Right active loudness row (0–120) |
 | 38 | `source_has_volume_control` | U8 | `1` when USB SET_CUR host volume is authoritative; `0` when PCM-inferred gain is used |
 | 39 | `bass_boost_enabled` | U8 | `1` when loudness contour selection is enabled (`henryctl --bassboost 1`) |
+| 40 | `gain_inferred_dbfs_left` | S8 | Peak-tracked inferred left gain (always updated, for tuning) |
+| 41 | `gain_inferred_dbfs_right` | S8 | Peak-tracked inferred right gain (always updated, for tuning) |
 
-Python struct format: `"<BBBBIIHHHIHbbbbIBBBBBBBB"`
+Python struct format: `"<BBBBIIHHHIHbbbbIBBBBBBBBbb"`
 
 Protocol constants live in [`src/usb_statistics_descriptors.h`](../src/usb_statistics_descriptors.h).
 
@@ -59,6 +61,7 @@ Slow telemetry fields live in `stats_telemetry` and are merged into the wire pac
 | Telemetry | `gain_dbfs_left/right`, `source_has_volume_control` | USB SET_CUR volume handler (immediate) | No |
 | Telemetry | `bass_boost_enabled` | `loudness_bass_boost_set()` (UAC Bass Boost / CLI) | No |
 | Telemetry | `db_spl_left/right`, `equalizer_step_left/right` | Loudness equalizer selection | No |
+| Telemetry | `gain_inferred_dbfs_left/right` | Loudness envelope follower (always, both volume-control modes) | No |
 | Last event | `last_tag`, `last_arg0..2` | `audio_stats_record_event()` | Yes → `NONE` / 0 |
 
 USBB FIFO access for HID IN and audio endpoints is serialized with `usb_fifo_hw_lock` (global interrupt disable) so stats and audio tasks cannot interleave `Usb_reset_endpoint_fifo_access`.

@@ -85,12 +85,30 @@ void test_loudness_inferred_gain_protocol_volume_overrides(void) {
     printf("test_loudness_inferred_gain_protocol_volume_overrides passed\n");
 }
 
+void test_loudness_inferred_gain_tracks_with_usb_volume_control(void) {
+    printf("Running test_loudness_inferred_gain_tracks_with_usb_volume_control...\n");
+    int i;
+    int32_t full = (int32_t)INT24_MAX << 8;
+
+    loudness_test_reset_inferred_gain();
+    loudness_inferred_gain_set_rate(48000);
+    loudness_set_source_has_volume_control();
+
+    for (i = 0; i < 50000; i++) {
+        loudness_envelope_follower_update_stereo(full, full);
+    }
+    assert(loudness_inferred_gain_dbfs_channel(0) >= -6);
+    assert(loudness_inferred_gain_dbfs_channel(1) >= -6);
+    printf("test_loudness_inferred_gain_tracks_with_usb_volume_control passed\n");
+}
+
 int main(void) {
     test_loudness_inferred_gain_fullscale();
     test_loudness_inferred_gain_halfscale();
     test_loudness_inferred_gain_fast_decay();
     test_loudness_inferred_gain_slow_rise();
     test_loudness_inferred_gain_protocol_volume_overrides();
+    test_loudness_inferred_gain_tracks_with_usb_volume_control();
     printf("\nAll loudness inferred gain tests completed!\n");
     return 0;
 }

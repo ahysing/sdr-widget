@@ -15,7 +15,9 @@
 #define USB_STATS_HID_REPORT_ID 1u
 #define USB_STATS_HID_REPORT_SIZE 63u
 #define USB_STATS_HID_TRANSFER_SIZE 64u
+#ifndef MSK_EP_DIR
 #define MSK_EP_DIR 0x80
+#endif
 
 #define FREERTOS_H
 #define TASK_H
@@ -23,7 +25,6 @@
 #define _USB_DRV_H_
 #define _USB_STANDARD_REQUEST_H_
 #define _PRINT_FUNCS_H_
-#define SDR_WIDGET_USB_STATISTICS_DESCRIPTORS_H
 
 typedef uint32_t portTickType;
 

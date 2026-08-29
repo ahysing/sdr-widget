@@ -33,4 +33,6 @@ void loudness_fast_select_equalizer_steps(int32_t db_spl_x10,
 void loudness_fast_select_unity_passthrough(void);
 void loudness_fast_reset_states(void);
 
+void loudness_refresh_quotient_table_selection(void);
+
 #endif /* LOUDNESS_INTERNAL_H_ */

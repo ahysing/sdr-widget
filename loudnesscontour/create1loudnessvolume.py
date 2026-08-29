@@ -53,6 +53,15 @@ def parse_args():
         choices=[32],
         help="Print flat Q4.28 C struct initializers",
     )
+    parser.add_argument(
+        "--coeff-mode",
+        choices=["filterandvolume", "filter"],
+        default="filterandvolume",
+        help=(
+            "filterandvolume: bake playback volume into b0/b1/b2; "
+            "filter: low-shelf only, no volume scaling"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -167,8 +176,20 @@ def baked_coefficients(params, sample_rate_hz, phon):
     ]), volume_db
 
 
+def filter_coefficients(params, sample_rate_hz, phon):
+    b0, b1, b2, a1, a2 = biquad_low_shelf(*params, sample_rate_hz)
+    volume_db = phon - MAXIMUM_PHON
+    return np.array([b0, b1, b2, a1, a2]), volume_db
+
+
+def row_coefficients(args, params, sample_rate_hz, phon):
+    if args.coeff_mode == "filter":
+        return filter_coefficients(params, sample_rate_hz, phon)
+    return baked_coefficients(params, sample_rate_hz, phon)
+
+
 def print_row(args, sample_rate_hz, phon, params):
-    coeffs, volume_db = baked_coefficients(params, sample_rate_hz, phon)
+    coeffs, volume_db = row_coefficients(args, params, sample_rate_hz, phon)
     b0, b1, b2, a1, a2 = coeffs
     if args.bit_width == 32:
         values = [float_to_q4_28(value) for value in (a1, a2, b0, b1, b2)]
@@ -203,7 +224,8 @@ def plot_results(args, optimized, frequencies_hz, sample_rate_hz):
     ref_f, ref_spl = iso226_contour(REFERENCE_PHON)
     reference = CubicSpline(ref_f, ref_spl)(frequencies_hz)
 
-    for phon in PHON_LEVELS:
+    for index in range(0, len(PHON_LEVELS), 10):
+        phon = PHON_LEVELS[index]
         iso_f, iso_spl = iso226_contour(phon)
         contour = CubicSpline(iso_f, iso_spl)(frequencies_hz)
         response = filter_response(optimized[phon], frequencies_hz, sample_rate_hz)

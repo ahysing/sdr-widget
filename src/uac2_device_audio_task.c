@@ -708,11 +708,9 @@ void uac2_device_audio_task(void *pvParameters)
 
 #ifndef LOUDNESS_DISABLE
 					if (loudness_enabled_packet) {
-						if (!loudness_inferred_gain_has_source_volume_control()) {
-							for (i = 0; i < num_samples; i++) {
-								loudness_envelope_follower_update_stereo(usb_out_L[i],
-									usb_out_R[i]);
-							}
+						for (i = 0; i < num_samples; i++) {
+							loudness_envelope_follower_update_stereo(usb_out_L[i],
+								usb_out_R[i]);
 						}
 						if (audio_out_alt == ALT2_AS_INTERFACE_INDEX) {
 							LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L,

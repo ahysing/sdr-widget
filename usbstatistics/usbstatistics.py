@@ -45,7 +45,7 @@ USB_STATS_HID_TRANSFER_SIZE = 64
 USB_STATS_PACKET_HID_ANCHOR = 0x53
 USB_STATS_PACKET_MAGIC = USB_STATS_PACKET_HID_ANCHOR  # backward-compatible alias
 USB_STATS_PACKET_VERSION = 3
-USB_STATS_PACKET_FORMAT = "<BBBBIIHHHIHbbbbIBBBBBBBB"
+USB_STATS_PACKET_FORMAT = "<BBBBIIHHHIHbbbbIBBBBBBBBbb"
 USB_STATS_PACKET_SIZE = struct.calcsize(USB_STATS_PACKET_FORMAT)
 USB_STATS_PACKET_CHECKSUM_INDEX = 3
 USB_STATS_HID_REPORT_SIZE = 63
@@ -416,6 +416,8 @@ def parse_stats_payload(payload):
         equalizer_step_right,
         source_has_volume_control,
         bass_boost_enabled,
+        gain_inferred_dbfs_left,
+        gain_inferred_dbfs_right,
     ) = fields
 
     if hid_anchor != USB_STATS_PACKET_HID_ANCHOR:
@@ -443,6 +445,8 @@ def parse_stats_payload(payload):
         "equalizer_step_right": equalizer_step_right,
         "source_has_volume_control": 1 if source_has_volume_control else 0,
         "bass_boost_enabled": 1 if bass_boost_enabled else 0,
+        "gain_inferred_dbfs_left": gain_inferred_dbfs_left,
+        "gain_inferred_dbfs_right": gain_inferred_dbfs_right,
         "last_event": decode_last_event(last_tag, last_arg0, last_arg1, last_arg2),
     }
 
@@ -471,6 +475,8 @@ def format_stats_deltas(prev_stats, stats):
         f"d_underrun={delta('underruns'):+d}",
         f"gain_L={stats['gain_dbfs_left']}dB",
         f"gain_R={stats['gain_dbfs_right']}dB",
+        f"infer_L={stats['gain_inferred_dbfs_left']}dB",
+        f"infer_R={stats['gain_inferred_dbfs_right']}dB",
         f"step_L={stats['equalizer_step_left']}",
         f"step_R={stats['equalizer_step_right']}",
         f"bass_boost={stats['bass_boost_enabled']}",

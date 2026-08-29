@@ -546,6 +546,9 @@ static void loudness_publish_equalizer_telemetry(void)
         (U8)loudness_get_equalizer_step(db_spl_left_x10),
         loudness_clamp_s8(db_spl_right),
         (U8)loudness_get_equalizer_step(db_spl_right_x10));
+    stats_telemetry_set_gain_inferred_dbfs_stereo(
+        loudness_clamp_s8(loudness_inferred_gain_dbfs_channel(0)),
+        loudness_clamp_s8(loudness_inferred_gain_dbfs_channel(1)));
 #endif
 }
 

@@ -8,6 +8,7 @@
 #include "usb_specific_request.h"
 #endif
 #include "loudness.h"
+#include "loudness_internal.h"
 
 /*
  * Peak-tracking leaky-integrator time constants.
@@ -40,11 +41,11 @@
 #define LOUDNESS_GAIN_LONG_FAST_SHIFT_BASE     12
 #define LOUDNESS_GAIN_LONG_SLOW_SHIFT_BASE     20
 #define LOUDNESS_GAIN_SHIFT_MAX                30
-#define LOUDNESS_PEAK_DBFS_BITS                24
+#define LOUDNESS_PEAK_DBFS_BITS                23
 
 static volatile Bool source_has_volume_control = FALSE;
-static volatile uint32_t gain_short_memory = 0;
-static volatile uint32_t gain_long_memory = 0;
+static volatile uint32_t gain_short_memory[LOUDNESS_CHANNELS];
+static volatile uint32_t gain_long_memory[LOUDNESS_CHANNELS];
 static volatile uint32_t gain_track_frequency_hz = 0;
 static volatile int gain_short_attack_shift = LOUDNESS_GAIN_SHORT_ATTACK_SHIFT_BASE;
 static volatile int gain_short_release_shift = LOUDNESS_GAIN_SHORT_RELEASE_SHIFT_BASE;
@@ -53,10 +54,9 @@ static volatile int gain_long_slow_shift = LOUDNESS_GAIN_LONG_SLOW_SHIFT_BASE;
 
 static int32_t loudness_peak_magnitude_to_dbfs(uint32_t magnitude)
 {
-    if (magnitude == 0) {
-        return -144;
-    }
-
+    if (magnitude == 0)
+        return -60; 
+    
     uint32_t leading_zeros = CLZ(magnitude);
     int32_t bit_position = 32 - (int32_t)leading_zeros;
     uint32_t fraction = 0;
@@ -126,8 +126,12 @@ void loudness_inferred_gain_set_rate(uint32_t frequency_hz)
 
 void loudness_inferred_gain_reset(void)
 {
-    gain_short_memory = 0;
-    gain_long_memory = 0;
+    int channel;
+
+    for (channel = 0; channel < LOUDNESS_CHANNELS; channel++) {
+        gain_short_memory[channel] = 0;
+        gain_long_memory[channel] = 0;
+    }
     loudness_inferred_gain_set_rate(current_freq.frequency);
 }
 
@@ -166,14 +170,14 @@ static uint32_t loudness_gain_leak_down(uint32_t high, uint32_t low, int shift)
 }
 
 /* Update short long peak time from instant_sample_peak (positive magnitude). */
-static void loudness_combined_context_loop(uint32_t instant_sample_peak)
+static void loudness_combined_context_loop(uint32_t instant_sample_peak, int channel)
 {
     int attack_shift = gain_short_attack_shift;
     int release_shift = gain_short_release_shift;
     int fast_shift = gain_long_fast_shift;
     int slow_shift = gain_long_slow_shift;
-    uint32_t short_mem = gain_short_memory;
-    uint32_t long_mem = gain_long_memory;
+    uint32_t short_mem = gain_short_memory[channel];
+    uint32_t long_mem = gain_long_memory[channel];
 
     if (instant_sample_peak > short_mem) {
         short_mem += (instant_sample_peak - short_mem) >> attack_shift;
@@ -190,26 +194,41 @@ static void loudness_combined_context_loop(uint32_t instant_sample_peak)
         long_mem = loudness_gain_leak_down(long_mem, short_mem, slow_shift);
     }
 
-    gain_short_memory = short_mem;
-    gain_long_memory = long_mem;
+    gain_short_memory[channel] = short_mem;
+    gain_long_memory[channel] = long_mem;
 }
 
-static uint32_t loudness_get_active_loudness_level(void)
+static uint32_t loudness_get_active_loudness_level(int channel)
 {
-    return gain_long_memory;
+    return gain_long_memory[channel];
 }
 
-static void envelope_follower_update_sample(int32_t sample, Bool is_16bit_container)
+static int32_t loudness_inferred_gain_dbfs_from_magnitude(uint32_t mag)
+{
+    if (mag > (uint32_t)INT24_MAX) {
+        mag = (uint32_t)INT24_MAX;
+    }
+    int32_t inferred_dbfs = loudness_peak_magnitude_to_dbfs(mag);
+    if (inferred_dbfs < -60)
+    {
+        return -60;
+    }
+    return inferred_dbfs;
+}
+
+static void envelope_follower_update_sample(int32_t sample, Bool is_16bit_container,
+    int channel)
 {
     uint32_t mag;
 
-    if (source_has_volume_control || gain_track_frequency_hz == 0) {
+    if (gain_track_frequency_hz == 0 || channel < 0
+        || channel >= LOUDNESS_CHANNELS) {
         return;
     }
 
     sample = loudness_inferred_gain_sample_to_24bit(sample, is_16bit_container);
     mag = loudness_inferred_gain_magnitude(sample);
-    loudness_combined_context_loop(mag);
+    loudness_combined_context_loop(mag, channel);
 }
 
 Bool loudness_inferred_gain_has_source_volume_control(void)
@@ -217,13 +236,24 @@ Bool loudness_inferred_gain_has_source_volume_control(void)
     return source_has_volume_control;
 }
 
+int32_t loudness_inferred_gain_dbfs_channel(int channel)
+{
+    if (channel < 0 || channel >= LOUDNESS_CHANNELS) {
+        return -144;
+    }
+    return loudness_inferred_gain_dbfs_from_magnitude(
+        loudness_get_active_loudness_level(channel));
+}
+
 int32_t loudness_inferred_gain_dbfs(void)
 {
-    uint32_t mag = loudness_get_active_loudness_level();
-    if (mag > (uint32_t)INT24_MAX) {
-        mag = (uint32_t)INT24_MAX;
+    uint32_t mag = loudness_get_active_loudness_level(0);
+    uint32_t mag_right = loudness_get_active_loudness_level(1);
+
+    if (mag_right > mag) {
+        mag = mag_right;
     }
-    return loudness_peak_magnitude_to_dbfs(mag);
+    return loudness_inferred_gain_dbfs_from_magnitude(mag);
 }
 
 void loudness_set_source_has_volume_control(void)
@@ -231,18 +261,16 @@ void loudness_set_source_has_volume_control(void)
     if (!source_has_volume_control) {
         source_has_volume_control = TRUE;
         loudness_inferred_gain_reset();
+        loudness_refresh_quotient_table_selection();
     }
 }
 
 void loudness_envelope_follower_update_stereo(int32_t sample_L, int32_t sample_R)
 {
-    if (source_has_volume_control) {
-        return;
-    }
-
     Bool is_16bit_container = (usb_alternate_setting_out == 0x02);
-    envelope_follower_update_sample(sample_L, is_16bit_container);
-    envelope_follower_update_sample(sample_R, is_16bit_container);
+
+    envelope_follower_update_sample(sample_L, is_16bit_container, 0);
+    envelope_follower_update_sample(sample_R, is_16bit_container, 1);
 }
 
 #ifdef BUILD_TESTING
@@ -254,32 +282,34 @@ void loudness_test_reset_inferred_gain(void)
 
 void loudness_test_set_short_memory(uint32_t value)
 {
-    gain_short_memory = value;
+    gain_short_memory[0] = value;
+    gain_short_memory[1] = value;
 }
 
 void loudness_test_set_long_memory(uint32_t value)
 {
-    gain_long_memory = value;
+    gain_long_memory[0] = value;
+    gain_long_memory[1] = value;
 }
 
 uint32_t loudness_test_get_short_memory(void)
 {
-    return gain_short_memory;
+    return gain_short_memory[0];
 }
 
 uint32_t loudness_test_get_long_memory(void)
 {
-    return gain_long_memory;
+    return gain_long_memory[0];
 }
 
 void loudness_test_combined_context_loop(uint32_t instant_sample_peak)
 {
-    loudness_combined_context_loop(instant_sample_peak);
+    loudness_combined_context_loop(instant_sample_peak, 0);
 }
 
 uint32_t loudness_test_get_active_loudness_level(void)
 {
-    return loudness_get_active_loudness_level();
+    return loudness_get_active_loudness_level(0);
 }
 #endif
 

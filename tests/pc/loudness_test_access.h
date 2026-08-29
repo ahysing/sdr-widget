@@ -6,6 +6,7 @@
 
 #ifdef BUILD_TESTING
 #include "compiler.h"
+#include "loudness_internal.h"
 
 extern volatile S16 last_db_spl_x10;
 
