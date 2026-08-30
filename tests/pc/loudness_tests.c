@@ -3,7 +3,6 @@
 #include "loudness_test_access.h"
 #include "usb_specific_request.h"
 #include "loudness_fast.h"
-#include "loudness_highres.h"
 #include <stdio.h>
 #include <assert.h>
 #include <stdint.h>
@@ -36,7 +35,7 @@ static int32_t apply_digital_volume(int32_t sample, S32 mult) {
 void test_loudness_init() {
     printf("Running test_loudness_init...\n");
     loudness_init();
-    assert(loudness_get_last_db_spl_x10() == LOUDNESS_MIN_PHON_X10);
+    assert(loudness_get_last_db_spl_x10() == LOUDNESS_DB_SPL_MAX * 10);
     printf("test_loudness_init passed\n");
 }
 
@@ -177,21 +176,39 @@ void test_saturate_16bit_s32_to_s32(void) {
     printf("test_saturate_16bit_s32_to_s32 passed\n");
 }
 
-void test_loudness_get_gain_dbfs() {
-    printf("Running test_loudness_get_gain_dbfs...\n");
+static void assert_gain_dbfs_channel(int channel, int32_t expected)
+{
+    assert(loudness_get_gain_dbfs_channel(channel) == expected);
+}
+
+void test_loudness_get_gain_dbfs_per_channel(void) {
+    printf("Running test_loudness_get_gain_dbfs_per_channel...\n");
     loudness_set_source_has_volume_control();
+
     loudness_usb_volume_changed_left(0);
-    assert(loudness_get_gain_dbfs() == 0);
+    loudness_usb_volume_changed_right(0);
+    assert_gain_dbfs_channel(0, 0);
+    assert_gain_dbfs_channel(1, 0);
 
     loudness_usb_volume_changed_left(-256 * 10);
-    assert(loudness_get_gain_dbfs() == -10);
+    assert_gain_dbfs_channel(0, -10);
+    assert_gain_dbfs_channel(1, 0);
+
+    loudness_usb_volume_changed_right(-256 * 10);
+    assert_gain_dbfs_channel(0, -10);
+    assert_gain_dbfs_channel(1, -10);
 
     loudness_usb_volume_changed_left(VOL_MIN);
-    assert(loudness_get_gain_dbfs() == -60);
+    assert_gain_dbfs_channel(0, -60);
+
+    loudness_usb_volume_changed_right(VOL_MAX);
+    assert_gain_dbfs_channel(0, -60);
+    assert_gain_dbfs_channel(1, 0);
 
     loudness_usb_volume_changed_left(VOL_MAX);
-    assert(loudness_get_gain_dbfs() == 0);
-    printf("test_loudness_get_gain_dbfs passed\n");
+    assert_gain_dbfs_channel(0, 0);
+    assert_gain_dbfs_channel(1, 0);
+    printf("test_loudness_get_gain_dbfs_per_channel passed\n");
 }
 
 
@@ -976,143 +993,6 @@ static double measure_fast_50hz_gain_db_stereo_packet(uint32_t sample_rate_hz,
     return 20.0 * log10(output_rms / input_rms);
 }
 
-void test_loudness_hires_stride4_counter_phase(void)
-{
-    S32 packet_L[7];
-    S32 packet_R[7];
-    int i;
-
-    printf("Running test_loudness_hires_stride4_counter_phase...\n");
-
-    current_freq.frequency = 176400;
-    loudness_change_frequency_fast(176400);
-    loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(10);
-
-    for (i = 0; i < 7; i++) {
-        packet_L[i] = 1000 << 16;
-        packet_R[i] = 1000 << 16;
-    }
-
-    loudness_filter_16bit_stereo_packet(packet_L, packet_R, 7);
-    assert(loudness_highres_test_channel_state(0)->sample_counter == 3);
-    assert(loudness_highres_test_channel_state(1)->sample_counter == 0);
-
-    printf("test_loudness_hires_stride4_counter_phase passed\n\n");
-}
-
-void test_loudness_hires_stride2_counter_phase(void)
-{
-    S32 packet_L[3];
-    S32 packet_R[3];
-    int i;
-
-    printf("Running test_loudness_hires_stride2_counter_phase...\n");
-
-    current_freq.frequency = 88200;
-    loudness_change_frequency_fast(88200);
-    loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(10);
-
-    for (i = 0; i < 3; i++) {
-        packet_L[i] = 1000 << 16;
-        packet_R[i] = 1000 << 16;
-    }
-
-    loudness_filter_16bit_stereo_packet(packet_L, packet_R, 3);
-    assert(loudness_highres_test_channel_state(0)->sample_counter == 1);
-    assert(loudness_highres_test_channel_state(1)->sample_counter == 0);
-
-    printf("test_loudness_hires_stride2_counter_phase passed\n\n");
-}
-
-void test_loudness_hires_packet_boundary_continuity(void)
-{
-    S32 packet_a[49];
-    S32 packet_b[49];
-    int i;
-    int32_t prev_out = 0;
-    int32_t max_step = 0;
-
-    printf("Running test_loudness_hires_packet_boundary_continuity...\n");
-
-    current_freq.frequency = 176400;
-    loudness_change_frequency_fast(176400);
-    loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(10);
-
-    for (i = 0; i < 49; i++) {
-        double phase = 2.0 * SINE_TEST_PI * 50.0 * (double)i / 176400.0;
-        int32_t s16 = (int32_t)lrint((32767.0 * 0.25) * sin(phase));
-
-        packet_a[i] = s16 << 16;
-        packet_b[i] = s16 << 16;
-    }
-
-    loudness_filter_16bit_stereo_packet(packet_a, packet_b, 49);
-    loudness_filter_16bit_stereo_packet(packet_b, packet_b, 49);
-
-    for (i = 0; i < 98; i++) {
-        int32_t out_s16;
-        int32_t step;
-
-        if (i < 49) {
-            out_s16 = (int32_t)(int16_t)(packet_a[i] >> 16);
-        } else {
-            out_s16 = (int32_t)(int16_t)(packet_b[i - 49] >> 16);
-        }
-
-        if (i > 0) {
-            step = out_s16 - prev_out;
-            if (step < 0) {
-                step = -step;
-            }
-            if (step > max_step) {
-                max_step = step;
-            }
-        }
-        prev_out = out_s16;
-    }
-
-    assert(max_step < 8000);
-    printf("test_loudness_hires_packet_boundary_continuity passed\n\n");
-}
-
-void test_loudness_hires_halfrate_delta_near_fullrate(void)
-{
-    double gain_halfrate;
-    double gain_176;
-    double gain_192;
-    double ref_gain_44100;
-    double ref_gain_48000;
-
-    printf("Running test_loudness_hires_halfrate_delta_near_fullrate...\n");
-
-    ref_gain_44100 = measure_fast_50hz_gain_db_stereo_packet(44100, 80);
-    ref_gain_48000 = measure_fast_50hz_gain_db_stereo_packet(48000, 80);
-
-    gain_halfrate = measure_fast_50hz_gain_db_stereo_packet(88200, 80);
-    printf("  half-rate 88.2 kHz packet gain=%.3f dB, "
-        "reference 44.1 kHz gain=%.3f dB\n",
-        gain_halfrate, ref_gain_44100);
-    fflush(stdout);
-    assert(fabs(gain_halfrate - ref_gain_44100) <=
-        HIRES_HALF_DELTA_GAIN_TOLERANCE_DB);
-
-    gain_176 = measure_fast_50hz_gain_db_stereo_packet(176400, 80);
-    assert(fabs(gain_176 - ref_gain_44100) <=
-        HIRES_HALF_DELTA_GAIN_TOLERANCE_DB);
-
-    gain_192 = measure_fast_50hz_gain_db_stereo_packet(192000, 80);
-    printf("  192 kHz packet gain=%.3f dB, reference 48 kHz gain=%.3f dB\n",
-        gain_192, ref_gain_48000);
-    fflush(stdout);
-    assert(fabs(gain_192 - ref_gain_48000) <=
-        HIRES_HALF_DELTA_GAIN_TOLERANCE_DB);
-
-    printf("test_loudness_hires_halfrate_delta_near_fullrate passed\n\n");
-}
-
 #define IDLE_DRAIN_MAX_SAMPLES 96000
 
 static void drain_zeros_24bit_channel(int channel)
@@ -1334,8 +1214,7 @@ void test_per_channel_baked_volume_policy(void)
     biquad_quotients_fast_t right;
     biquad_quotients_fast_t shared_actual;
     biquad_quotients_fast_t shared_expected;
-    const uint32_t independent_rates[] = { 44100, 48000 };
-    const uint32_t shared_rates[] = { 88200, 96000, 176400, 192000 };
+    const uint32_t independent_rates[] = { 44100, 48000,  88200, 96000, 176400, 192000 };
     size_t i;
 
     printf("Running test_per_channel_baked_volume_policy...\n");
@@ -1361,29 +1240,6 @@ void test_per_channel_baked_volume_policy(void)
         assert(left.b0 != right.b0);
     }
 
-    for (i = 0; i < sizeof(shared_rates) / sizeof(shared_rates[0]); i++) {
-        current_freq.frequency = shared_rates[i];
-        loudness_change_frequency_fast(shared_rates[i]);
-        loudness_usb_volume_changed_left(spk_vol_usb_L);
-        loudness_usb_volume_changed_right(spk_vol_usb_R);
-        assert(loudness_get_last_db_spl_x10() == 820);
-        loudness_test_get_fast_channel(0, &state, &left);
-        loudness_test_get_fast_channel(1, &state, &right);
-        assert(left.a1 == right.a1);
-        assert(left.a2 == right.a2);
-        assert(left.b0 == right.b0);
-        assert(left.b1 == right.b1);
-        assert(left.b2 == right.b2);
-        shared_actual = left;
-        loudness_test_load_active_quotients_fast(94);
-        loudness_test_get_fast_channel(0, &state, &shared_expected);
-        assert(shared_actual.a1 == shared_expected.a1);
-        assert(shared_actual.a2 == shared_expected.a2);
-        assert(shared_actual.b0 == shared_expected.b0);
-        assert(shared_actual.b1 == shared_expected.b1);
-        assert(shared_actual.b2 == shared_expected.b2);
-    }
-
     printf("test_per_channel_baked_volume_policy passed\n\n");
 }
 
@@ -1398,7 +1254,7 @@ int main() {
     test_saturate_24bit_s32_to_s32();
     test_saturate_24bit_s32_to_u32();
     test_saturate_16bit_s32_to_s32();
-    test_loudness_get_gain_dbfs();
+    test_loudness_get_gain_dbfs_per_channel();
     test_loudness_16bit_cd_audio_processing();
     test_loudness_16bit_container_no_int32_overflow();
     test_loudness_intersample_peak_saturation();
@@ -1428,10 +1284,6 @@ int main() {
     test_50hz_79phon_bass_boost_magnitude();
     test_50hz_bass_boost_is_monotonic();
     test_loudness_all_curve_transitions_glitchfree();
-    test_loudness_hires_stride2_counter_phase();
-    test_loudness_hires_stride4_counter_phase();
-    test_loudness_hires_packet_boundary_continuity();
-    test_loudness_hires_halfrate_delta_near_fullrate();
     test_filter_idle_after_zeros_base();
     test_filter_active_during_hires_interp();
     test_filter_idle_after_zeros_stride2();

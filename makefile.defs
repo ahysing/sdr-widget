@@ -95,9 +95,6 @@ src/loudness_fast.o: ../src/loudness_fast.c
 src/loudness_highres.o: ../src/loudness_highres.c
 	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))
 
-src/loudness_inferred_gain.o: ../src/loudness_inferred_gain.c
-	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))
-
 src/loudness.o: ../src/loudness.c
 	$(call AVR32_COMPILE_APP,$@,$(CFLAGS_LOUDNESS_HOT))
 

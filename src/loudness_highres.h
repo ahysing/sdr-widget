@@ -9,7 +9,24 @@
 #include "loudness_fast.h"
 #include "compiler.h"
 
+typedef struct {
+    int32_t y_prev_biquad;
+    int32_t y_derivative;
+    int32_t y_current_est;
+    uint8_t sample_counter;
+} loudness_highres_channel_state_t;
+
+typedef int32_t (*loudness_highres_biquad1_step_stride_fn)(int32_t x_24,
+    biquad_state_fast_t *st, loudness_highres_channel_state_t *ch,
+    const biquad_runtime_fast_t *rt);
+
 Bool loudness_highres_applies(uint32_t sample_rate_hz);
+
+void loudness_highres_current_stereo_db_spl_x10(
+    int32_t *db_spl_left_x10, int32_t *db_spl_right_x10);
+void loudness_highres_change_frequency(uint32_t frequency);
+void loudness_highres_filter_16bit_stereo_packet(
+    S32 *sample_L, S32 *sample_R, U16 num_samples);
 
 const biquad_quotients_fast_t *loudness_highres_halfrate_quotients(
     uint32_t sample_rate_hz, int equalizer_step,
@@ -38,6 +55,7 @@ void loudness_highres_filter_16bit_stereo_packet_shared(
     biquad_state_fast_t *stL, biquad_state_fast_t *stR, U16 num_samples);
 
 #ifdef BUILD_TESTING
+void loudness_highres_test_load_active_quotients(int equalizer_step);
 void loudness_highres_test_filter_16bit_stereo_packet_fullrate(S32 *sample_L,
     S32 *sample_R, biquad_state_fast_t *stL, biquad_state_fast_t *stR,
     const biquad_runtime_fast_t *runtime, U16 num_samples);

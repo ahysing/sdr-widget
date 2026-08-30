@@ -1,5 +1,4 @@
 #include "loudness_fast.h"
-#include "loudness_highres.h"
 #include "loudness_internal.h"
 #include "loudness_inferred_gain.h"
 #include "taskAK5394A.h"
@@ -569,20 +568,17 @@ lowshelf_no_volume_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
 };
 
 
-static biquad_quotients_fast_t loudness_quotients_scaled[LOUDNESS_NUM_EQUALIZER_STEPS];
-static const biquad_quotients_fast_t *active_equalizer_step_table =
-    lowshelf_no_volume_44100hz;
 static biquad_quotients_fast_t staging_quotients[LOUDNESS_CHANNELS];
 static biquad_runtime_fast_t staging_runtime[LOUDNESS_CHANNELS];
 static biquad_quotients_fast_t loudness_quotients_bank[2][LOUDNESS_CHANNELS];
 static biquad_runtime_fast_t loudness_runtime_bank[2][LOUDNESS_CHANNELS];
 static volatile uint8_t loudness_active_quotients_bank;
 static biquad_state_fast_t     loudness_states[LOUDNESS_CHANNELS];
-
-static biquad_quotients_fast_t loudness_scale_quotients_fast(
-    biquad_quotients_fast_t base, uint32_t n);
+static const biquad_quotients_fast_t *active_equalizer_step_table =
+    lowshelf_and_volume_44100hz;
 
 static void loudness_filter_refresh_idle_cache(void);
+
 
 static const biquad_quotients_fast_t *loudness_base_table_44100hz(void)
 {
@@ -599,33 +595,15 @@ static const biquad_quotients_fast_t *loudness_base_table_48000hz(void)
     }
     return lowshelf_no_volume_48000hz;
 }
+static void loudness_filter_refresh_idle_cache(void);
 
 static const biquad_quotients_fast_t *loudness_resolve_quotient_base_table(
     uint32_t frequency)
 {
-    const biquad_quotients_fast_t *base_table;
-    uint32_t n = 1;
-
-    base_table = loudness_base_table_44100hz();
-    if (frequency % FREQ_48 == 0) {
-        base_table = loudness_base_table_48000hz();
-        n = frequency / FREQ_48;
-    } else if (frequency % FREQ_44 == 0) {
-        base_table = loudness_base_table_44100hz();
-        n = frequency / FREQ_44;
+    if (frequency == (uint32_t)FREQ_48) {
+        return loudness_base_table_48000hz();
     }
-    if (n > 4) {
-        n = 4;
-    }
-    if (n > 1) {
-        int b;
-        for (b = 0; b < LOUDNESS_NUM_EQUALIZER_STEPS; b++) {
-            loudness_quotients_scaled[b] = loudness_scale_quotients_fast(
-                base_table[b], n);
-        }
-        base_table = loudness_quotients_scaled;
-    }
-    return base_table;
+    return loudness_base_table_44100hz();
 }
 
 static const biquad_runtime_fast_t *loudness_fast_active_runtime(void)
@@ -718,29 +696,6 @@ int32_t loudness_fast_biquad1_step_runtime(int32_t x_n,
 #define LOUDNESS_BIQUAD1_STEP loudness_fast_biquad1_step_runtime
 #endif
 
-#define LOUDNESS_FAST_DEFINE_BIQUAD1_STEP_RUNTIME_STRIDE(fn_name, shift_plus_one, counter_mask) \
-int32_t fn_name(int32_t x_24, biquad_state_fast_t *st,                                      \
-    loudness_highres_channel_state_t *ch, const biquad_runtime_fast_t *rt)                  \
-{                                                                                             \
-    if (ch->sample_counter == 0) {                                                            \
-        int32_t y_true = loudness_fast_biquad1_step_runtime(x_24, st, rt);                  \
-        ch->y_derivative = (y_true - ch->y_prev_biquad) >> ((shift_plus_one) - 1);           \
-        ch->y_current_est = y_true;                                                           \
-        ch->y_prev_biquad = y_true;                                                           \
-        ch->sample_counter = 1;                                                               \
-        return y_true;                                                                        \
-    }                                                                                         \
-    ch->y_current_est += ch->y_derivative;                                                    \
-    ch->sample_counter++;                                                                     \
-    ch->sample_counter &= (counter_mask);                                                     \
-    return ch->y_current_est;                                                                 \
-}
-
-LOUDNESS_FAST_DEFINE_BIQUAD1_STEP_RUNTIME_STRIDE(
-    loudness_fast_biquad1_step_runtime_stride4, 3, 0x03)
-LOUDNESS_FAST_DEFINE_BIQUAD1_STEP_RUNTIME_STRIDE(
-    loudness_fast_biquad1_step_runtime_stride2, 2, 0x01)
-
 static inline int32_t loudness_downsample_filter_to_16bit_container(int32_t y_24)
 {
     int32_t s;
@@ -765,16 +720,6 @@ LOUDNESS_FAST_INLINE int32_t loudness_biquad1_16bit_container_step(int32_t x_con
     return loudness_downsample_filter_to_16bit_container(y_24);
 }
 
-#ifdef BUILD_TESTING
-void loudness_test_filter_16bit_stereo_packet_hires_fullrate(S32 *sample_L,
-    S32 *sample_R, U16 num_samples)
-{
-    loudness_highres_test_filter_16bit_stereo_packet_fullrate(sample_L, sample_R,
-        &loudness_states[0], &loudness_states[1],
-        loudness_fast_active_runtime(), num_samples);
-}
-#endif
-
 int32_t biquad_step_fast_24bit(int32_t x_n, biquad_state_fast_t* biquad_states,
     const biquad_quotients_fast_t* q)
 {
@@ -790,50 +735,17 @@ int32_t biquad_step_fast_32bit(int32_t x_n, biquad_state_fast_t* biquad_states,
     return biquad_step_fast_24bit(x_n, biquad_states, q);
 }
 
-static Bool loudness_fast_share_master_row(void)
-{
-    return loudness_highres_applies(loudness_fast_frequency_hz);
-}
-
-static int loudness_fast_runtime_channel(int channel)
-{
-    return loudness_fast_share_master_row() ? 0 : channel;
-}
-
 static void loudness_fill_staging_quotients_fast(int equalizer_step_left,
     int equalizer_step_right)
 {
     int channel;
-    const biquad_quotients_fast_t *hires_src_left;
-    const biquad_quotients_fast_t *hires_src_right;
 
-    if (loudness_fast_share_master_row()) {
-        equalizer_step_right = equalizer_step_left;
-    }
-    hires_src_left = loudness_highres_halfrate_quotients(
-        loudness_fast_frequency_hz, equalizer_step_left,
-        loudness_base_table_44100hz(), loudness_base_table_48000hz());
-    if (loudness_fast_share_master_row()) {
-        staging_quotients[0] =
-            active_equalizer_step_table[equalizer_step_left];
-        loudness_runtime_from_quotients(&staging_quotients[0],
-            &staging_runtime[0]);
-        loudness_highres_staging_fill_halfrate_shared(hires_src_left,
-            staging_runtime);
-        return;
-    }
-
-    hires_src_right = loudness_highres_halfrate_quotients(
-        loudness_fast_frequency_hz, equalizer_step_right,
-        loudness_base_table_44100hz(), loudness_base_table_48000hz());
     for (channel = 0; channel < LOUDNESS_CHANNELS; channel++) {
         int step = (channel == 0) ? equalizer_step_left : equalizer_step_right;
         staging_quotients[channel] = active_equalizer_step_table[step];
         loudness_runtime_from_quotients(&staging_quotients[channel],
             &staging_runtime[channel]);
     }
-    loudness_highres_staging_fill_halfrate_independent(
-        hires_src_left, hires_src_right, staging_runtime);
 }
 
 static void loudness_commit_staging_quotients_fast(void)
@@ -844,9 +756,79 @@ static void loudness_commit_staging_quotients_fast(void)
         sizeof(staging_quotients));
     memcpy(loudness_runtime_bank[inactive], staging_runtime,
         sizeof(staging_runtime));
-    loudness_highres_staging_commit();
     loudness_fast_memory_barrier();
     loudness_active_quotients_bank = inactive;
+}
+
+const biquad_quotients_fast_t *loudness_fast_baked_quotient_table_44100hz(void)
+{
+    return loudness_base_table_44100hz();
+}
+
+const biquad_quotients_fast_t *loudness_fast_baked_quotient_table_48000hz(void)
+{
+    return loudness_base_table_48000hz();
+}
+
+
+void loudness_fast_set_active_equalizer_step_table(
+    const biquad_quotients_fast_t *table)
+{
+    active_equalizer_step_table = table;
+}
+
+const biquad_quotients_fast_t *loudness_fast_active_equalizer_step_table(void)
+{
+    return active_equalizer_step_table;
+}
+void loudness_fast_stage_equalizer_steps(
+    const biquad_quotients_fast_t *table,
+    int equalizer_step_left, int equalizer_step_right)
+{
+    int channel;
+
+    for (channel = 0; channel < LOUDNESS_CHANNELS; channel++) {
+        int step = (channel == 0) ? equalizer_step_left : equalizer_step_right;
+        staging_quotients[channel] = table[step];
+        loudness_runtime_from_quotients(&staging_quotients[channel],
+            &staging_runtime[channel]);
+    }
+}
+
+void loudness_fast_stage_shared_equalizer_step(
+    const biquad_quotients_fast_t *table, int equalizer_step)
+{
+    staging_quotients[0] = table[equalizer_step];
+    loudness_runtime_from_quotients(&staging_quotients[0],
+        &staging_runtime[0]);
+    staging_quotients[1] = staging_quotients[0];
+    staging_runtime[1] = staging_runtime[0];
+}
+
+void loudness_fast_commit_staged_quotients(void)
+{
+    loudness_commit_staging_quotients_fast();
+}
+
+biquad_state_fast_t *loudness_fast_biquad_state(int channel)
+{
+    if (channel < 0 || channel >= LOUDNESS_CHANNELS) {
+        return &loudness_states[0];
+    }
+    return &loudness_states[channel];
+}
+
+const biquad_runtime_fast_t *loudness_fast_channel_runtime(int channel)
+{
+    if (channel < 0 || channel >= LOUDNESS_CHANNELS) {
+        channel = 0;
+    }
+    return &loudness_fast_active_runtime()[channel];
+}
+
+void loudness_fast_refresh_idle_cache(void)
+{
+    loudness_filter_refresh_idle_cache();
 }
 
 void loudness_refresh_quotient_table_selection(void)
@@ -873,9 +855,7 @@ void loudness_refresh_quotient_table_selection(void)
         equalizer_step_right);
     loudness_commit_staging_quotients_fast();
     loudness_fast_committed_step[0] = (uint8_t)equalizer_step_left;
-    loudness_fast_committed_step[1] = (uint8_t)(
-        loudness_fast_share_master_row()
-            ? equalizer_step_left : equalizer_step_right);
+    loudness_fast_committed_step[1] = (uint8_t)equalizer_step_right;
     loudness_filter_refresh_idle_cache();
 }
 
@@ -904,8 +884,7 @@ void loudness_test_get_fast_channel(int channel,
     taskENTER_CRITICAL();
     *state = loudness_states[channel];
     if (quotients != NULL) {
-        int quotient_channel = loudness_fast_share_master_row() ? 0 : channel;
-        *quotients = loudness_fast_active_quotients()[quotient_channel];
+        *quotients = loudness_fast_active_quotients()[channel];
     }
     taskEXIT_CRITICAL();
 }
@@ -929,9 +908,6 @@ void loudness_fast_select_equalizer_steps(int32_t db_spl_x10,
     int32_t prev_db_spl_x10 = (int32_t)last_db_spl_x10;
     int prev_step = loudness_get_equalizer_step((int32_t)last_db_spl_x10);
 
-    if (loudness_fast_share_master_row()) {
-        equalizer_step_right = equalizer_step_left;
-    }
     if (equalizer_step_left == (int)loudness_fast_committed_step[0]
         && equalizer_step_right == (int)loudness_fast_committed_step[1]) {
         loudness_publish_equalizer_step(db_spl_x10);
@@ -960,20 +936,10 @@ void loudness_fast_select_unity_passthrough(void)
     unity.a1 = 0;
     unity.a2 = 0;
 
-    if (loudness_fast_share_master_row()) {
-        staging_quotients[0] = unity;
-        loudness_runtime_from_quotients(&staging_quotients[0],
-            &staging_runtime[0]);
-        loudness_highres_staging_fill_halfrate_shared(&unity,
-            staging_runtime);
-    } else {
-        for (channel = 0; channel < LOUDNESS_CHANNELS; channel++) {
-            staging_quotients[channel] = unity;
-            loudness_runtime_from_quotients(&staging_quotients[channel],
-                &staging_runtime[channel]);
-        }
-        loudness_highres_staging_fill_halfrate_independent(
-            &unity, &unity, staging_runtime);
+    for (channel = 0; channel < LOUDNESS_CHANNELS; channel++) {
+        staging_quotients[channel] = unity;
+        loudness_runtime_from_quotients(&staging_quotients[channel],
+            &staging_runtime[channel]);
     }
     loudness_commit_staging_quotients_fast();
     loudness_fast_committed_step[0] = LOUDNESS_EQUALIZER_STEP_UNSET;
@@ -995,11 +961,7 @@ static void loudness_filter_refresh_channel_idle_cache(int channel)
         loudness_channel_idle_cached[channel] = FALSE;
         return;
     }
-    if (loudness_highres_applies(loudness_fast_frequency_hz)) {
-        loudness_channel_idle_cached[channel] =
-            loudness_highres_channel_is_idle(channel);
-        return;
-    }
+
     loudness_channel_idle_cached[channel] = TRUE;
 }
 
@@ -1027,7 +989,6 @@ void loudness_fast_reset_states(void)
     taskENTER_CRITICAL();
     memset(loudness_states, 0, sizeof(loudness_states));
     taskEXIT_CRITICAL();
-    loudness_highres_reset_states();
     loudness_filter_refresh_idle_cache();
 }
 
@@ -1046,8 +1007,7 @@ int32_t loudness_fast_24bit(int channel, int32_t sample)
     }
 
     runtime = loudness_fast_active_runtime();
-    sample = LOUDNESS_BIQUAD1_STEP(sample, st,
-        &runtime[loudness_fast_runtime_channel(channel)]);
+    sample = LOUDNESS_BIQUAD1_STEP(sample, st, &runtime[channel]);
     loudness_filter_refresh_channel_idle_cache(channel);
     return saturate_24bit_s32_to_s32(sample);
 }
@@ -1066,7 +1026,7 @@ S32 loudness_filter_16bit_container(int channel, S32 sample)
     }
 
     sample = loudness_biquad1_16bit_container_step(sample, st,
-        &loudness_fast_active_runtime()[loudness_fast_runtime_channel(channel)]);
+        &loudness_fast_active_runtime()[channel]);
     loudness_filter_refresh_channel_idle_cache(channel);
     return sample;
 }
@@ -1089,18 +1049,6 @@ void loudness_filter_16bit_stereo_packet(S32 *sample_L, S32 *sample_R, U16 num_s
     stR = &loudness_states[1];
 
     runtime = loudness_fast_active_runtime();
-
-    if (loudness_highres_applies(loudness_fast_frequency_hz)) {
-        if (loudness_fast_share_master_row()) {
-            loudness_highres_filter_16bit_stereo_packet_shared(
-                sample_L, sample_R, stL, stR, num_samples);
-        } else {
-            loudness_highres_filter_16bit_stereo_packet_independent(
-                sample_L, sample_R, stL, stR, num_samples);
-        }
-        loudness_filter_refresh_idle_cache();
-        return;
-    }
 
     idle_L = loudness_channel_idle_cached[0];
     idle_R = loudness_channel_idle_cached[1];
@@ -1136,62 +1084,12 @@ S32 loudness_filter_24bit_container(int channel, S32 sample)
     return y << 8;
 }
 
-static biquad_quotients_fast_t loudness_scale_quotients_fast(
-    biquad_quotients_fast_t base, uint32_t n)
-{
-    if (n <= 1 || n > 4) {
-        return base;
-    }
-    double b0 = (double)base.b0 / (double)LOUDNESS_Q28_ONE;
-    double b1 = (double)base.b1 / (double)LOUDNESS_Q28_ONE;
-    double b2 = (double)base.b2 / (double)LOUDNESS_Q28_ONE;
-    double a1 = (double)base.a1 / (double)LOUDNESS_Q28_ONE;
-    double a2 = (double)base.a2 / (double)LOUDNESS_Q28_ONE;
-    double cosw = -a1 / (1.0 + a2);
-    if (cosw > 1.0) {
-        cosw = 1.0;
-    } else if (cosw < -1.0) {
-        cosw = -1.0;
-    }
-    double w0 = acos(cosw);
-    double k = tan(w0 / (2.0 * n)) / tan(w0 / 2.0);
-    double den_s = 1.0 - a1 + a2;
-    if (fabs(den_s) < 1e-12) {
-        return base;
-    }
-    double N0 = (b0 + b1 + b2) / den_s;
-    double N1 = 2.0 * (b0 - b2) / den_s;
-    double N2 = (b0 - b1 + b2) / den_s;
-    double D1 = 2.0 * (1.0 - a2) / den_s;
-    double D2 = (1.0 + a1 + a2) / den_s;
-    double k2 = k * k;
-    double N1_new = N1 / k;
-    double N2_new = N2 / k2;
-    double D1_new = D1 / k;
-    double D2_new = D2 / k2;
-    double a0_n = D2_new + D1_new + 1.0;
-    if (fabs(a0_n) < 1e-12) {
-        return base;
-    }
-    double b0_n = (N2_new + N1_new + N0) / a0_n;
-    double b1_n = 2.0 * (N0 - N2_new) / a0_n;
-    double b2_n = (N2_new - N1_new + N0) / a0_n;
-    double a1_n = 2.0 * (1.0 - D2_new) / a0_n;
-    double a2_n = (D2_new - D1_new + 1.0) / a0_n;
-    biquad_quotients_fast_t result;
-    result.b0 = (int32_t)round(b0_n * (double)LOUDNESS_Q28_ONE);
-    result.b1 = (int32_t)round(b1_n * (double)LOUDNESS_Q28_ONE);
-    result.b2 = (int32_t)round(b2_n * (double)LOUDNESS_Q28_ONE);
-    result.a1 = (int32_t)round(a1_n * (double)LOUDNESS_Q28_ONE);
-    result.a2 = (int32_t)round(a2_n * (double)LOUDNESS_Q28_ONE);
-    return result;
-}
-
 void loudness_change_frequency_fast(uint32_t frequency) {
-    loudness_fast_frequency_hz = frequency;
-    if (loudness_highres_applies(frequency)) {
-        loudness_highres_set_stride(frequency);
+    if (frequency != (uint32_t)FREQ_44 && frequency != (uint32_t)FREQ_48) {
+        return;
     }
+
+    loudness_fast_frequency_hz = frequency;
     {
         int32_t db_spl_left_x10;
         int32_t db_spl_right_x10;
@@ -1209,12 +1107,9 @@ void loudness_change_frequency_fast(uint32_t frequency) {
             equalizer_step_right);
         loudness_commit_staging_quotients_fast();
         loudness_fast_committed_step[0] = (uint8_t)equalizer_step_left;
-        loudness_fast_committed_step[1] = (uint8_t)(
-            loudness_fast_share_master_row()
-                ? equalizer_step_left : equalizer_step_right);
+        loudness_fast_committed_step[1] = (uint8_t)equalizer_step_right;
     }
     loudness_filter_refresh_idle_cache();
-    loudness_inferred_gain_set_rate(frequency);
 }
 
 Bool loudness_channel_biquad_is_idle(int channel)

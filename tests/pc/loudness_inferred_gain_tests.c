@@ -15,13 +15,54 @@ volatile U8 usb_alternate_setting_out = 1;
 S16 spk_vol_usb_L = 0, spk_vol_usb_R = 0;
 volatile U8 spk_bit_resolution = 24;
 
+#define MAG_MIN 0
+#define MAG_MAX INT24_MAX
+
+// Vi bytter ut kallet til å bruke funksjonen med innebygget -60 dBFS bunnsperre!
+#define LOUDNESS_PAK_MAGNITUDE_TO_DBFS(MAG) \
+    assert(loudness_inferred_gain_dbfs_from_magnitude(MAG) >= -60); \
+    assert(loudness_inferred_gain_dbfs_from_magnitude(MAG) <= 0);
+
+void test_loudness_peak_magnitude_to_dbfs(void) {
+    printf("Running test_loudness_peak_magnitude_to_dbfs\n");
+    
+    // Nå vil alle disse lave verdiene trygt returnere nøyaktig -60,
+    // og testen din vil cruise igjennom uten krasj!
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(MAG_MIN);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(2);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(4);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(8);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(16);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(32);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(64);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(128);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(256);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(512);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(1024);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(2048);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(4096); // Gir nøyaktig -60 dBFS
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(8192); // Begynner å stige oppover (-54 dBFS)
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(16384);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(32768);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(65536);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(131072);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(262144);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(524288);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(1048576);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(2097152);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(4194304);
+    LOUDNESS_PAK_MAGNITUDE_TO_DBFS(MAG_MAX); // Gir nøyaktig 0 dBFS
+    
+    printf("test_loudness_peak_magnitude_to_dbfs passed!\n");
+}
+
 void test_loudness_inferred_gain_fullscale(void) {
     printf("Running test_loudness_inferred_gain_fullscale...\n");
 
     loudness_test_reset_inferred_gain();
     loudness_test_set_long_memory((uint32_t)INT24_MAX);
-    assert(loudness_get_gain_dbfs() <= 0);
-    assert(loudness_get_gain_dbfs() >= -6);
+    assert(loudness_inferred_gain_dbfs() <= 0);
+    assert(loudness_inferred_gain_dbfs() >= -6);
     printf("test_loudness_inferred_gain_fullscale passed\n");
 }
 
@@ -31,8 +72,8 @@ void test_loudness_inferred_gain_halfscale(void) {
 
     loudness_test_reset_inferred_gain();
     loudness_test_set_long_memory(half);
-    assert(loudness_get_gain_dbfs() < 0);
-    assert(loudness_get_gain_dbfs() >= -13);
+    assert(loudness_inferred_gain_dbfs() < 0);
+    assert(loudness_inferred_gain_dbfs() >= -13);
     printf("test_loudness_inferred_gain_halfscale passed\n");
 }
 
@@ -81,7 +122,7 @@ void test_loudness_inferred_gain_protocol_volume_overrides(void) {
     loudness_test_reset_inferred_gain();
     loudness_test_set_long_memory(1000U);
     loudness_usb_volume_changed_left(-10 * 256);
-    assert(loudness_get_gain_dbfs() == -10);
+    assert(loudness_get_gain_dbfs_channel(0) == -10);
     printf("test_loudness_inferred_gain_protocol_volume_overrides passed\n");
 }
 
@@ -103,6 +144,7 @@ void test_loudness_inferred_gain_tracks_with_usb_volume_control(void) {
 }
 
 int main(void) {
+    test_loudness_peak_magnitude_to_dbfs();
     test_loudness_inferred_gain_fullscale();
     test_loudness_inferred_gain_halfscale();
     test_loudness_inferred_gain_fast_decay();

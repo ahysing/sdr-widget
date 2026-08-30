@@ -2,7 +2,6 @@
 #define LOUDNESS_TEST_ACCESS_H
 
 #include <stdint.h>
-#include "loudness_inferred_gain.h"
 
 #ifdef BUILD_TESTING
 #include "compiler.h"

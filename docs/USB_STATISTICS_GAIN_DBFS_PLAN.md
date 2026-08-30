@@ -60,7 +60,7 @@ Python struct format: `"<BBBBIIHHHIHbbbIBBBB"`
 In [`loudness_update_active_equalizer_step()`](../src/loudness.c) (~20 ms loudness task):
 
 1. Compute `db_spl` as today.
-2. Read `gain_dbfs = loudness_get_gain_dbfs()` (cheap: volume register math, no sqrt).
+2. Read per-channel gain via `loudness_get_gain_dbfs_channel(0)` / `loudness_get_gain_dbfs_channel(1)` (cheap: volume register math, no sqrt).
 3. Snapshot when **either** condition is true:
    - `db_spl_x10 != last_db_spl_x10`
    - `gain_dbfs != last_snapshot_gain_dbfs` (new static in `loudness.c`)
@@ -81,14 +81,17 @@ This keeps heavy work off the 100 µs audio path while making volume slider move
 flowchart TD
     loudnessTask["loudness task ~20ms"]
     calcDbSpl["loudness_calculate_db_spl"]
-    readGain["loudness_get_gain_dbfs"]
+    readGainL["loudness_get_gain_dbfs_channel(0)"]
+    readGainR["loudness_get_gain_dbfs_channel(1)"]
     changed{"db_spl changed OR gain_dbfs changed?"}
     snap["statistics_with_active_buffer snapshots"]
     skip["no stats write"]
     loudnessTask --> calcDbSpl
-    loudnessTask --> readGain
+    loudnessTask --> readGainL
+    loudnessTask --> readGainR
     calcDbSpl --> changed
-    readGain --> changed
+    readGainL --> changed
+    readGainR --> changed
     changed -->|yes| snap
     changed -->|no| skip
 ```

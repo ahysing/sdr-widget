@@ -72,13 +72,11 @@ Bool loudness_bass_boost_is_enabled(void);
 /* Update the active equalizer step based on current host gain level. */
 void loudness_update_active_equalizer_step(void);
 
-/* Return the current host-gain expressed in dBFS. Non-positive. */
-int32_t loudness_get_gain_dbfs(void);
+/* Return per-channel host gain in dBFS (channel 0 = L, 1 = R). Non-positive. */
+int32_t loudness_get_gain_dbfs_channel(int channel);
 
 #include "loudness_inferred_gain.h"
 
-/* Blended listening level in dB SPL (same value as used for equalizer step selection). */
-int32_t loudness_get_db_spl(void);
 
 /* Current left/master level in 0.1 dB SPL units. */
 int16_t loudness_get_last_db_spl_x10(void);

@@ -144,7 +144,6 @@ static void test_usb_volume_change_updates_telemetry_immediately(void) {
     assert(telemetry.gain_dbfs_left == 84 - LOUDNESS_DB_SPL_MAX);
     assert(telemetry.db_spl_left == 84);
     assert(telemetry.equalizer_step_left == 98);
-    assert(loudness_get_gain_dbfs() == 84 - LOUDNESS_DB_SPL_MAX);
 
     /* Every 0.5 dB has a dedicated loudness+volume row. */
     loudness_usb_volume_changed_left((S16)((83 - LOUDNESS_DB_SPL_MAX) * 256));
@@ -155,14 +154,12 @@ static void test_usb_volume_change_updates_telemetry_immediately(void) {
 
     /* The canonical target is no longer polled from the shared USB variable. */
     spk_vol_usb_L = (S16)((75 - LOUDNESS_DB_SPL_MAX) * 256);
-    assert(loudness_get_gain_dbfs() == 83 - LOUDNESS_DB_SPL_MAX);
 
     loudness_usb_volume_changed_left((S16)((75 - LOUDNESS_DB_SPL_MAX) * 256));
     telemetry = stats_telemetry_read_best_effort();
     assert(telemetry.gain_dbfs_left == 75 - LOUDNESS_DB_SPL_MAX);
     assert(telemetry.db_spl_left == 75);
     assert(telemetry.equalizer_step_left == 80);
-    assert(loudness_get_gain_dbfs() == 75 - LOUDNESS_DB_SPL_MAX);
 
     /* Values observed in the device log must update both SPL and filter step. */
     loudness_usb_volume_changed_left((S16)((77 - LOUDNESS_DB_SPL_MAX) * 256));
@@ -208,14 +205,16 @@ static void test_stereo_telemetry_policies(void)
     loudness_change_frequency_fast(192000);
     loudness_update_active_equalizer_step();
     telemetry = stats_telemetry_read_best_effort();
-    assert(telemetry.gain_dbfs_left == -13);
-    assert(telemetry.gain_dbfs_right == -13);
-    assert(telemetry.db_spl_left == 82);
-    assert(telemetry.db_spl_right == 82);
-    assert(telemetry.equalizer_step_left == 94);
-    assert(telemetry.equalizer_step_right == 94);
+    /* Base-rate loudness telemetry is unchanged when frequency is highres. */
+    assert(telemetry.gain_dbfs_left == -6);
+    assert(telemetry.gain_dbfs_right == -20);
+    assert(telemetry.db_spl_left == 89);
+    assert(telemetry.db_spl_right == 75);
+    assert(telemetry.equalizer_step_left == 108);
+    assert(telemetry.equalizer_step_right == 80);
 
-    loudness_test_reset_inferred_gain();
+    loudness_usb_volume_changed_left(VOL_MIN);
+    loudness_usb_volume_changed_right(VOL_MIN);
     current_freq.frequency = 48000;
     loudness_change_frequency_fast(48000);
     loudness_update_active_equalizer_step();

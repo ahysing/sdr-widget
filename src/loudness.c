@@ -1,7 +1,6 @@
 #include "loudness.h"
 #include "loudness_internal.h"
 #include "loudness_fast.h"
-#include "loudness_highres.h"
 #include "taskAK5394A.h"
 #if defined(BUILD_TESTING)
 #include "../tests/pc/usb_specific_request.h"
@@ -10,9 +9,6 @@ extern S16 spk_vol_usb_L, spk_vol_usb_R;
 #else
 #include "usb_specific_request.h"
 #include "device_audio_task.h"
-#endif
-#ifndef LOUDNESS_DISABLE
-#include "loudness_inferred_gain.h"
 #endif
 #ifndef USBSTATISTICS_DISABLE
 #include "usb_statistics.h"
@@ -233,23 +229,6 @@ static int32_t loudness_get_gain_dbfs_x10_for_channel(int channel)
         loudness_clamp_gain_dbfs_q8(gain_q8));
 }
 
-static int32_t loudness_get_gain_dbfs_q8_shared(void)
-{
-    return ((int32_t)target_gain_dbfs_left_q8
-        + (int32_t)target_gain_dbfs_right_q8) / 2;
-}
-
-static int32_t loudness_get_gain_dbfs_x10_shared(void)
-{
-    return loudness_gain_dbfs_q8_to_x10(
-        loudness_clamp_gain_dbfs_q8(loudness_get_gain_dbfs_q8_shared()));
-}
-
-static int32_t loudness_get_inferred_gain_dbfs_x10(void)
-{
-    return loudness_clamp_gain_dbfs(loudness_inferred_gain_dbfs()) * 10;
-}
-
 #if !defined(USBSTATISTICS_DISABLE)
 
 static void loudness_record_event_tag(U8 tag, U8 arg0, U8 arg1, U8 arg2)
@@ -301,31 +280,11 @@ static int32_t loudness_get_db_spl_x10_for_channel(int channel)
         + loudness_get_gain_dbfs_x10_for_channel(channel);
 }
 
-static int32_t loudness_get_db_spl_x10_shared(void)
-{
-    return (LOUDNESS_DB_SPL_MAX * 10)
-        + loudness_get_gain_dbfs_x10_shared();
-}
-
-static int32_t loudness_get_inferred_db_spl_x10(void)
-{
-    return (LOUDNESS_DB_SPL_MAX * 10)
-        + loudness_get_inferred_gain_dbfs_x10();
-}
-
 void loudness_internal_current_stereo_db_spl_x10(
     int32_t *db_spl_left_x10, int32_t *db_spl_right_x10)
 {
-    if (!loudness_inferred_gain_has_source_volume_control()) {
-        *db_spl_left_x10 = loudness_get_inferred_db_spl_x10();
-        *db_spl_right_x10 = *db_spl_left_x10;
-    } else if (loudness_highres_applies(current_freq.frequency)) {
-        *db_spl_left_x10 = loudness_get_db_spl_x10_shared();
-        *db_spl_right_x10 = *db_spl_left_x10;
-    } else {
-        *db_spl_left_x10 = loudness_get_db_spl_x10_for_channel(0);
-        *db_spl_right_x10 = loudness_get_db_spl_x10_for_channel(1);
-    }
+    *db_spl_left_x10 = loudness_get_db_spl_x10_for_channel(0);
+    *db_spl_right_x10 = loudness_get_db_spl_x10_for_channel(1);
 }
 
 int loudness_get_equalizer_step(int32_t db_spl_x10)
@@ -409,8 +368,7 @@ static void loudness_update_filter_by_volume_or_frequency(void *pvParameters)
             continue;
         }
 
-        if (current_freq.frequency == FREQ_44 || current_freq.frequency == FREQ_48
-            || loudness_highres_applies(current_freq.frequency)) {
+        if (current_freq.frequency == FREQ_44 || current_freq.frequency == FREQ_48) {
             if (xQueueReceive(xLoudnessFreqQueue, &request, xDelay20ms) == pdPASS) {
                 if (request.type == LOUDNESS_REQUEST_FREQUENCY) {
                     if (request.value != 0) {
@@ -546,9 +504,6 @@ static void loudness_publish_equalizer_telemetry(void)
         (U8)loudness_get_equalizer_step(db_spl_left_x10),
         loudness_clamp_s8(db_spl_right),
         (U8)loudness_get_equalizer_step(db_spl_right_x10));
-    stats_telemetry_set_gain_inferred_dbfs_stereo(
-        loudness_clamp_s8(loudness_inferred_gain_dbfs_channel(0)),
-        loudness_clamp_s8(loudness_inferred_gain_dbfs_channel(1)));
 #endif
 }
 
@@ -580,17 +535,6 @@ void loudness_bass_boost_set(Bool enabled)
 Bool loudness_bass_boost_is_enabled(void)
 {
     return loudness_bass_boost_enabled;
-}
-
-int32_t loudness_get_gain_dbfs(void) {
-    if (loudness_inferred_gain_has_source_volume_control()) {
-        int32_t gain_q8 = loudness_highres_applies(current_freq.frequency)
-            ? loudness_get_gain_dbfs_q8_shared()
-            : (int32_t)loudness_target_gain_dbfs_q8(0);
-        gain_q8 = loudness_clamp_gain_dbfs_q8(gain_q8);
-        return loudness_clamp_gain_dbfs(gain_q8 / 256);
-    }
-    return loudness_inferred_gain_dbfs();
 }
 
 void loudness_usb_volume_changed_left(S16 volume_q8)
@@ -634,8 +578,14 @@ void loudness_usb_volume_changed_right(S16 volume_q8)
     loudness_update_active_equalizer_step();
 }
 
-int32_t loudness_get_db_spl(void) {
-    return loudness_calculate_db_spl();
+int32_t loudness_get_gain_dbfs_channel(int channel)
+{
+    int32_t gain_dbfs_q8 = (int32_t)loudness_target_gain_dbfs_q8(channel);
+    int32_t gain_dbfs = gain_dbfs_q8 / 256;
+    if (gain_dbfs > 0) {
+        return 0;
+    }
+    return gain_dbfs;
 }
 
 int16_t loudness_get_last_db_spl_x10(void) {
@@ -660,8 +610,6 @@ void loudness_filter_init(void) {
         return;
     }
 #endif
-
-    loudness_inferred_gain_reset();
 
     loudness_fast_reset_states();
     target_gain_dbfs_left_q8 = (S16)loudness_clamp_gain_dbfs_q8(
@@ -718,17 +666,14 @@ int16_t loudness_get_last_db_spl_x10(void) {
     return LOUDNESS_DB_SPL_MAX * 10;
 }
 
-int32_t loudness_get_db_spl(void) {
-    return LOUDNESS_DB_SPL_MAX;
-}
-
-int32_t loudness_get_gain_dbfs(void) {
-    int32_t gain_dbfs_q8 = (int32_t)spk_vol_usb_L - (int32_t)VOL_MAX;
+int32_t loudness_get_gain_dbfs_channel(int channel) {
+    int32_t gain_dbfs_q8 = (channel == 1)
+        ? (int32_t)spk_vol_usb_R - (int32_t)VOL_MAX
+        : (int32_t)spk_vol_usb_L - (int32_t)VOL_MAX;
     int32_t gain_dbfs = gain_dbfs_q8 / 256;
     if (gain_dbfs > 0) {
         return 0;
     }
-    
     return gain_dbfs;
 }
 

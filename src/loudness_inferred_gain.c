@@ -42,6 +42,7 @@
 #define LOUDNESS_GAIN_LONG_SLOW_SHIFT_BASE     20
 #define LOUDNESS_GAIN_SHIFT_MAX                30
 #define LOUDNESS_PEAK_DBFS_BITS                23
+#define LOUDNESS_DBFS_MIN                      (-144)
 
 static volatile Bool source_has_volume_control = FALSE;
 static volatile uint32_t gain_short_memory[LOUDNESS_CHANNELS];
@@ -55,14 +56,17 @@ static volatile int gain_long_slow_shift = LOUDNESS_GAIN_LONG_SLOW_SHIFT_BASE;
 static int32_t loudness_peak_magnitude_to_dbfs(uint32_t magnitude)
 {
     if (magnitude == 0)
-        return -60; 
+        return LOUDNESS_DBFS_MIN; 
     
     uint32_t leading_zeros = CLZ(magnitude);
     int32_t bit_position = 32 - (int32_t)leading_zeros;
     uint32_t fraction = 0;
-
+    uint32_t shift = leading_zeros + 1;
     if (bit_position < 32) {
-        fraction = (magnitude << (leading_zeros + 1)) >> 24;
+        if (shift < 32)
+            fraction = (magnitude << shift) >> 24;
+        else
+            fraction = 0;
     }
 
     int32_t db_base = (bit_position - LOUDNESS_PEAK_DBFS_BITS) * 6;
@@ -203,7 +207,11 @@ static uint32_t loudness_get_active_loudness_level(int channel)
     return gain_long_memory[channel];
 }
 
+#ifdef BUILD_TESTING
+int32_t loudness_inferred_gain_dbfs_from_magnitude(uint32_t mag)
+#else
 static int32_t loudness_inferred_gain_dbfs_from_magnitude(uint32_t mag)
+#endif
 {
     if (mag > (uint32_t)INT24_MAX) {
         mag = (uint32_t)INT24_MAX;
@@ -239,7 +247,7 @@ Bool loudness_inferred_gain_has_source_volume_control(void)
 int32_t loudness_inferred_gain_dbfs_channel(int channel)
 {
     if (channel < 0 || channel >= LOUDNESS_CHANNELS) {
-        return -144;
+        return LOUDNESS_DBFS_MIN;
     }
     return loudness_inferred_gain_dbfs_from_magnitude(
         loudness_get_active_loudness_level(channel));
