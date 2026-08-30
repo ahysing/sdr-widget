@@ -119,6 +119,7 @@ volatile S16 last_db_spl_x10 = LOUDNESS_DB_SPL_MAX * 10;
 volatile S16 target_gain_dbfs_left_q8 = 0;
 volatile S16 target_gain_dbfs_right_q8 = 0;
 static volatile Bool loudness_bass_boost_enabled = TRUE;
+static volatile Bool loudness_loudness_enabled = TRUE;
 static Bool loudness_external_volume_active = FALSE;
 
 static void loudness_select_equalizer_steps(void);
@@ -472,16 +473,6 @@ static void loudness_calculate_db_spl_stereo_x10(
         db_spl_left_x10, db_spl_right_x10);
 }
 
-static int32_t loudness_calculate_db_spl(void)
-{
-    int32_t db_spl_left_x10;
-    int32_t db_spl_right_x10;
-
-    loudness_calculate_db_spl_stereo_x10(
-        &db_spl_left_x10, &db_spl_right_x10);
-    return (db_spl_left_x10 + 5) / 10;
-}
-
 static void loudness_publish_equalizer_telemetry(void)
 {
 #if !defined(USBSTATISTICS_DISABLE)
@@ -520,8 +511,12 @@ void loudness_update_active_equalizer_step(void)
 void loudness_bass_boost_set(Bool enabled)
 {
     loudness_bass_boost_enabled = enabled;
+    if (enabled)
+        loudness_loudness_enabled = FALSE;
 #if !defined(USBSTATISTICS_DISABLE)
     stats_telemetry_set_bass_boost_enabled(enabled ? 1u : 0u);
+    if (enabled)
+        stats_telemetry_set_loudness_enabled(0u);
 #endif
     if (loudness_rtos_is_ready()) {
 #ifdef FREERTOS_USED
@@ -536,6 +531,31 @@ Bool loudness_bass_boost_is_enabled(void)
 {
     return loudness_bass_boost_enabled;
 }
+
+void loudness_loudness_set(Bool enabled)
+{
+    loudness_loudness_enabled = enabled;
+    if (enabled)
+        loudness_bass_boost_enabled = FALSE;
+#if !defined(USBSTATISTICS_DISABLE)
+    stats_telemetry_set_loudness_enabled(enabled ? 1u : 0u);
+    if (enabled)
+        stats_telemetry_set_bass_boost_enabled(0u);
+#endif
+    if (loudness_rtos_is_ready()) {
+#ifdef FREERTOS_USED
+        loudness_request_volume_apply();
+#endif
+        return;
+    }
+    loudness_update_filter_mode();
+}
+
+Bool loudness_loudness_is_enabled(void)
+{
+    return loudness_loudness_enabled;
+}
+
 
 void loudness_usb_volume_changed_left(S16 volume_q8)
 {

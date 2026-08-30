@@ -136,12 +136,13 @@ void test_statistics_wire_packet_is_little_endian() {
         (S8)80, 90, (S8)70, 70);
     stats_telemetry_set_source_has_volume_control(1);
     stats_telemetry_set_bass_boost_enabled(1);
+    stats_telemetry_set_loudness_enabled(0);
     stats_telemetry_set_gain_inferred_dbfs_stereo((S8)-3, (S8)-4);
 
     statistics_test_build_wire_packet(wire, buf, 7);
 
-    assert(USB_STATS_PACKET_VERSION == 3);
-    assert(USB_STATS_PACKET_WIRE_SIZE == 42);
+    assert(USB_STATS_PACKET_VERSION == 4);
+    assert(USB_STATS_PACKET_WIRE_SIZE == 43);
     assert(sizeof(usb_stats_packet_t) == USB_STATS_PACKET_WIRE_SIZE);
     assert(wire[0] == USB_STATS_PACKET_HID_ANCHOR);
     assert(wire[1] == USB_STATS_PACKET_VERSION);
@@ -170,6 +171,7 @@ void test_statistics_wire_packet_is_little_endian() {
     assert(wire[37] == 70);
     assert(wire[38] == 1);
     assert(wire[USB_STATS_WIRE_OFFSET_BASS_BOOST_ENABLED] == 1);
+    assert(wire[USB_STATS_WIRE_OFFSET_LOUDNESS_ENABLED] == 0);
     assert((int8_t)wire[USB_STATS_WIRE_OFFSET_GAIN_INFERRED_LEFT] == -3);
     assert((int8_t)wire[USB_STATS_WIRE_OFFSET_GAIN_INFERRED_RIGHT] == -4);
     assert(wire[3] == statistics_test_build_wire_checksum(wire));

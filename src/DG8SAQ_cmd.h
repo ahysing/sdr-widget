@@ -73,5 +73,6 @@ extern volatile bool FRQ_lcdupdate;				// Flag: Update LCD frequency printout
 #define DG8SAQ_SDR_CTL_SET_SR 0x00			//
 
 #define DG8SAQ_SET_BASS_BOOST 0x72			// 1 byte: 0=off, 1=on (loudness contour gate)
+#define DG8SAQ_SET_LOUDNESS 0x73			// 1 byte: 0=off, 1=on (loudness preference gate)
 
 #endif /* DG8SAQ_CMD_H_ */

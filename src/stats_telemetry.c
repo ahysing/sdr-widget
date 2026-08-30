@@ -12,6 +12,7 @@ static volatile U8 stats_telemetry_equalizer_step_left;
 static volatile U8 stats_telemetry_equalizer_step_right;
 static volatile U8 stats_telemetry_source_has_volume_control;
 static volatile U8 stats_telemetry_bass_boost_enabled;
+static volatile U8 stats_telemetry_loudness_enabled;
 static volatile S8 stats_telemetry_gain_inferred_dbfs_left;
 static volatile S8 stats_telemetry_gain_inferred_dbfs_right;
 
@@ -26,7 +27,8 @@ void stats_telemetry_init(void)
     stats_telemetry_equalizer_step_left = 0;
     stats_telemetry_equalizer_step_right = 0;
     stats_telemetry_source_has_volume_control = 0;
-    stats_telemetry_bass_boost_enabled = 1;
+    stats_telemetry_bass_boost_enabled = 0;
+    stats_telemetry_loudness_enabled = 0;
     stats_telemetry_gain_inferred_dbfs_left = 0;
     stats_telemetry_gain_inferred_dbfs_right = 0;
 }
@@ -73,6 +75,12 @@ void stats_telemetry_set_bass_boost_enabled(U8 bass_boost_enabled)
     stats_telemetry_generation++;
 }
 
+void stats_telemetry_set_loudness_enabled(U8 loudness_enabled)
+{
+    stats_telemetry_generation++;
+    stats_telemetry_loudness_enabled = loudness_enabled ? 1u : 0u;
+    stats_telemetry_generation++;
+}
 void stats_telemetry_set_gain_inferred_dbfs_stereo(
     S8 gain_inferred_dbfs_left, S8 gain_inferred_dbfs_right)
 {
@@ -99,6 +107,7 @@ stats_telemetry_snapshot_t stats_telemetry_read_best_effort(void)
         snap.equalizer_step_right = stats_telemetry_equalizer_step_right;
         snap.source_has_volume_control = stats_telemetry_source_has_volume_control;
         snap.bass_boost_enabled = stats_telemetry_bass_boost_enabled;
+        snap.loudness_enabled = stats_telemetry_loudness_enabled;
         snap.gain_inferred_dbfs_left = stats_telemetry_gain_inferred_dbfs_left;
         snap.gain_inferred_dbfs_right = stats_telemetry_gain_inferred_dbfs_right;
         g2 = stats_telemetry_generation;
@@ -120,6 +129,7 @@ void stats_telemetry_test_reset(void)
     stats_telemetry_equalizer_step_right = 0;
     stats_telemetry_source_has_volume_control = 0;
     stats_telemetry_bass_boost_enabled = 1;
+    stats_telemetry_loudness_enabled = 0;
     stats_telemetry_gain_inferred_dbfs_left = 0;
     stats_telemetry_gain_inferred_dbfs_right = 0;
 }

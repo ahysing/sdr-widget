@@ -69,6 +69,9 @@ void loudness_usb_volume_changed_right(S16 volume_q8);
 void loudness_bass_boost_set(Bool enabled);
 Bool loudness_bass_boost_is_enabled(void);
 
+void loudness_loudness_set(Bool enabled);
+Bool loudness_loudness_is_enabled(void);
+
 /* Update the active equalizer step based on current host gain level. */
 void loudness_update_active_equalizer_step(void);
 

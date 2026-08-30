@@ -44,8 +44,8 @@ USB_STATS_HID_REPORT_ID = 1
 USB_STATS_HID_TRANSFER_SIZE = 64
 USB_STATS_PACKET_HID_ANCHOR = 0x53
 USB_STATS_PACKET_MAGIC = USB_STATS_PACKET_HID_ANCHOR  # backward-compatible alias
-USB_STATS_PACKET_VERSION = 3
-USB_STATS_PACKET_FORMAT = "<BBBBIIHHHIHbbbbIBBBBBBBBbb"
+USB_STATS_PACKET_VERSION = 4
+USB_STATS_PACKET_FORMAT = "<BBBBIIHHHIHbbbbIBBBBBBBBbbB"
 USB_STATS_PACKET_SIZE = struct.calcsize(USB_STATS_PACKET_FORMAT)
 USB_STATS_PACKET_CHECKSUM_INDEX = 3
 USB_STATS_HID_REPORT_SIZE = 63
@@ -418,6 +418,7 @@ def parse_stats_payload(payload):
         bass_boost_enabled,
         gain_inferred_dbfs_left,
         gain_inferred_dbfs_right,
+        loudness_enabled,
     ) = fields
 
     if hid_anchor != USB_STATS_PACKET_HID_ANCHOR:
@@ -447,6 +448,7 @@ def parse_stats_payload(payload):
         "bass_boost_enabled": 1 if bass_boost_enabled else 0,
         "gain_inferred_dbfs_left": gain_inferred_dbfs_left,
         "gain_inferred_dbfs_right": gain_inferred_dbfs_right,
+        "loudness_enabled": 1 if loudness_enabled else 0,
         "last_event": decode_last_event(last_tag, last_arg0, last_arg1, last_arg2),
     }
 
@@ -480,6 +482,7 @@ def format_stats_deltas(prev_stats, stats):
         f"step_L={stats['equalizer_step_left']}",
         f"step_R={stats['equalizer_step_right']}",
         f"bass_boost={stats['bass_boost_enabled']}",
+        f"loudness={stats['loudness_enabled']}",
     ]
     if stats["equalizer_step_left"] != prev_stats["equalizer_step_left"]:
         parts.append(

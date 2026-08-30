@@ -137,6 +137,10 @@ void dg8saqFunctionWrite(uint8_t type, uint16_t wValue, uint16_t wIndex, U8 *Buf
 				if (len >= 1)
 					loudness_bass_boost_set(Buffer[0] != 0);
 				break;
+			case DG8SAQ_SET_LOUDNESS:
+				if (len >= 1)
+					loudness_loudness_set(Buffer[0] != 0);
+				break;
 #endif
 	}
 }
@@ -167,6 +171,9 @@ uint8_t dg8saqFunctionSetup(uint8_t type, uint16_t wValue, uint16_t wIndex, U8* 
 #ifndef LOUDNESS_DISABLE
 	case DG8SAQ_SET_BASS_BOOST:
 		Buffer[0] = loudness_bass_boost_is_enabled() ? 1 : 0;
+		return sizeof(uint8_t);
+	case DG8SAQ_SET_LOUDNESS:
+		Buffer[0] = loudness_loudness_is_enabled() ? 1 : 0;
 		return sizeof(uint8_t);
 #endif
 

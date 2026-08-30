@@ -61,6 +61,7 @@ PACK(struct usb_stats_packet {
     U8 bass_boost_enabled;
     S8 gain_inferred_dbfs_left;
     S8 gain_inferred_dbfs_right;
+    U8 loudness_enabled;
 });
 typedef struct usb_stats_packet usb_stats_packet_t;
 

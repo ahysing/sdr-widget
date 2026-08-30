@@ -142,6 +142,25 @@ static void uac2_wait_control_in_ready(void)
 	do { while (!Is_usb_control_in_ready()) { } } while (0)
 #endif
 
+/*
+ * UAC2 RANGE layout for 1-byte Feature Unit controls (Mute, Bass Boost):
+ * wNumSubRanges (16-bit) + MIN + MAX + RES.
+ */
+static void uac2_fu_write_one_byte_control_range(U16 wLength)
+{
+	U16 i;
+
+	Usb_write_endpoint_data(EP_CONTROL, 16, Usb_format_mcu_to_usb_data(16, 1));
+	if (wLength >= 3)
+		Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
+	if (wLength >= 4)
+		Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
+	if (wLength >= 5)
+		Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
+	for (i = 5; i < wLength; i++)
+		Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
+}
+
 // Send a descriptor to the Host, if needed by means of multiple fillings of EP0
 void send_descriptor(U16 wLength, Bool zlp) {
 	if (wLength > data_to_transfer) {
@@ -1239,6 +1258,20 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						return TRUE;
 					}
 
+					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_MUTE)
+							&& (request == AUDIO_CS_REQUEST_RANGE)) {
+						Usb_ack_setup_received_free();
+						Usb_reset_endpoint_fifo_access(EP_CONTROL);
+
+						uac2_fu_write_one_byte_control_range(wLength);
+
+						Usb_ack_control_in_ready_send();
+						while (!Is_usb_control_out_received())
+							;
+						Usb_ack_control_out_received_free();
+						return TRUE;
+					}
+
 					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_VOLUME)
 							&& (request == AUDIO_CS_REQUEST_CUR)) {
 						Usb_ack_setup_received_free();
@@ -1297,7 +1330,28 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 
 #ifndef LOUDNESS_DISABLE
 						Usb_write_endpoint_data(EP_CONTROL, 8,
-							(U8)loudness_bass_boost_is_enabled());
+							loudness_bass_boost_is_enabled() ? 0x01 : 0x00);
+#else
+						Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
+#endif
+						for (i = 0; i < (wLength - 1); i++)
+							Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
+
+						Usb_ack_control_in_ready_send();
+						while (!Is_usb_control_out_received())
+							;
+						Usb_ack_control_out_received_free();
+						return TRUE;
+					}
+
+					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_LOUDNESS)
+							&& (request == AUDIO_CS_REQUEST_CUR)) {
+						Usb_ack_setup_received_free();
+						Usb_reset_endpoint_fifo_access(EP_CONTROL);
+
+#ifndef LOUDNESS_DISABLE
+						Usb_write_endpoint_data(EP_CONTROL, 8,
+							loudness_loudness_is_enabled() ? 0x01 : 0x00);
 #else
 						Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
 #endif
@@ -1316,12 +1370,21 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						Usb_ack_setup_received_free();
 						Usb_reset_endpoint_fifo_access(EP_CONTROL);
 
-						if (wLength >= 2) {
-							Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
-							Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
-						}
-						for (i = 2; i < wLength; i++)
-							Usb_write_endpoint_data(EP_CONTROL, 8, 0x00);
+						uac2_fu_write_one_byte_control_range(wLength);
+
+						Usb_ack_control_in_ready_send();
+						while (!Is_usb_control_out_received())
+							;
+						Usb_ack_control_out_received_free();
+						return TRUE;
+					}
+
+					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_LOUDNESS)
+							&& (request == AUDIO_CS_REQUEST_RANGE)) {
+						Usb_ack_setup_received_free();
+						Usb_reset_endpoint_fifo_access(EP_CONTROL);
+
+						uac2_fu_write_one_byte_control_range(wLength);
 
 						Usb_ack_control_in_ready_send();
 						while (!Is_usb_control_out_received())
@@ -1668,6 +1731,26 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 
 #ifndef LOUDNESS_DISABLE
 						loudness_bass_boost_set(temp1 == 0x01);
+#endif
+
+						Usb_ack_control_out_received_free();
+						Usb_ack_control_in_ready_send();
+						uac2_wait_control_in_ready();
+						return TRUE;
+					}
+
+					else if ((wValue_msb == AUDIO_FU_CONTROL_CS_LOUDNESS)
+							&& (request == AUDIO_CS_REQUEST_CUR)) {
+						Usb_ack_setup_received_free();
+						uac2_wait_control_out_received();
+						Usb_reset_endpoint_fifo_access(EP_CONTROL);
+
+						temp1 = 0;
+						if (wLength >= 1)
+							temp1 = Usb_read_endpoint_data(EP_CONTROL, 8);
+
+#ifndef LOUDNESS_DISABLE
+						loudness_loudness_set(temp1 == 0x01);
 #endif
 
 						Usb_ack_control_out_received_free();

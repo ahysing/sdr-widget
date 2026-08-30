@@ -8,6 +8,7 @@ const char usage[] = {
 	"         --help\n"
 	"         -v = verbose = verbose mode\n"
 	"         --bassboost 0|1 = set firmware bass boost flag.\n"
+	"         --loudness 0|1 = set firmware loudness flag.\n"
 }; 
 
 #include <stdlib.h>
@@ -23,11 +24,31 @@ static int require_features = 1;
 /* UAC2 Audio Control class request constants (see usb_audio.h). */
 #define AUDIO_CS_REQUEST_CUR                0x01
 #define AUDIO_FU_CONTROL_CS_BASS_BOOST      0x09
+#define AUDIO_FU_CONTROL_CS_LOUDNESS          0x0A
 #define AUDIO_INTERFACE                     0x01
 #define AUDIO_INTERFACE_SUBCLASS_AUDIOCONTROL 0x01
 #define AUDIO_INTERFACE_IP_VERSION_02_00    0x20
 #define SPK_FEATURE_UNIT_ID                 0x14
 #define DG8SAQ_SET_BASS_BOOST               0x72
+#define DG8SAQ_SET_LOUDNESS                 0x73
+
+typedef struct {
+	const char *label;
+	unsigned char dg8saq_request;
+	unsigned char uac2_control_cs;
+} henryctl_bool_feature_t;
+
+static const henryctl_bool_feature_t henryctl_feature_bass_boost = {
+	"Bass boost",
+	DG8SAQ_SET_BASS_BOOST,
+	AUDIO_FU_CONTROL_CS_BASS_BOOST,
+};
+
+static const henryctl_bool_feature_t henryctl_feature_loudness = {
+	"Loudness",
+	DG8SAQ_SET_LOUDNESS,
+	AUDIO_FU_CONTROL_CS_LOUDNESS,
+};
 
 /*
 ** features
@@ -211,7 +232,13 @@ static int claim_interface_optional(libusb_device_handle *h, int iface)
 static int find_dg8saq_config_interface(libusb_device_handle *h);
 static int claim_dg8saq_config_interface(libusb_device_handle *h, int *claimed_out);
 static int find_audio_control_interface(libusb_device_handle *h);
-static int set_bass_boost_uac2(libusb_device_handle *h, int enabled);
+static int get_bool_feature_vendor(libusb_device_handle *h,
+	unsigned char dg8saq_request);
+static int set_bool_feature_vendor(libusb_device_handle *h,
+	unsigned char dg8saq_request, int enabled);
+static int set_bool_feature_uac2(libusb_device_handle *h,
+	unsigned char uac2_control_cs, int enabled);
+static int set_bool_feature(const henryctl_bool_feature_t *feature, int enabled);
 	
 
 // this needs modification to handle the -u usb_serial_id option
@@ -627,11 +654,12 @@ static int claim_dg8saq_config_interface(libusb_device_handle *h, int *claimed_o
 	return cfg_if;
 }
 
-static int get_bass_boost_vendor(libusb_device_handle *h)
+static int get_bool_feature_vendor(libusb_device_handle *h,
+	unsigned char dg8saq_request)
 {
 	int res;
 
-	res = device_to_host_handle(h, DG8SAQ_SET_BASS_BOOST, 0, 0, 1);
+	res = device_to_host_handle(h, dg8saq_request, 0, 0, 1);
 	if (res != 1)
 		return -1;
 	if (usb_data[0] != 0 && usb_data[0] != 1)
@@ -639,17 +667,18 @@ static int get_bass_boost_vendor(libusb_device_handle *h)
 	return usb_data[0] ? 1 : 0;
 }
 
-static int set_bass_boost_vendor(libusb_device_handle *h, int enabled)
+static int set_bool_feature_vendor(libusb_device_handle *h,
+	unsigned char dg8saq_request, int enabled)
 {
 	unsigned char value = (unsigned char)enabled;
 	int res;
 	int state;
 
-	res = host_to_device_vendor_handle(h, DG8SAQ_SET_BASS_BOOST, 0, 0, &value, 1);
+	res = host_to_device_vendor_handle(h, dg8saq_request, 0, 0, &value, 1);
 	if (res != 1)
 		return res;
 
-	state = get_bass_boost_vendor(h);
+	state = get_bool_feature_vendor(h, dg8saq_request);
 	if (state < 0)
 		return LIBUSB_ERROR_NOT_SUPPORTED;
 	if (state == enabled)
@@ -657,7 +686,8 @@ static int set_bass_boost_vendor(libusb_device_handle *h, int enabled)
 	return LIBUSB_ERROR_NOT_SUPPORTED;
 }
 
-static int set_bass_boost_uac2(libusb_device_handle *h, int enabled)
+static int set_bool_feature_uac2(libusb_device_handle *h,
+	unsigned char uac2_control_cs, int enabled)
 {
 	int audio_if;
 	unsigned char value;
@@ -679,7 +709,7 @@ static int set_bass_boost_uac2(libusb_device_handle *h, int enabled)
 	value = (unsigned char)enabled;
 	wIndex = (unsigned short)((SPK_FEATURE_UNIT_ID << 8) | (audio_if & 0xff));
 	res = host_to_device_handle(h, AUDIO_CS_REQUEST_CUR,
-		(unsigned short)((AUDIO_FU_CONTROL_CS_BASS_BOOST << 8) | 0x00),
+		(unsigned short)((uac2_control_cs << 8) | 0x00),
 		wIndex, &value, 1);
 
 	if (claimed)
@@ -690,15 +720,58 @@ static int set_bass_boost_uac2(libusb_device_handle *h, int enabled)
 	return 0;
 }
 
-int set_bass_boost(int enabled)
+static void henryctl_print_vendor_failure(const henryctl_bool_feature_t *feature,
+	int res, int cfg_if, int cfg_claimed)
+{
+	if (cfg_if < 0) {
+		fprintf(stderr,
+			"henryctl: vendor %s failed: %s\n",
+			feature->label, error_string(res));
+	} else if (!cfg_claimed) {
+		fprintf(stderr,
+			"henryctl: vendor %s failed: %s (could not claim config interface %d; see docs/FIRMWARE_USAGE.md USBView section)\n",
+			feature->label, error_string(res), cfg_if);
+	} else if (verbose) {
+		fprintf(stderr,
+			"henryctl: vendor %s failed (%s), trying UAC2 SET_CUR\n",
+			feature->label, error_string(res));
+	} else {
+		fprintf(stderr,
+			"henryctl: vendor %s failed: %s (flash firmware with DG8SAQ 0x%02x)\n",
+			feature->label, error_string(res), feature->dg8saq_request);
+	}
+}
+
+static void henryctl_print_uac2_failure(const henryctl_bool_feature_t *feature,
+	int res, int cfg_if, int cfg_claimed)
+{
+	fprintf(stderr,
+		"henryctl: %s SET_CUR failed: %s\n",
+		feature->label, error_string(res));
+	if (cfg_if < 0)
+		fprintf(stderr,
+			"henryctl: hint: flash firmware with FEATURE_CFG_INTERFACE and DG8SAQ 0x%02x\n",
+			feature->dg8saq_request);
+	else if (!cfg_claimed)
+		fprintf(stderr,
+			"henryctl: hint: use Zadig WinUSB on config interface %d only (keep usbaudio on audio interfaces)\n",
+			cfg_if);
+	else
+		fprintf(stderr,
+			"henryctl: hint: flash firmware with DG8SAQ 0x%02x handler\n",
+			feature->dg8saq_request);
+}
+
+static int set_bool_feature(const henryctl_bool_feature_t *feature, int enabled)
 {
 	int res;
 	int cfg_if = -1;
 	int cfg_claimed = 0;
+	const char *enabled_text = enabled ? "enabled" : "disabled";
 
 	if (enabled != 0 && enabled != 1) {
-		fprintf(stderr, "henryctl: invalid bass boost value %d, use 0 or 1\n",
-			enabled);
+		fprintf(stderr, "henryctl: invalid %s value %d, use 0 or 1\n",
+			feature->label, enabled);
 		return 1;
 	}
 
@@ -724,54 +797,39 @@ int set_bass_boost(int enabled)
 			cfg_if);
 	}
 
-	res = set_bass_boost_vendor(usb_handle, enabled);
+	res = set_bool_feature_vendor(usb_handle, feature->dg8saq_request, enabled);
 	if (cfg_claimed)
 		libusb_release_interface(usb_handle, cfg_if);
 
 	if (res == 0) {
 		if (verbose)
-			fprintf(stderr, "henryctl: bass boost set via vendor request 0x72\n");
-		fprintf(stdout, "Bass boost %s\n", enabled ? "enabled" : "disabled");
+			fprintf(stderr,
+				"henryctl: %s set via vendor request 0x%02x\n",
+				feature->label, feature->dg8saq_request);
+		fprintf(stdout, "%s %s\n", feature->label, enabled_text);
 		return close_usb_device(0);
 	}
-	if (cfg_if < 0) {
-		fprintf(stderr,
-			"henryctl: vendor bass boost failed: %s\n",
-			error_string(res));
-	} else if (!cfg_claimed) {
-		fprintf(stderr,
-			"henryctl: vendor bass boost failed: %s (could not claim config interface %d; see docs/FIRMWARE_USAGE.md USBView section)\n",
-			error_string(res), cfg_if);
-	} else if (verbose) {
-		fprintf(stderr,
-			"henryctl: vendor bass boost failed (%s), trying UAC2 SET_CUR\n",
-			error_string(res));
-	} else {
-		fprintf(stderr,
-			"henryctl: vendor bass boost failed: %s (flash firmware with DG8SAQ 0x72)\n",
-			error_string(res));
-	}
 
-	res = set_bass_boost_uac2(usb_handle, enabled);
+	henryctl_print_vendor_failure(feature, res, cfg_if, cfg_claimed);
+
+	res = set_bool_feature_uac2(usb_handle, feature->uac2_control_cs, enabled);
 	if (res != 0) {
-		fprintf(stderr,
-			"henryctl: bass boost SET_CUR failed: %s\n",
-			error_string(res));
-		if (cfg_if < 0)
-			fprintf(stderr,
-				"henryctl: hint: flash firmware with FEATURE_CFG_INTERFACE and DG8SAQ 0x72\n");
-		else if (!cfg_claimed)
-			fprintf(stderr,
-				"henryctl: hint: use Zadig WinUSB on config interface %d only (keep usbaudio on audio interfaces)\n",
-				cfg_if);
-		else
-			fprintf(stderr,
-				"henryctl: hint: flash firmware with DG8SAQ 0x72 handler\n");
+		henryctl_print_uac2_failure(feature, res, cfg_if, cfg_claimed);
 		return close_usb_device(1);
 	}
 
-	fprintf(stdout, "Bass boost %s\n", enabled ? "enabled" : "disabled");
+	fprintf(stdout, "%s %s\n", feature->label, enabled_text);
 	return close_usb_device(0);
+}
+
+int set_bass_boost(int enabled)
+{
+	return set_bool_feature(&henryctl_feature_bass_boost, enabled);
+}
+
+int set_loudness(int enabled)
+{
+	return set_bool_feature(&henryctl_feature_loudness, enabled);
 }
 
 int main(int argc, char *argv[]) {
@@ -791,7 +849,6 @@ int main(int argc, char *argv[]) {
 	}
 
 	for (i = 1; i < argc; i += 1) {
-
 		if (strcmp(argv[i], "--bassboost") == 0) {
 			if (i + 1 >= argc) {
 				fprintf(stderr, "henryctl: value required for --bassboost (0 or 1)\n");
@@ -799,6 +856,15 @@ int main(int argc, char *argv[]) {
 			}
 
 			exit(set_bass_boost(atoi(argv[++i])));
+		}
+
+		if (strcmp(argv[i], "--loudness") == 0) {
+			if (i + 1 >= argc) {
+				fprintf(stderr, "henryctl: value required for --loudness (0 or 1)\n");
+				return 1;
+			}
+
+			exit(set_loudness(atoi(argv[++i])));
 		}
 	}
 	
