@@ -598,6 +598,15 @@ void uac2_user_set_interface(U8 wIndex, U8 wValue) {
 	if (usb_interface_nb == STD_AS_INTERFACE_OUT) {
 		usb_alternate_setting_out = wValue;
 		usb_alternate_setting_out_changed = TRUE;
+#ifndef USBSTATISTICS_DISABLE
+		if (wValue == ALT2_AS_INTERFACE_INDEX) {
+			stats_telemetry_set_sample_bits(16);
+		} else if (wValue == ALT1_AS_INTERFACE_INDEX) {
+			stats_telemetry_set_sample_bits(24);
+		} else {
+			stats_telemetry_set_sample_bits(0);
+		}
+#endif
 	}
 
 	// BSB 20130604 disabling UAC1 IN
@@ -1332,6 +1341,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						Usb_write_endpoint_data(EP_CONTROL, 8,
 							loudness_bass_boost_is_enabled() ? 0x01 : 0x00);
 #else
+						/* LOUDNESS_DISABLE: stable USB facade — GET_CUR always on. */
 						Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
 #endif
 						for (i = 0; i < (wLength - 1); i++)
@@ -1353,6 +1363,7 @@ Bool uac2_user_read_request(U8 type, U8 request) {
 						Usb_write_endpoint_data(EP_CONTROL, 8,
 							loudness_loudness_is_enabled() ? 0x01 : 0x00);
 #else
+						/* LOUDNESS_DISABLE: stable USB facade — GET_CUR always on. */
 						Usb_write_endpoint_data(EP_CONTROL, 8, 0x01);
 #endif
 						for (i = 0; i < (wLength - 1); i++)

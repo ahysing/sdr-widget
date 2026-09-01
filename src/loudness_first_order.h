@@ -2,6 +2,13 @@
 #define LOUDNESS_FIRST_ORDER_H
 
 #include <stdint.h>
+#include "compiler.h"
+#include "loudness.h"
+#include "loudness_fast.h"
+
+#ifndef LOUDNESS_Q28_ONE
+#define LOUDNESS_Q28_ONE ((int32_t)1 << 28)
+#endif
 
 typedef struct {
     int32_t w1;  /* canonical DF-II delay state 1, stored with M-bit headroom */
@@ -13,4 +20,16 @@ typedef struct {
     int32_t b1;
 } biquad_first_order_quotients_t;
 
-#endif
+extern biquad_first_order_state_t highshelf_states[LOUDNESS_CHANNELS];
+extern const biquad_first_order_quotients_t highshelf_no_volume_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS];
+extern const biquad_first_order_quotients_t highshelf_no_volume_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS];
+
+int32_t loudness_highshelf_inline(int32_t x_n,
+    biquad_first_order_state_t *st, const biquad_first_order_quotients_t *rt);
+
+const biquad_first_order_quotients_t *loudness_resolve_highshelf_base_table(uint32_t frequency);
+const biquad_first_order_quotients_t *loudness_highshelf_active_quotients(void);
+Bool loudness_highshelf_biquad_is_idle(int channel);
+void loudness_highshelf_reset_states(void);
+
+#endif /* LOUDNESS_FIRST_ORDER_H */

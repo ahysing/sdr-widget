@@ -207,11 +207,7 @@ static uint32_t loudness_get_active_loudness_level(int channel)
     return gain_long_memory[channel];
 }
 
-#ifdef BUILD_TESTING
 int32_t loudness_inferred_gain_dbfs_from_magnitude(uint32_t mag)
-#else
-static int32_t loudness_inferred_gain_dbfs_from_magnitude(uint32_t mag)
-#endif
 {
     if (mag > (uint32_t)INT24_MAX) {
         mag = (uint32_t)INT24_MAX;

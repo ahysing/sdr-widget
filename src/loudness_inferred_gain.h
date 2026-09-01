@@ -23,7 +23,6 @@ int32_t loudness_inferred_gain_dbfs(void);
 int32_t loudness_inferred_gain_dbfs_channel(int channel);
 
 #ifdef BUILD_TESTING
-int32_t loudness_inferred_gain_dbfs_from_magnitude(uint32_t mag);
 void loudness_test_reset_inferred_gain(void);
 void loudness_test_set_short_memory(uint32_t value);
 void loudness_test_set_long_memory(uint32_t value);
@@ -31,6 +30,7 @@ uint32_t loudness_test_get_short_memory(void);
 uint32_t loudness_test_get_long_memory(void);
 void loudness_test_combined_context_loop(uint32_t instant_sample_peak);
 uint32_t loudness_test_get_active_loudness_level(void);
+int32_t loudness_inferred_gain_dbfs_from_magnitude(uint32_t mag);
 #endif
 
 #else /* LOUDNESS_DISABLE */
