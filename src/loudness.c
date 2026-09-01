@@ -115,20 +115,27 @@ static Bool loudness_rtos_initialized = FALSE;
 static volatile Bool loudness_task_ready = FALSE;
 #endif
 
-volatile S16 last_db_spl_x10 = LOUDNESS_DB_SPL_MAX * 10;
+volatile S16 last_db_spl_left_x10 = LOUDNESS_DB_SPL_MAX * 10;
+volatile S16 last_db_spl_right_x10 = LOUDNESS_DB_SPL_MAX * 10;
 volatile S16 target_gain_dbfs_left_q8 = 0;
 volatile S16 target_gain_dbfs_right_q8 = 0;
-static volatile Bool loudness_bass_boost_enabled = TRUE;
+static volatile Bool loudness_bass_boost_enabled = FALSE;
 static volatile Bool loudness_loudness_enabled = TRUE;
+static volatile filter_mode_t last_filter_enabled = LOUDNESS_MODE;
 static Bool loudness_external_volume_active = FALSE;
 
 static void loudness_select_equalizer_steps(void);
 static void loudness_publish_equalizer_telemetry(void);
 static void loudness_update_filter_mode(void);
 
-static Bool loudness_bass_boost_allows_contour(void)
+static Bool loudness_filter_contour_is_enabled(void)
 {
-    return loudness_bass_boost_enabled;
+    return last_filter_enabled != FILTER_OFF_MODE;
+}
+
+filter_mode_t loudness_active_filter()
+{
+    return last_filter_enabled;
 }
 
 #if defined(BUILD_TESTING)
@@ -146,7 +153,7 @@ static void loudness_set_volume_in_biquad(Bool volume_in_biquad)
 
 static void loudness_update_filter_mode(void)
 {
-	if (!loudness_bass_boost_allows_contour()) {
+	if (!loudness_filter_contour_is_enabled()) {
 		int32_t db_spl_left_x10;
 		int32_t db_spl_right_x10;
 
@@ -155,16 +162,31 @@ static void loudness_update_filter_mode(void)
 		loudness_external_volume_active = TRUE;
 		loudness_internal_current_stereo_db_spl_x10(
 			&db_spl_left_x10, &db_spl_right_x10);
-		loudness_publish_equalizer_step(db_spl_left_x10);
+		loudness_publish_equalizer_step(db_spl_left_x10, db_spl_right_x10);
 		loudness_publish_equalizer_telemetry();
 		return;
 	}
+
+	/*
+	 * LOUDNESS_MODE <-> BASS_BOOST_MODE changes the high-shelf from an active
+	 * treble contour to identity (or the reverse). Residual delay-line energy
+	 * in highshelf_states[] may cause a short pop if coeffs flip without a
+	 * state reset. loudness_fast_reset_states() is intentionally not called
+	 * here until empirical HW listening confirms whether it is needed.
+	 */
 
 	if (loudness_external_volume_active) {
 		loudness_fast_reset_states();
 		loudness_external_volume_active = FALSE;
 	}
-	loudness_set_volume_in_biquad(TRUE);
+
+	if (last_filter_enabled == LOUDNESS_MODE) {
+		loudness_set_volume_in_biquad(TRUE);
+	} else if (last_filter_enabled == BASS_BOOST_MODE) {
+		loudness_set_volume_in_biquad(FALSE);
+	}
+
+	loudness_fast_refresh_quotient_table_pointers();
 	loudness_publish_equalizer_telemetry();
 	loudness_select_equalizer_steps();
 }
@@ -172,8 +194,7 @@ static void loudness_update_filter_mode(void)
 #if defined(BUILD_TESTING)
 Bool loudness_test_volume_in_biquad(void)
 {
-	return !loudness_external_volume_active
-		&& loudness_bass_boost_allows_contour();
+	return last_filter_enabled == LOUDNESS_MODE;
 }
 #endif
 
@@ -261,9 +282,10 @@ static int8_t loudness_clamp_s8(int32_t value)
 }
 #endif
 
-void loudness_publish_equalizer_step(int32_t db_spl_x10)
+void loudness_publish_equalizer_step(int32_t db_spl_left_x10, int32_t db_spl_right_x10)
 {
-    last_db_spl_x10 = (int16_t)db_spl_x10;
+    last_db_spl_left_x10 = (int16_t)db_spl_left_x10;
+    last_db_spl_right_x10 = (int16_t)db_spl_right_x10;
 }
 
 void loudness_report_equalizer_step_switch(int32_t prev_db_spl_x10,
@@ -301,34 +323,46 @@ int loudness_test_get_equalizer_step(int32_t db_spl_x10) {
 #endif
 
 #ifdef BUILD_TESTING
-static int loudness_get_current_equalizer_step(void)
+static Bool loudness_should_change_equalizer_step(int32_t db_spl_left_x10, int32_t db_spl_right_x10)
 {
-    return loudness_get_equalizer_step((int32_t)last_db_spl_x10);
+    int step_left = loudness_get_equalizer_step(db_spl_left_x10);
+    int step_right = loudness_get_equalizer_step(db_spl_right_x10);
+    int curr_step_left = loudness_get_equalizer_step((int32_t)last_db_spl_left_x10);
+    int curr_step_right = loudness_get_equalizer_step((int32_t)last_db_spl_right_x10);
+
+    return (step_left != curr_step_left) || (step_right != curr_step_right);
 }
 
-static Bool loudness_should_change_equalizer_step(int32_t db_spl_x10)
-{
-    return loudness_get_equalizer_step(db_spl_x10)
-        != loudness_get_current_equalizer_step();
-}
-
-Bool loudness_test_should_change_equalizer_step(int32_t db_spl_x10) {
-    return loudness_should_change_equalizer_step(db_spl_x10);
+Bool loudness_test_should_change_equalizer_step(int32_t db_spl_left_x10, int32_t db_spl_right_x10) {
+    return loudness_should_change_equalizer_step(db_spl_left_x10, db_spl_right_x10);
 }
 #endif
 
 static void loudness_select_equalizer_steps(void)
 {
-    int32_t db_spl_left_x10;
-    int32_t db_spl_right_x10;
-    int equalizer_step_left;
-    int equalizer_step_right;
+    int32_t db_spl_left_x10 = 0;
+    int32_t db_spl_right_x10 = 0;
+    int equalizer_step_left = 0;
+    int equalizer_step_right = 0;
 
     loudness_internal_current_stereo_db_spl_x10(
         &db_spl_left_x10, &db_spl_right_x10);
-    equalizer_step_left = loudness_get_equalizer_step(db_spl_left_x10);
-    equalizer_step_right = loudness_get_equalizer_step(db_spl_right_x10);
-    loudness_fast_select_equalizer_steps(db_spl_left_x10,
+
+    switch (last_filter_enabled)
+    {
+        case BASS_BOOST_MODE:
+            equalizer_step_left = BASSS_PHON_55_IDX;
+            equalizer_step_right = BASSS_PHON_55_IDX;
+            break;
+        case LOUDNESS_MODE:
+            equalizer_step_left = loudness_get_equalizer_step(db_spl_left_x10);
+            equalizer_step_right = loudness_get_equalizer_step(db_spl_right_x10);
+            break;
+        default:
+            break;
+    }
+
+    loudness_fast_select_equalizer_steps(db_spl_left_x10, db_spl_right_x10,
         equalizer_step_left, equalizer_step_right);
 }
 
@@ -444,7 +478,9 @@ static void loudness_request_volume_apply(void)
 
     request.type = LOUDNESS_REQUEST_VOLUME;
     request.value = 0;
-    (void)xQueueSend(xLoudnessFreqQueue, &request, 0);
+    if (xQueueSend(xLoudnessFreqQueue, &request, 0) != pdPASS) {
+        loudness_update_filter_mode();
+    }
 }
 #else /* FREERTOS_USED */
 
@@ -480,11 +516,20 @@ static void loudness_publish_equalizer_telemetry(void)
     int32_t db_spl_right_x10;
     int32_t db_spl_left;
     int32_t db_spl_right;
+    U8 equalizer_step_left;
+    U8 equalizer_step_right;
 
     loudness_calculate_db_spl_stereo_x10(
         &db_spl_left_x10, &db_spl_right_x10);
     db_spl_left = (db_spl_left_x10 + 5) / 10;
     db_spl_right = (db_spl_right_x10 + 5) / 10;
+    if (last_filter_enabled == BASS_BOOST_MODE) {
+        equalizer_step_left = (U8)BASSS_PHON_55_IDX;
+        equalizer_step_right = (U8)BASSS_PHON_55_IDX;
+    } else {
+        equalizer_step_left = (U8)loudness_get_equalizer_step(db_spl_left_x10);
+        equalizer_step_right = (U8)loudness_get_equalizer_step(db_spl_right_x10);
+    }
     stats_telemetry_set_gain_dbfs_stereo(
         loudness_clamp_s8(db_spl_left - LOUDNESS_DB_SPL_MAX),
         loudness_clamp_s8(db_spl_right - LOUDNESS_DB_SPL_MAX));
@@ -492,9 +537,9 @@ static void loudness_publish_equalizer_telemetry(void)
         loudness_inferred_gain_has_source_volume_control() ? 1u : 0u);
     stats_telemetry_set_equalizer_state_stereo(
         loudness_clamp_s8(db_spl_left),
-        (U8)loudness_get_equalizer_step(db_spl_left_x10),
+        equalizer_step_left,
         loudness_clamp_s8(db_spl_right),
-        (U8)loudness_get_equalizer_step(db_spl_right_x10));
+        equalizer_step_right);
 #endif
 }
 
@@ -507,17 +552,46 @@ void loudness_update_active_equalizer_step(void)
 {
     loudness_update_filter_mode();
 }
+static void stats_emit_bass_boost()
+{
+#if !defined(USBSTATISTICS_DISABLE)
+    stats_telemetry_set_loudness_enabled(0u);
+    stats_telemetry_set_bass_boost_enabled(1u);
+#endif
+}
+
+static void stats_emit_loudness()
+{
+#if !defined(USBSTATISTICS_DISABLE)
+    stats_telemetry_set_loudness_enabled(1u);
+    stats_telemetry_set_bass_boost_enabled(0u);
+#endif
+}
+
+static void stats_emit_filter_off()
+{
+#if !defined(USBSTATISTICS_DISABLE)
+    stats_telemetry_set_loudness_enabled(0u);
+    stats_telemetry_set_bass_boost_enabled(0u);
+#endif
+}
 
 void loudness_bass_boost_set(Bool enabled)
 {
     loudness_bass_boost_enabled = enabled;
-    if (enabled)
-        loudness_loudness_enabled = FALSE;
-#if !defined(USBSTATISTICS_DISABLE)
-    stats_telemetry_set_bass_boost_enabled(enabled ? 1u : 0u);
-    if (enabled)
-        stats_telemetry_set_loudness_enabled(0u);
-#endif
+    if (enabled) {
+        last_filter_enabled = BASS_BOOST_MODE;
+        stats_emit_bass_boost();
+    } else if (last_filter_enabled == BASS_BOOST_MODE) {
+        if (loudness_loudness_enabled) {
+            last_filter_enabled = LOUDNESS_MODE;
+            stats_emit_loudness();
+        } else {
+            last_filter_enabled = FILTER_OFF_MODE;
+            stats_emit_filter_off();
+        }
+    }
+
     if (loudness_rtos_is_ready()) {
 #ifdef FREERTOS_USED
         loudness_request_volume_apply();
@@ -535,13 +609,19 @@ Bool loudness_bass_boost_is_enabled(void)
 void loudness_loudness_set(Bool enabled)
 {
     loudness_loudness_enabled = enabled;
-    if (enabled)
-        loudness_bass_boost_enabled = FALSE;
-#if !defined(USBSTATISTICS_DISABLE)
-    stats_telemetry_set_loudness_enabled(enabled ? 1u : 0u);
-    if (enabled)
-        stats_telemetry_set_bass_boost_enabled(0u);
-#endif
+    if (enabled) {
+        last_filter_enabled = LOUDNESS_MODE;
+        stats_emit_loudness();
+    } else if (last_filter_enabled == LOUDNESS_MODE) {
+        if (loudness_bass_boost_enabled) {
+            last_filter_enabled = BASS_BOOST_MODE;
+            stats_emit_bass_boost();
+        } else {
+            last_filter_enabled = FILTER_OFF_MODE;
+            stats_emit_filter_off();
+        }
+    }
+
     if (loudness_rtos_is_ready()) {
 #ifdef FREERTOS_USED
         loudness_request_volume_apply();
@@ -555,7 +635,6 @@ Bool loudness_loudness_is_enabled(void)
 {
     return loudness_loudness_enabled;
 }
-
 
 void loudness_usb_volume_changed_left(S16 volume_q8)
 {
@@ -608,8 +687,12 @@ int32_t loudness_get_gain_dbfs_channel(int channel)
     return gain_dbfs;
 }
 
-int16_t loudness_get_last_db_spl_x10(void) {
-    return last_db_spl_x10;
+int16_t loudness_get_last_db_spl_left_x10(void) {
+    return last_db_spl_left_x10;
+}
+
+int16_t loudness_get_last_db_spl_right_x10(void) {
+    return last_db_spl_right_x10;
 }
 
 void loudness_set_level_dbfs(int32_t db_fs) {
@@ -641,6 +724,7 @@ void loudness_filter_init(void) {
         loudness_change_frequency(current_freq.frequency);
     }
     loudness_update_filter_mode();
+    stats_emit_loudness();
 
 #ifdef FREERTOS_USED
     loudness_state_initialized = TRUE;
@@ -648,6 +732,15 @@ void loudness_filter_init(void) {
 }
 
 #endif /* LOUDNESS_DISABLE */
+
+#ifndef LOUDNESS_DISABLE
+Bool loudness_uac2_packet_filter_enabled(Bool not_muted, uint32_t freq_hz)
+{
+    return not_muted
+        && (freq_hz == (uint32_t)FREQ_44 || freq_hz == (uint32_t)FREQ_48)
+        && loudness_active_filter() != FILTER_OFF_MODE;
+}
+#endif
 
 int32_t loudness_apply_noise_shaper_to_output(int32_t sample_32bit, int32_t* noise_shaper_error) {
     int32_t error = *noise_shaper_error;
@@ -682,7 +775,11 @@ void loudness_set_level_dbfs(int32_t db_fs) {
 
 void loudness_update_active_equalizer_step(void) {}
 
-int16_t loudness_get_last_db_spl_x10(void) {
+int16_t loudness_get_last_db_spl_left_x10(void) {
+    return LOUDNESS_DB_SPL_MAX * 10;
+}
+
+int16_t loudness_get_last_db_spl_right_x10(void) {
     return LOUDNESS_DB_SPL_MAX * 10;
 }
 

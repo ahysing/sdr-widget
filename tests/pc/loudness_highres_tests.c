@@ -255,7 +255,7 @@ void test_filter_active_during_hires_interp(void)
 
     drive_stereo_impulse(packet_L, packet_R, 4);
     assert(!loudness_channel_filter_is_idle(0));
-    assert(loudness_filter_is_active());
+    assert(loudness_lowshelf_is_active());
 
     printf("test_filter_active_during_hires_interp passed\n\n");
 }
@@ -281,7 +281,7 @@ void test_filter_idle_after_zeros_stride2(void)
 
     assert(loudness_channel_filter_is_idle(0));
     assert(loudness_channel_filter_is_idle(1));
-    assert(!loudness_filter_is_active());
+    assert(!loudness_lowshelf_is_active());
 
     printf("test_filter_idle_after_zeros_stride2 passed\n\n");
 }
@@ -307,56 +307,9 @@ void test_filter_idle_after_zeros_stride4(void)
 
     assert(loudness_channel_filter_is_idle(0));
     assert(loudness_channel_filter_is_idle(1));
-    assert(!loudness_filter_is_active());
+    assert(!loudness_lowshelf_is_active());
 
     printf("test_filter_idle_after_zeros_stride4 passed\n\n");
-}
-
-void test_highres_shared_baked_volume_policy(void)
-{
-    biquad_state_fast_t state;
-    biquad_quotients_fast_t left;
-    biquad_quotients_fast_t right;
-    biquad_quotients_fast_t shared_actual;
-    biquad_quotients_fast_t shared_expected;
-    const uint32_t shared_rates[] = { 88200, 96000, 176400, 192000 };
-    int32_t db_spl_left_x10;
-    int32_t db_spl_right_x10;
-    size_t i;
-
-    printf("Running test_highres_shared_baked_volume_policy...\n");
-
-    loudness_init();
-    spk_vol_usb_L = -6 * 256;
-    spk_vol_usb_R = -20 * 256;
-
-    for (i = 0; i < sizeof(shared_rates) / sizeof(shared_rates[0]); i++) {
-        current_freq.frequency = shared_rates[i];
-        loudness_usb_volume_changed_left(spk_vol_usb_L);
-        loudness_usb_volume_changed_right(spk_vol_usb_R);
-        loudness_highres_change_frequency(shared_rates[i]);
-        loudness_highres_current_stereo_db_spl_x10(
-            &db_spl_left_x10, &db_spl_right_x10);
-        assert(db_spl_left_x10 == 820);
-        assert(db_spl_right_x10 == 820);
-        loudness_test_get_fast_channel(0, &state, &left);
-        loudness_test_get_fast_channel(1, &state, &right);
-        assert(left.a1 == right.a1);
-        assert(left.a2 == right.a2);
-        assert(left.b0 == right.b0);
-        assert(left.b1 == right.b1);
-        assert(left.b2 == right.b2);
-        shared_actual = left;
-        loudness_highres_test_load_active_quotients(94);
-        loudness_test_get_fast_channel(0, &state, &shared_expected);
-        assert(shared_actual.a1 == shared_expected.a1);
-        assert(shared_actual.a2 == shared_expected.a2);
-        assert(shared_actual.b0 == shared_expected.b0);
-        assert(shared_actual.b1 == shared_expected.b1);
-        assert(shared_actual.b2 == shared_expected.b2);
-    }
-
-    printf("test_highres_shared_baked_volume_policy passed\n\n");
 }
 
 int main(void)
@@ -368,7 +321,6 @@ int main(void)
     test_filter_active_during_hires_interp();
     test_filter_idle_after_zeros_stride2();
     test_filter_idle_after_zeros_stride4();
-    test_highres_shared_baked_volume_policy();
     printf("\nAll highres tests completed!\n");
     return 0;
 }

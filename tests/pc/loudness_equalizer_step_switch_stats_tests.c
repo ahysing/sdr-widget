@@ -1,6 +1,7 @@
 #include "fff.h"
 #include "loudness.h"
 #include "loudness_test_access.h"
+#include "loudness_internal.h"
 #include "usb_specific_request.h"
 #include "usb_statistics.h"
 #include "stats_telemetry.h"
@@ -20,12 +21,18 @@ S16 spk_vol_usb_L = 0, spk_vol_usb_R = 0;
 volatile U8 spk_bit_resolution = 24;
 
 static int64_t process_sample(int64_t sample) {
-    return loudness_fast_24bit(0, (int32_t)sample);
+    return loudness_filter_24bit_container(0, (int32_t)sample);
 }
 
 static void reset_usb_stats_buffers(void) {
     usb_test_mocks_reset();
     statistics_test_reset();
+}
+
+static void loudness_usb_volume_changed_stereo(S16 volume_q8)
+{
+    loudness_usb_volume_changed_left(volume_q8);
+    loudness_usb_volume_changed_right(volume_q8);
 }
 
 static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
@@ -36,38 +43,43 @@ static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
     current_freq.frequency = 44100;
     loudness_init();
     loudness_set_source_has_volume_control();
-    loudness_usb_volume_changed_left(0);
+    loudness_usb_volume_changed_stereo(0);
     reset_usb_stats_buffers();
 
     assert(stats->event_count == 0);
-    assert(loudness_get_last_db_spl_x10() == LOUDNESS_DB_SPL_MAX * 10);
+    assert(loudness_get_last_db_spl_left_x10() == LOUDNESS_DB_SPL_MAX * 10);
+    assert(loudness_get_last_db_spl_right_x10() == LOUDNESS_DB_SPL_MAX * 10);
 
-    loudness_usb_volume_changed_left((79 - LOUDNESS_DB_SPL_MAX) * 256);
-    assert(loudness_get_last_db_spl_x10() == 790);
+    loudness_usb_volume_changed_stereo((S16)((79 - LOUDNESS_DB_SPL_MAX) * 256));
+    assert(loudness_get_last_db_spl_left_x10() == 790);
+    assert(loudness_get_last_db_spl_right_x10() == 790);
     assert(stats->event_count == 1);
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg0 == LOUDNESS_DB_SPL_MAX);
     assert(stats->last_arg1 == 79);
     assert(stats->last_arg2 == 88);
 
-    loudness_usb_volume_changed_left((75 - LOUDNESS_DB_SPL_MAX) * 256);
-    assert(loudness_get_last_db_spl_x10() == 750);
+    loudness_usb_volume_changed_stereo((S16)((75 - LOUDNESS_DB_SPL_MAX) * 256));
+    assert(loudness_get_last_db_spl_left_x10() == 750);
+    assert(loudness_get_last_db_spl_right_x10() == 750);
     assert(stats->event_count == 2);
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg0 == 79);
     assert(stats->last_arg1 == 75);
     assert(stats->last_arg2 == 80);
 
-    loudness_usb_volume_changed_left((55 - LOUDNESS_DB_SPL_MAX) * 256);
-    assert(loudness_get_last_db_spl_x10() == 550);
+    loudness_usb_volume_changed_stereo((S16)((55 - LOUDNESS_DB_SPL_MAX) * 256));
+    assert(loudness_get_last_db_spl_left_x10() == 550);
+    assert(loudness_get_last_db_spl_right_x10() == 550);
     assert(stats->event_count == 3);
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg0 == 75);
     assert(stats->last_arg1 == 55);
     assert(stats->last_arg2 == 40);
 
-    loudness_usb_volume_changed_left(0);
-    assert(loudness_get_last_db_spl_x10() == LOUDNESS_DB_SPL_MAX * 10);
+    loudness_usb_volume_changed_stereo(0);
+    assert(loudness_get_last_db_spl_left_x10() == LOUDNESS_DB_SPL_MAX * 10);
+    assert(loudness_get_last_db_spl_right_x10() == LOUDNESS_DB_SPL_MAX * 10);
     assert(stats->event_count == 4);
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg1 == LOUDNESS_DB_SPL_MAX);
@@ -120,7 +132,7 @@ static void test_equalizer_step_switch_rapid_sweep_no_deadline_misses(void) {
     };
     int v;
     for (v = 0; v < 6; v++) {
-        loudness_usb_volume_changed_left((S16)volumes[v]);
+        loudness_usb_volume_changed_stereo((S16)volumes[v]);
         (void)process_sample(1000);
         (void)process_sample(-1000);
     }
@@ -228,6 +240,38 @@ static void test_stereo_telemetry_policies(void)
     printf("test_stereo_telemetry_policies passed\n");
 }
 
+static void test_boot_telemetry_reports_loudness_enabled(void) {
+    stats_telemetry_snapshot_t telemetry;
+
+    printf("Running test_boot_telemetry_reports_loudness_enabled...\n");
+    reset_usb_stats_buffers();
+    current_freq.frequency = 48000;
+    loudness_init();
+    telemetry = stats_telemetry_read_best_effort();
+    assert(telemetry.loudness_enabled == 1);
+    assert(telemetry.bass_boost_enabled == 0);
+    printf("test_boot_telemetry_reports_loudness_enabled passed\n");
+}
+
+static void test_bass_boost_telemetry_reports_equalizer_step_40(void) {
+    stats_telemetry_snapshot_t telemetry;
+
+    printf("Running test_bass_boost_telemetry_reports_equalizer_step_40...\n");
+    reset_usb_stats_buffers();
+    current_freq.frequency = 48000;
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    loudness_bass_boost_set(TRUE);
+    loudness_usb_volume_changed_stereo(0);
+    loudness_update_active_equalizer_step();
+    telemetry = stats_telemetry_read_best_effort();
+    assert(telemetry.equalizer_step_left == BASSS_PHON_55_IDX);
+    assert(telemetry.equalizer_step_right == BASSS_PHON_55_IDX);
+    assert(telemetry.bass_boost_enabled == 1);
+    assert(telemetry.loudness_enabled == 0);
+    printf("test_bass_boost_telemetry_reports_equalizer_step_40 passed\n");
+}
+
 int main(void) {
     printf("=== loudness_equalizer_step_switch_stats_tests ===\n");
     test_equalizer_step_switch_tagged_events_volume_sweep();
@@ -235,6 +279,8 @@ int main(void) {
     test_equalizer_step_switch_rapid_sweep_no_deadline_misses();
     test_usb_volume_change_updates_telemetry_immediately();
     test_stereo_telemetry_policies();
+    test_boot_telemetry_reports_loudness_enabled();
+    test_bass_boost_telemetry_reports_equalizer_step_40();
     printf("All loudness_equalizer_step_switch_stats_tests passed.\n");
     return 0;
 }

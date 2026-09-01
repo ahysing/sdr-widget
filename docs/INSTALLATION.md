@@ -130,7 +130,11 @@ avr32-gcc -nostartfiles -Wl,--gc-sections -Wl,-e,_trampoline -mpart=uc3a3256 \
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `LOUDNESS_DISABLE` | `0` | Set to `1` to compile out the loudness filter entirely |
+| `LOUDNESS_DISABLE` | `0` | Removes runtime DSP only; USB descriptors and `GET_CUR` for Bass Boost / Loudness stay unchanged (stable facade for Windows descriptor cache). `SET_CUR` is a no-op. |
+
+`LOUDNESS_DISABLE=1` does **not** remove Bass Boost or Loudness from USB descriptors.
+`GET_CUR` still returns on; only the biquad path is compiled out and legacy
+`adjust_volume()` handles level. See [LOUDNESS.md](LOUDNESS.md).
 
 Examples:
 

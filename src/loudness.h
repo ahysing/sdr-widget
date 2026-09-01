@@ -36,6 +36,12 @@
 
 /* --- Public API --- */
 
+typedef enum {
+    LOUDNESS_MODE,
+    BASS_BOOST_MODE,
+    FILTER_OFF_MODE,
+} filter_mode_t;
+
 void loudness_init(void);
 void loudness_usb_statistics_init(void);
 void loudness_filter_init(void);
@@ -47,15 +53,14 @@ void loudness_request_frequency_change(uint32_t frequency);
 void loudness_change_frequency_fast(uint32_t frequency);
 #define loudness_change_frequency loudness_change_frequency_fast
 
-#define LOUDNESS_FILTER_FAST_32(ch, sample_32) ((S32)loudness_fast_24bit((ch), (sample_32)))
-#define LOUDNESS_FILTER_16BIT_CONTAINER(ch, sample_32) \
-    loudness_filter_16bit_container((ch), (sample_32))
 #define LOUDNESS_FILTER_16BIT_STEREO_PACKET(L, R, N) \
     loudness_filter_16bit_stereo_packet((L), (R), (N))
+#define LOUDNESS_FILTER_24BIT_STEREO_PACKET(L, R, N) \
+    loudness_filter_24bit_stereo_packet((L), (R), (N))
 #define LOUDNESS_FILTER_24BIT_CONTAINER(ch, sample_32) \
     loudness_filter_24bit_container((ch), (sample_32))
 
-Bool loudness_filter_is_active(void);
+Bool loudness_lowshelf_is_active(void);
 Bool loudness_channel_filter_is_idle(int channel);
 
 /* Force the active loudness band from an external dBFS estimate (<= 0). */
@@ -72,6 +77,8 @@ Bool loudness_bass_boost_is_enabled(void);
 void loudness_loudness_set(Bool enabled);
 Bool loudness_loudness_is_enabled(void);
 
+filter_mode_t loudness_active_filter();
+Bool loudness_uac2_packet_filter_enabled(Bool not_muted, uint32_t freq_hz);
 /* Update the active equalizer step based on current host gain level. */
 void loudness_update_active_equalizer_step(void);
 
@@ -81,15 +88,14 @@ int32_t loudness_get_gain_dbfs_channel(int channel);
 #include "loudness_inferred_gain.h"
 
 
-/* Current left/master level in 0.1 dB SPL units. */
-int16_t loudness_get_last_db_spl_x10(void);
+/* Current per-channel published level in 0.1 dB SPL units. */
+int16_t loudness_get_last_db_spl_left_x10(void);
+int16_t loudness_get_last_db_spl_right_x10(void);
 
 #else /* LOUDNESS_DISABLE */
-#define LOUDNESS_FILTER_FAST_32(ch, sample_32) \
-    ((void)(ch), (S32)(sample_32))
-#define LOUDNESS_FILTER_16BIT_CONTAINER(ch, sample_32) \
-    ((void)(ch), (sample_32))
 #define LOUDNESS_FILTER_16BIT_STEREO_PACKET(L, R, N) \
+    do { (void)(L); (void)(R); (void)(N); } while (0)
+#define LOUDNESS_FILTER_24BIT_STEREO_PACKET(L, R, N) \
     do { (void)(L); (void)(R); (void)(N); } while (0)
 #define LOUDNESS_FILTER_24BIT_CONTAINER(ch, sample_32) \
     ((void)(ch), (sample_32))

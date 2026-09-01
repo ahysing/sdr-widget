@@ -3,25 +3,35 @@
 This document describes how to control loudness and bass boost on SDR-Widget /
 audiophile-widget firmware from the host.
 
-**Host tools:** [`henryctl`](../henryctl.c) controls the firmware loudness bass
-boost flag (`--bassboost`). [`widget-control`](../widget-control.c) is the
+**Host tools:** [`henryctl`](../henryctl.c) exposes bass boost and loudness
+preferences (`--bassboost`, `--loudness`). [`widget-control`](../widget-control.c) is the
 original SDR-Widget features utility (NVRAM features `-g`/`-s`, etc.) and does
-**not** include `--bassboost`.
+**not** include those loudness controls.
 
-## Two different things called "bass boost"
+## Dual UAC controls and last-filter-wins
 
-| Name | What it is | Updates `bass_boost_enabled` in HID stats? |
-|------|------------|---------------------------------------------|
-| **Firmware bass boost flag** | Preference gate in [`src/loudness.c`](../src/loudness.c). When off, the DAC keeps a flat transfer function. When on, ISO 226 loudness contour selection follows volume. | **Yes** — via `loudness_bass_boost_set()` |
-| **Windows Speaker Properties → Enhancements → Bass Boost** | Host-side audio processing (registry + Windows Audio Processing Objects). Applied in the Windows audio stack **before** PCM reaches the USB device. | **No** |
+The UAC2 Feature Unit exposes **two independent preference flags**:
 
-These are **not the same control**. Toggling Bass Boost in Windows Sound settings and
-clicking **Apply** does **not** send a UAC2 Feature Unit `SET_CUR` to the device and
-does **not** change `bass_boost_enabled` in the 1 Hz statistics HID stream.
+| Control | UAC CS | Preference flag | `GET_CUR` semantics |
+|---------|--------|-----------------|---------------------|
+| Bass Boost | `0x09` | `loudness_bass_boost_enabled` | **Both can be 1** |
+| Loudness | `0x0A` | `loudness_loudness_enabled` | **Both can be 1** |
 
-To change the **firmware** flag from the host, use `henryctl --bassboost` (see
-below) or a host that issues UAC2 Bass Boost `SET_CUR` (CS `0x09`) — which the
-in-box Windows UAC2 driver does not do today.
+Firmware applies **exactly one active DSP mode** (`last_filter_enabled`):
+
+- Enabling either control makes that mode active (last write wins).
+- Disabling the **active** control falls back to the other preference if still on,
+  otherwise `FILTER_OFF_MODE`.
+- Disabling a **non-active** preference only clears the flag.
+
+HID statistics bytes `bass_boost_enabled` / `loudness_enabled` (wire offsets 39
+and 42) report the **active mode**, not the raw preference flags — they are
+mutually exclusive in telemetry. See [USB_STATISTICS.md](USB_STATISTICS.md) and
+[LOUDNESS.md](LOUDNESS.md) for the full filter-mode matrix.
+
+To change firmware state from the host, use `henryctl` (see below) or a host that
+issues UAC2 Feature Unit `SET_CUR` for CS `0x09` / `0x0A` — which the in-box
+Windows UAC2 driver does not expose in its UI today.
 
 ## Loudness CLI (`henryctl`)
 
@@ -157,7 +167,7 @@ sudo ./henryctl -u 201901030VBSB --bassboost 1
 
 Both successful paths call `loudness_bass_boost_set()` in
 [`src/loudness.c`](../src/loudness.c), which updates `bass_boost_enabled` in
-the HID statistics stream (protocol version 3). See
+the HID statistics stream (protocol version 5). See
 [USB_STATISTICS.md](USB_STATISTICS.md).
 
 When the firmware flag is off, the DAC keeps a flat transfer function regardless

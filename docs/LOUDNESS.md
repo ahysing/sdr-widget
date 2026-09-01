@@ -69,19 +69,53 @@ The PC and AVR32 `macs.d` paths use the same shifts and rounding.
 When no source volume control is present, both channels use the same inferred
 gain at every sample rate.
 
+## Filter modes and volume routing
+
+Loudness processing combines up to two biquads (low-shelf then high-shelf) with
+an optional external volume multiply (`adjust_volume` via `spk_vol_mult_*`). Coefficients
+come from
+[`loudnesscontour/create1loudnessvolume/create1loudnessvolume.py`](../loudnesscontour/create1loudnessvolume/create1loudnessvolume.py).
+
+**Bass boost** applies a fixed 55-phon low-shelf contour (step 40) and bypasses
+treble shaping. **Loudness** tracks listening level: the low-shelf row follows USB
+volume (gain baked into coefficients when the host provides volume control), and the
+high-shelf row follows the same phon step. **Inferred gain** selects the phon row
+from the envelope follower when the host does not expose volume, using no-volume
+low-shelf tables. **Filter off** skips both biquads and restores normal USB volume
+scaling.
+
+| Mode | Low-shelf | High-shelf | Volume stage |
+|------|-----------|------------|--------------|
+| **Bass boost** | `lowshelf_no_volume_*`, fixed step 40 (55 phon) | Identity (bypass) | External `adjust_volume` |
+| **Loudness** (host volume) | `lowshelf_and_volume_*`, step from USB volume → phon | `highshelf_no_volume_*`, same phon | Baked in low-shelf (`keep_volume`) |
+| **Inferred gain loudness** | `lowshelf_no_volume_*`, step from inferred gain | `highshelf_no_volume_*`, same phon | No multiply — level from PCM + step |
+| **Filter off** | Skipped (`uac2` packet gate) | Skipped | External `adjust_volume` |
+
+Baked-volume low-shelf numerators scale `b0`/`b1`/`b2` by `10^(volume_db/20)` at
+table generation time while poles stay fixed — see `second_order_baked_coefficients`
+in the generator script. External volume multiplies PCM after the biquad chain in
+[`src/device_audio_task.c`](../src/device_audio_task.c).
+
 ## USB audio signal chain
 
 1. Read USB samples.
 2. Update inferred level only when no host volume control is available.
-3. Run the loudness+volume biquad:
+3. When active (not `FILTER_OFF_MODE` at 44.1/48 kHz), run low-shelf then
+   high-shelf biquads:
    - ALT2: stereo 16-bit packet path
    - ALT1: per-channel 24-bit container path
-4. Apply explicit mute if requested.
-5. Write samples to the DAC buffer.
+4. Apply `device_audio_volume_apply_fn` (`keep_volume` or `adjust_volume`).
+5. Apply explicit mute if requested.
+6. Write samples to the DAC buffer.
 
-There is no post-filter multiplication when loudness is enabled. With
-`LOUDNESS_DISABLE=1`, the legacy `spk_vol_mult_L/R` path remains active so USB
-volume still works.
+With `LOUDNESS_MODE`, playback gain is baked into the low-shelf row and
+`keep_volume` is a no-op. Bass boost and filter-off use `adjust_volume`.
+
+## LOUDNESS_DISABLE USB facade
+
+`LOUDNESS_DISABLE=1` removes runtime DSP but keeps Bass Boost and Loudness in USB
+descriptors. `GET_CUR` returns on; `SET_CUR` is ignored. This avoids Windows
+descriptor-cache churn between firmware builds. See [INSTALLATION.md](INSTALLATION.md).
 
 ## State and idle bypass
 

@@ -23,8 +23,10 @@ C_SRCS += \
 ../src/image.c \
 ../src/loudness.c \
 ../src/loudness_fast.c \
+../src/loudness_first_order.c \
 ../src/loudness_highres.c \
 ../src/loudness_inferred_gain.c \
+../src/loudness_internal.c \
 ../src/rotary_encoder.c \
 ../src/taskAK5394A.c \
 ../src/taskEXERCISE.c \
@@ -68,8 +70,10 @@ OBJS += \
 ./src/image.o \
 ./src/loudness.o \
 ./src/loudness_fast.o \
+./src/loudness_first_order.o \
 ./src/loudness_highres.o \
 ./src/loudness_inferred_gain.o \
+./src/loudness_internal.o \
 ./src/rotary_encoder.o \
 ./src/taskAK5394A.o \
 ./src/taskEXERCISE.o \
@@ -114,8 +118,10 @@ C_DEPS += \
 ./src/image.d \
 ./src/loudness.d \
 ./src/loudness_fast.d \
+./src/loudness_first_order.d \
 ./src/loudness_highres.d \
 ./src/loudness_inferred_gain.d \
+./src/loudness_internal.d \
 ./src/rotary_encoder.d \
 ./src/taskAK5394A.d \
 ./src/taskEXERCISE.d \

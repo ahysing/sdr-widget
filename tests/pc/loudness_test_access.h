@@ -7,10 +7,11 @@
 #include "compiler.h"
 #include "loudness_internal.h"
 
-extern volatile S16 last_db_spl_x10;
+extern volatile S16 last_db_spl_left_x10;
+extern volatile S16 last_db_spl_right_x10;
 
 int loudness_test_get_equalizer_step(int32_t db_spl_x10);
-Bool loudness_test_should_change_equalizer_step(int32_t db_spl_x10);
+Bool loudness_test_should_change_equalizer_step(int32_t db_spl_left_x10, int32_t db_spl_right_x10);
 Bool loudness_test_volume_in_biquad(void);
 #endif
 

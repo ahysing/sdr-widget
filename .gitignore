@@ -8,7 +8,8 @@
 *.obj
 *.d
 *.elf
-*.exe
+henryctl
+henryctl.exe
 widget-control
 widget-control.exe
 /tests/audio_stats_logic_tests.exe

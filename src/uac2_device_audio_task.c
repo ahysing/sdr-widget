@@ -95,7 +95,7 @@
 // To access input select constants
 #include "Mobo_config.h"
 
-
+#include "loudness_internal.h"
 //_____ M A C R O S ________________________________________________________
 
 
@@ -150,14 +150,11 @@ void uac2_device_audio_task_init(U8 ep_in, U8 ep_out, U8 ep_out_fb)
 //!
 //! @brief Entry point of the device Audio task management
 //!
-
-
-#define UAC2_USB_OUT_MAX_STEREO_SAMPLES  (EP_OUT_LENGTH_2_HS / 8u)
-
 #ifndef LOUDNESS_DISABLE
 static Bool uac2_loudness_filter_enabled(void)
 {
-	return usb_spk_mute == 0;
+	return loudness_uac2_packet_filter_enabled(
+		usb_spk_mute == 0, current_freq.frequency);
 }
 #endif
 
@@ -514,9 +511,7 @@ void uac2_device_audio_task(void *pvParameters)
 #ifndef LOUDNESS_DISABLE
 					// Loudness filter runs for frequences 44.1 KHz and 48 KHz . For higher frequencies the CPU is not able to keep up. All attempt on speeding up and simplifying has failed.
 					const Bool loudness_enabled_packet =
-						uac2_loudness_filter_enabled()
-						&& (current_freq.frequency == FREQ_44
-						 || current_freq.frequency == FREQ_48);
+						uac2_loudness_filter_enabled();
 #endif
 
 #ifdef USB_STATE_MACHINE_GPIO
@@ -715,6 +710,9 @@ void uac2_device_audio_task(void *pvParameters)
 						if (audio_out_alt == ALT2_AS_INTERFACE_INDEX) {
 							LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L,
 								usb_out_R, num_samples);
+						} else if (audio_out_alt == ALT1_AS_INTERFACE_INDEX) {
+							LOUDNESS_FILTER_24BIT_STEREO_PACKET(usb_out_L,
+								usb_out_R, num_samples);
 						}
 					}
 #endif
@@ -766,14 +764,6 @@ void uac2_device_audio_task(void *pvParameters)
 						#endif
 
 
-#ifndef LOUDNESS_DISABLE
-						if (loudness_enabled_packet) {
-							if (audio_out_alt == ALT1_AS_INTERFACE_INDEX) {
-								sample_L = LOUDNESS_FILTER_24BIT_CONTAINER(0, sample_L);
-								sample_R = LOUDNESS_FILTER_24BIT_CONTAINER(1, sample_R);
-							}
-						}
-#endif
 
 
 	#ifdef FEATURE_VOLUME_CTRL
