@@ -10,13 +10,14 @@
  * Keep usbstatistics/usbstatistics.py in sync.
  */
 #define USB_STATS_PACKET_HID_ANCHOR              0x53u
-#define USB_STATS_PACKET_VERSION                 4u
-#define USB_STATS_PACKET_WIRE_SIZE               43u
+#define USB_STATS_PACKET_VERSION                 5u
+#define USB_STATS_PACKET_WIRE_SIZE               44u
 #define USB_STATS_PACKET_CHECKSUM_OFFSET         3u
 #define USB_STATS_WIRE_OFFSET_BASS_BOOST_ENABLED 39u
 #define USB_STATS_WIRE_OFFSET_GAIN_INFERRED_LEFT   40u
 #define USB_STATS_WIRE_OFFSET_GAIN_INFERRED_RIGHT  41u
 #define USB_STATS_WIRE_OFFSET_LOUDNESS_ENABLED     42u
+#define USB_STATS_WIRE_OFFSET_SAMPLE_BITS          43u
 
 #ifndef USBSTATISTICS_DISABLE
 
