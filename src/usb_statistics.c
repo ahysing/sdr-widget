@@ -127,6 +127,7 @@ static void statistics_build_wire_packet(U8 *wire, const volatile usb_stats_t *s
         (U8)telemetry->gain_inferred_dbfs_right;
     wire[USB_STATS_WIRE_OFFSET_LOUDNESS_ENABLED] =
         telemetry->loudness_enabled ? 1u : 0u;
+    wire[USB_STATS_WIRE_OFFSET_SAMPLE_BITS] = telemetry->sample_bits;
     wire[3] = statistics_wire_checksum(wire);
 }
 

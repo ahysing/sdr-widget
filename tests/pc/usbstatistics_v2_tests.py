@@ -10,7 +10,7 @@ usbstatistics = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(usbstatistics)
 
 
-def build_v4_payload():
+def build_v5_payload():
     values = (
         usbstatistics.USB_STATS_PACKET_HID_ANCHOR,
         usbstatistics.USB_STATS_PACKET_VERSION,
@@ -39,6 +39,7 @@ def build_v4_payload():
         -3,
         -4,
         0,
+        24,
     )
     packet = bytearray(struct.pack(usbstatistics.USB_STATS_PACKET_FORMAT, *values))
     packet[usbstatistics.USB_STATS_PACKET_CHECKSUM_INDEX] = (
@@ -50,11 +51,11 @@ def build_v4_payload():
     return packet
 
 
-class UsbStatisticsV4Tests(unittest.TestCase):
-    def test_parse_stereo_v4_packet(self):
-        stats = usbstatistics.parse_stats_payload(build_v4_payload())
+class UsbStatisticsV5Tests(unittest.TestCase):
+    def test_parse_stereo_v5_packet(self):
+        stats = usbstatistics.parse_stats_payload(build_v5_payload())
 
-        self.assertEqual(stats["version"], 4)
+        self.assertEqual(stats["version"], 5)
         self.assertEqual(stats["frequency_hz"], 192000)
         self.assertEqual(stats["gain_dbfs_left"], -6)
         self.assertEqual(stats["gain_dbfs_right"], -20)
@@ -64,10 +65,11 @@ class UsbStatisticsV4Tests(unittest.TestCase):
         self.assertEqual(stats["equalizer_step_right"], 80)
         self.assertEqual(stats["bass_boost_enabled"], 1)
         self.assertEqual(stats["loudness_enabled"], 0)
+        self.assertEqual(stats["sample_bits"], 24)
 
-    def test_reject_version_3_packet(self):
-        payload = build_v4_payload()
-        payload[1] = 3
+    def test_reject_version_4_packet(self):
+        payload = build_v5_payload()
+        payload[1] = 4
         payload[usbstatistics.USB_STATS_PACKET_CHECKSUM_INDEX] = 0
         payload[usbstatistics.USB_STATS_PACKET_CHECKSUM_INDEX] = (
             usbstatistics.packet_checksum(
