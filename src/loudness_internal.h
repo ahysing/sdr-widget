@@ -51,27 +51,20 @@ const biquad_quotients_fast_t *loudness_fast_baked_quotient_table_48000hz(void);
 void loudness_fast_refresh_quotient_table_pointers(void);
 const biquad_quotients_fast_t *loudness_fast_no_volume_quotient_table_44100hz(void);
 const biquad_quotients_fast_t *loudness_fast_no_volume_quotient_table_48000hz(void);
-void loudness_fast_set_active_equalizer_step_table(
-    const biquad_quotients_fast_t *table);
+void loudness_fast_set_active_equalizer_step_table(const biquad_quotients_fast_t *table);
 const biquad_quotients_fast_t *loudness_fast_active_equalizer_step_table(void);
-void loudness_fast_prepare_inactive_quotients(
-    const biquad_quotients_fast_t *table,
-    int equalizer_step_left, int equalizer_step_right);
+void loudness_fast_prepare_inactive_quotients(const biquad_quotients_fast_t *table, int equalizer_step_left, int equalizer_step_right);
 void loudness_fast_publish_quotients(void);
 biquad_state_fast_t *loudness_fast_biquad_state(int channel);
 const biquad_quotients_fast_t *loudness_lowshelf_quotients(int channel);
-
 void loudness_refresh_quotient_table_selection(void);
 void loudness_set_source_has_volume_control(void);
-
-
 
 #if defined(__GNUC__)
 #define LOUDNESS_STATIC_INLINE static __attribute__((always_inline)) inline
 #else
 #define LOUDNESS_STATIC_INLINE static inline
 #endif
-
 
 int32_t loudness_saturate_s64_to_s32(int64_t value);
 

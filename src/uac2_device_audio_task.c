@@ -82,6 +82,7 @@
 #ifndef USBSTATISTICS_DISABLE
 #include "usb_statistics.h"
 #include "audio_stats_logic.h"
+#include "stats_telemetry.h"
 #endif
 #include "usb_fifo_hw_lock.h"
 
@@ -552,6 +553,10 @@ void uac2_device_audio_task(void *pvParameters)
 					}
 					Usb_ack_out_received_free(EP_AUDIO_OUT);
 					usb_fifo_hw_unlock(&usb_lock);
+
+#ifndef USBSTATISTICS_DISABLE
+					stats_telemetry_set_num_samples((U8)num_samples);
+#endif
 
 					spk_usb_heart_beat++;					// indicates EP_AUDIO_OUT receiving data from host
 

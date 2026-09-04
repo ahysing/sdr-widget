@@ -41,7 +41,7 @@ AVR32_APP_INCLUDES = \
 	-I../src/SOFTWARE_FRAMEWORK/BOARDS \
 	-I../src
 
-AVR32_APP_CFLAGS = -O2 -fdata-sections -Wall -c -fmessage-length=0 \
+AVR32_APP_CFLAGS = -std=gnu99 -fgnu89-inline -O2 -fdata-sections -Wall -c -fmessage-length=0 \
 	-mpart=uc3a3256 -ffunction-sections -masm-addr-pseudos -mrelax
 
 AVR32_FRAMEWORK_CFLAGS = -O2 -fdata-sections -Wall -c -fmessage-length=0 \

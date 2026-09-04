@@ -63,6 +63,7 @@ PACK(struct usb_stats_packet {
     S8 gain_inferred_dbfs_right;
     U8 loudness_enabled;
     U8 sample_bits;
+    U8 num_samples;
 });
 typedef struct usb_stats_packet usb_stats_packet_t;
 

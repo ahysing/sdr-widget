@@ -284,8 +284,7 @@ const biquad_first_order_quotients_t *loudness_resolve_highshelf_base_table(uint
 
 biquad_first_order_state_t highshelf_states[LOUDNESS_CHANNELS];
 
-int32_t loudness_highshelf_inline(int32_t x_n,
-    biquad_first_order_state_t *st, const biquad_first_order_quotients_t *rt)
+int32_t loudness_highshelf_inline(int32_t x_n, biquad_first_order_state_t *st, const biquad_first_order_quotients_t *rt)
 {
     int64_t fb = -((int64_t)rt->a1 * (int64_t)st->w1);
     

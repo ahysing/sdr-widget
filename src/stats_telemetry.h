@@ -15,6 +15,7 @@ typedef struct {
     U8 bass_boost_enabled;
     U8 loudness_enabled;
     U8 sample_bits;
+    U8 num_samples;
     S8 gain_inferred_dbfs_left;
     S8 gain_inferred_dbfs_right;
 } stats_telemetry_snapshot_t;
@@ -30,6 +31,7 @@ void stats_telemetry_set_source_has_volume_control(U8 source_has_volume_control)
 void stats_telemetry_set_bass_boost_enabled(U8 bass_boost_enabled);
 void stats_telemetry_set_loudness_enabled(U8 loudness_enabled);
 void stats_telemetry_set_sample_bits(U8 sample_bits);
+void stats_telemetry_set_num_samples(U8 num_samples);
 void stats_telemetry_set_gain_inferred_dbfs_stereo(
     S8 gain_inferred_dbfs_left, S8 gain_inferred_dbfs_right);
 
