@@ -86,9 +86,7 @@
 #define configPBA_CLOCK_HZ        ( FPBA_HZ )
 #define configTICK_RATE_HZ        ( ( portTickType ) 10000 )
 #define configMAX_PRIORITIES      ( ( unsigned portBASE_TYPE ) 5 )
-////////////////#define configMINIMAL_STACK_SIZE  ( ( unsigned portSHORT ) 128 )
-#define configMINIMAL_STACK_SIZE  ( ( unsigned portSHORT ) 2048 )
-//#define configMINIMAL_STACK_SIZE  ( ( unsigned portSHORT ) 1024 )
+#define configMINIMAL_STACK_SIZE  ( ( unsigned portSHORT ) 256 )
 /* configTOTAL_HEAP_SIZE is not used when heap_3.c is used. */
 #define configTOTAL_HEAP_SIZE     ( ( size_t ) ( 1024*50 ) )
 #define configMAX_TASK_NAME_LEN   ( 20 )
@@ -141,8 +139,6 @@ to exclude the API function. */
 #else
    #define configDBG                     0
 #endif
-/* FreeRTOS configuration macro in FreeRTOSConfig.h that tells the kernel whether to use fast, hardware-specific assembly instructions (like "count leading zeros") or slow, generic C code to pick the next task to run. */
-#define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
 
 /* USB task definitions. */
 #define configTSK_USB_NAME                    ((const signed portCHAR *)"USB")
@@ -179,7 +175,7 @@ to exclude the API function. */
 
 /* USB device Audio task definitions. */
 #define configTSK_USB_DAUDIO_NAME				((const signed portCHAR *)"USB Device Audio")
-#define configTSK_USB_DAUDIO_STACK_SIZE		512
+#define configTSK_USB_DAUDIO_STACK_SIZE		1024
 #define configTSK_USB_DAUDIO_PRIORITY			(tskIDLE_PRIORITY + 2)
 #define UAC1_configTSK_USB_DAUDIO_PERIOD		2
 #define UAC2_configTSK_USB_DAUDIO_PERIOD		1
@@ -203,13 +199,13 @@ to exclude the API function. */
 
 /* USB device Audio Statistics task definitions. */
 #define configTSK_USB_DAUDIOSTATS_NAME				((const signed portCHAR *)"USB Device Audio Statistics")
-#define configTSK_USB_DAUDIOSTATS_STACK_SIZE		128
+#define configTSK_USB_DAUDIOSTATS_STACK_SIZE		256
 #define configTSK_USB_DAUDIOSTATS_PRIORITY		(tskIDLE_PRIORITY + 2)
 #define configTSK_USB_DAUDIOSTATS_PERIOD_MS	   1000
 
 /* loudness task definitions. */
 #define configTSK_LOUDNESS_NAME				  ((const signed portCHAR *)"LOUDNESS")
-#define configTSK_LOUDNESS_STACK_SIZE		  256
+#define configTSK_LOUDNESS_STACK_SIZE		  512
 #define configTSK_LOUDNESS_PRIORITY		     (tskIDLE_PRIORITY + 1)
 #define configTSK_LOUDNESS_PERIOD_MS	     1000
 

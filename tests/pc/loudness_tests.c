@@ -691,7 +691,6 @@ void test_loudness_bass_boost_reenable_resets_states(void) {
 
     loudness_test_get_fast_channel(0, &state, NULL);
     state.w1 = 100000000;
-    state.w2 = 100000000;
     loudness_test_set_fast_channel(0, &state);
 
     loudness_bass_boost_set(TRUE);
@@ -699,7 +698,6 @@ void test_loudness_bass_boost_reenable_resets_states(void) {
 
     loudness_test_get_fast_channel(0, &state, NULL);
     assert(state.w1 == 0);
-    assert(state.w2 == 0);
     assert(loudness_test_volume_in_biquad() == FALSE);
 
     printf("test_loudness_bass_boost_reenable_resets_states passed\n\n");
@@ -875,19 +873,19 @@ typedef struct {
 } bass_boost_test_case_t;
 
 static const bass_boost_test_case_t bass_boost_test_cases[] = {
-    { 55, 40, -29.624143, -29.624619 },
-    { 57, 44, -28.436874, -28.437249 },
-    { 59, 48, -27.253678, -27.254029 },
-    { 61, 52, -26.074340, -26.074662 },
-    { 63, 56, -24.898314, -24.898581 },
-    { 65, 60, -23.725323, -23.725547 },
-    { 67, 64, -22.555126, -22.555293 },
-    { 69, 68, -21.387410, -21.387553 },
-    { 71, 72, -20.221946, -20.222061 },
-    { 73, 76, -19.058543, -19.058627 },
-    { 75, 80, -17.896947, -17.897044 },
-    { 77, 84, -16.737059, -16.737106 },
-    { 79, 88, -15.578649, -15.578707 },
+    { 55, 40, -29.263390, -29.268654 },
+    { 57, 44, -28.097767, -28.102800 },
+    { 59, 48, -26.940380, -26.945178 },
+    { 61, 52, -25.789976, -25.794397 },
+    { 63, 56, -24.643647, -24.647874 },
+    { 65, 60, -23.502171, -23.505573 },
+    { 67, 64, -22.363480, -22.366130 },
+    { 69, 68, -21.227026, -21.229477 },
+    { 71, 72, -20.092152, -20.094094 },
+    { 73, 76, -18.958565, -18.960139 },
+    { 75, 80, -17.826369, -17.827642 },
+    { 77, 84, -16.695084, -16.695725 },
+    { 79, 88, -15.564788, -15.564986 },
 };
 
 static double measure_fast_50hz_gain_db(
@@ -1061,7 +1059,6 @@ static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
     }
 
     assert(trans_final_state.w1 == ref_final_state.w1);
-    assert(trans_final_state.w2 == ref_final_state.w2);
     assert(trans_final_highshelf_state.w1 == ref_final_highshelf_state.w1);
 }
 
@@ -1436,7 +1433,6 @@ void test_per_channel_zero_bypass(void)
     loudness_test_get_fast_channel(1, &r_state_after, NULL);
 
     assert(r_state_before.w1 == r_state_after.w1);
-    assert(r_state_before.w2 == r_state_after.w2);
     assert(packet_R[0] == 0);
 
     printf("test_per_channel_zero_bypass passed\n\n");
@@ -1469,8 +1465,8 @@ void test_per_channel_independent_biquad(void)
     loudness_test_get_fast_channel(0, &l_state, NULL);
     loudness_test_get_fast_channel(1, &r_state, NULL);
 
-    assert(l_state.w1 != 0 || l_state.w2 != 0);
-    assert(r_state.w1 == 0 && r_state.w2 == 0);
+    assert(l_state.w1 != 0);
+    assert(r_state.w1 == 0);
 
     printf("test_per_channel_independent_biquad passed\n\n");
 }
@@ -1538,6 +1534,7 @@ int main() {
     test_container_sign_preservation();
     test_full_scale_boundaries();
     test_dc_silence_response();
+    test_50hz_bass_boost_is_monotonic();
     test_50hz_55phon_bass_boost_magnitude();
     test_50hz_57phon_bass_boost_magnitude();
     test_50hz_59phon_bass_boost_magnitude();

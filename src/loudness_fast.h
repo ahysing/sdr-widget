@@ -11,18 +11,14 @@
 
 #define LOUDNESS_FAST_FILTERS 1
 #define LOUDNESS_CHANNELS     2
-
 typedef struct {
     int32_t w1;  /* canonical DF-II delay state 1, stored with M-bit headroom */
-    int32_t w2;  /* canonical DF-II delay state 2, stored with M-bit headroom */
 } biquad_state_fast_t;
 
 typedef struct {
     int32_t a1;
-    int32_t a2;
     int32_t b0;
     int32_t b1;
-    int32_t b2;
 } biquad_quotients_fast_t;
 
 int32_t loudness_lowshelf(int32_t x_n, biquad_state_fast_t *st, const biquad_quotients_fast_t *q);

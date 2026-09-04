@@ -1,8 +1,8 @@
-"""Generate one low-shelf loudness biquad with baked-in playback volume and one high-pass loudness biquad
+"""Generate one first order low-shelf loudness biquad with baked-in playback volume and one first order high-shelf loudness biquad
 
 The 121 output rows pair 35.0..95.0 phon with -60.0..0.0 dB volume in
 0.5 dB increments.  With --bit-width 32, rows are flat C struct initializers
-using Q4.28 coefficients in {a1, a2, b0, b1, b2} order.
+using Q4.28 coefficients in {a1, b0, b1} order.
 """
 
 import argparse
@@ -33,18 +33,20 @@ class BiquadCoeffsSecondOrder:
     b2: float
 
 
-type BiquadCoeffs = BiquadCoeffsFirstOrder | BiquadCoeffsSecondOrder
-
 @dataclass
 class BiquadFirstOrder:
     fc: float
     gain_db: float
+
 
 @dataclass
 class BiquadCoeffsFirstOrder:
     a1: float
     b0: float
     b1: float
+
+
+type BiquadCoeffs = BiquadCoeffsFirstOrder | BiquadCoeffsSecondOrder
 
 
 SAMPLE_RATES_HZ = [
@@ -54,14 +56,14 @@ SAMPLE_RATES_HZ = [
 PHON_LEVELS = [step / 2.0 for step in range(70, 191)]
 REFERENCE_PHON = 80.0
 MAXIMUM_PHON = 95.0
-#                           fc      Q       gain
-LOW_SHELF_INITIAL_PARAMS = np.array([120.0, 0.5, 12.0])
-LOW_SHELF_LOWER_BOUNDS = np.array([20.0, 0.1, -40.0])
-LOW_SHELF_UPPER_BOUNDS = np.array([300.0, 2.0, 40.0])
+#                           fc      gain
+LOW_SHELF_INITIAL_PARAMS = np.array([120.0, 12.0])
+LOW_SHELF_LOWER_BOUNDS = np.array([20.0, -40.0])
+LOW_SHELF_UPPER_BOUNDS = np.array([300.0, 40.0])
 
-LOW_SHELF_INITIAL_BIQUAD = BiquadSecondOrder(*LOW_SHELF_INITIAL_PARAMS)
-LOW_SHELF_LOWER_BIQUAD = BiquadSecondOrder(*LOW_SHELF_LOWER_BOUNDS)
-LOW_SHELF_UPPER_BIQUAD = BiquadSecondOrder(*LOW_SHELF_UPPER_BOUNDS)
+LOW_SHELF_INITIAL_BIQUAD = BiquadFirstOrder(*LOW_SHELF_INITIAL_PARAMS)
+LOW_SHELF_LOWER_BIQUAD = BiquadFirstOrder(*LOW_SHELF_LOWER_BOUNDS)
+LOW_SHELF_UPPER_BIQUAD = BiquadFirstOrder(*LOW_SHELF_UPPER_BOUNDS)
 
 #                           fc      gain
 HIGH_SHELF_INITIAL_PARAMS = np.array([4000.0, -4.0])
@@ -89,7 +91,34 @@ def float_to_q4_28(value: float64) -> int:
     return scaled
 
 
-# second order IIR filter
+# first order IIR low shelf filter
+def first_order_biquad_low_shelf(params: BiquadFirstOrder, sample_rate_hz: float) -> BiquadCoeffsFirstOrder:
+    fc: float64 = params.fc
+    gain_db: float64 = params.gain_db
+
+    A = 10.0 ** (gain_db / 20.0)
+    th = 2.0 * np.pi * fc / sample_rate_hz
+    tan_w = np.tan(th / 2.0)
+
+    if gain_db >= 0:
+        a0 = tan_w + 1.0
+        b0 = (A * tan_w + 1.0) / a0
+        b1 = (A * tan_w - 1.0) / a0
+        a1 = (tan_w - 1.0) / a0
+    else:
+        a0 = tan_w + A
+        b0 = (A * (tan_w + 1.0)) / a0
+        b1 = (A * (tan_w - 1.0)) / a0
+        a1 = (tan_w - A) / a0
+
+    return BiquadCoeffsFirstOrder(
+        b0=b0,
+        b1=b1,
+        a1=a1,
+    )
+
+
+# second order IIR filter (kept for reference / compatibility)
 def second_order_biquad_low_shelf(params: BiquadSecondOrder, sample_rate_hz: float) -> BiquadCoeffsSecondOrder:
     fc: float64 = params.fc
     q_factor: float64 = params.Q
@@ -153,15 +182,13 @@ def first_order_biquad_high_shelf(params: BiquadFirstOrder, sample_rate_hz: floa
     A = 10.0 ** (gain_db / 20.0)
     th = 2.0 * np.pi * fc / sample_rate_hz
     
-    # Beregn den analoge pol/nullpunkt-vinklingen basert på gain og Fc
-    # For en hylle (shelf) må tangens vektes ulikt for a og b
     tan_w = np.tan(th / 2.0)
     
     if gain_db >= 0:
         # Boost-konfigurasjon
         a0 = tan_w + 1.0
-        b0 = (A * tan_w + 1.0) / a0
-        b1 = (A * tan_w - 1.0) / a0
+        b0 = (tan_w + A) / a0
+        b1 = (tan_w - A) / a0
         a1 = (tan_w - 1.0) / a0
     else:
         # Cut-konfigurasjon
@@ -170,7 +197,6 @@ def first_order_biquad_high_shelf(params: BiquadFirstOrder, sample_rate_hz: floa
         b1 = (A * (tan_w - 1.0)) / a0
         a1 = (A * tan_w - 1.0) / a0
 
-    # Nå returnerer vi nøyaktig de feltene din nye hifi-dataclass forventer!
     return BiquadCoeffsFirstOrder(
         b0=b0,
         b1=b1,
@@ -186,28 +212,55 @@ def first_order_frequency_response(coeffs: BiquadCoeffsFirstOrder, frequencies_h
     w = 2.0 * np.pi * frequencies_hz / sample_rate_hz
     z1 = np.exp(-1j * w)
     
-    # Endret til ren 1. ordens overføringsfunksjon: (b0 + b1*z^-1) / (1 + a1*z^-1)
     return (b0 + b1 * z1) / (1.0 + a1 * z1)
 
 
-def first_order_filter_response(params: BiquadFirstOrder, frequencies_hz: ndarray, sample_rate_hz: float) -> ndarray:
+def first_order_low_shelf_filter_response(params: BiquadFirstOrder, frequencies_hz: ndarray, sample_rate_hz: float) -> ndarray:
+    coeffs = first_order_biquad_low_shelf(params, sample_rate_hz)
+    return 20.0 * np.log10(
+        np.abs(first_order_frequency_response(coeffs, frequencies_hz, sample_rate_hz))
+    )
+
+
+def first_order_high_shelf_filter_response(params: BiquadFirstOrder, frequencies_hz: ndarray, sample_rate_hz: float) -> ndarray:
     coeffs = first_order_biquad_high_shelf(params, sample_rate_hz)
     return 20.0 * np.log10(
         np.abs(first_order_frequency_response(coeffs, frequencies_hz, sample_rate_hz))
     )
 
 
+def first_order_filter_response(params: BiquadFirstOrder, frequencies_hz: ndarray, sample_rate_hz: float) -> ndarray:
+    return first_order_high_shelf_filter_response(params, frequencies_hz, sample_rate_hz)
+
+
 def first_order_filter_coefficients(params: BiquadFirstOrder, sample_rate_hz: float, phon: float) -> tuple[BiquadCoeffsFirstOrder, float]:
-    coeffs = first_order_biquad_high_shelf(params, sample_rate_hz)
+    coeffs = first_order_biquad_low_shelf(params, sample_rate_hz)
+    volume_db = phon - MAXIMUM_PHON
+    return coeffs, volume_db
+
+
+def first_order_baked_coefficients(params: BiquadFirstOrder, sample_rate_hz: float, phon: float) -> tuple[BiquadCoeffsFirstOrder, float]:
+    coeffs = first_order_biquad_low_shelf(params, sample_rate_hz)
     b0 = coeffs.b0
     b1 = coeffs.b1
     a1 = coeffs.a1
     volume_db = phon - MAXIMUM_PHON
-    return BiquadCoeffsFirstOrder(b0=b0, b1=b1, a1=a1), volume_db
+    volume_gain = 10 ** (volume_db / 20.0)
+    return BiquadCoeffsFirstOrder(
+        b0=b0 * volume_gain,
+        b1=b1 * volume_gain,
+        a1=a1,
+    ), volume_db
 
 
-def first_order_print_row(args: argparse.Namespace, sample_rate_hz: float, phon: float, params: BiquadFirstOrder) -> None:
-    coeffs, volume_db = first_order_filter_coefficients(params, sample_rate_hz, phon)
+def first_order_print_row(
+    args: argparse.Namespace,
+    sample_rate_hz: float,
+    phon: float,
+    params: BiquadFirstOrder,
+    coeffs: BiquadCoeffsFirstOrder,
+    volume_db: float,
+) -> None:
     b0 = coeffs.b0
     b1 = coeffs.b1
     a1 = coeffs.a1
@@ -229,13 +282,13 @@ def first_order_print_row(args: argparse.Namespace, sample_rate_hz: float, phon:
             f"a1={a1:18.12f}"
         )
         
-def optimization_cost(params: ndarray, frequencies_hz: ndarray, sample_rate_hz: float, target_db: ndarray) -> ndarray:
-    # If optimizing both low-shelf and high-shelf filters together:
-    low_shelf = BiquadSecondOrder(params[0], params[1], params[2])
-    high_shelf = BiquadFirstOrder(params[3], params[4])
 
-    H = second_order_filter_response(low_shelf, frequencies_hz, sample_rate_hz)
-    H += first_order_filter_response(high_shelf, frequencies_hz, sample_rate_hz)
+def optimization_cost(params: ndarray, frequencies_hz: ndarray, sample_rate_hz: float, target_db: ndarray) -> ndarray:
+    low_shelf = BiquadFirstOrder(params[0], params[1])
+    high_shelf = BiquadFirstOrder(params[2], params[3])
+
+    H = first_order_low_shelf_filter_response(low_shelf, frequencies_hz, sample_rate_hz)
+    H += first_order_high_shelf_filter_response(high_shelf, frequencies_hz, sample_rate_hz)
     return (H - target_db)
 
 
@@ -252,7 +305,7 @@ def iso226_contour(phon: float) -> tuple[ndarray, ndarray]:
     return frequencies, spl_90 + (phon - 90.0) * slope_per_phon
 
 
-def optimize_contours(sample_rate_hz: float, frequencies_hz: ndarray) -> dict[float, BiquadCoeffs]:
+def optimize_contours(sample_rate_hz: float, frequencies_hz: ndarray) -> dict[float, ndarray]:
     ref_f, ref_spl = iso226_contour(REFERENCE_PHON)
     reference = CubicSpline(ref_f, ref_spl)(frequencies_hz)
     optimized = {}
@@ -344,15 +397,15 @@ def plot_results(
         spl_interp = CubicSpline(iso_f, iso_spl)(frequencies_hz)
 
         optimized_phon = optimized[phon]
-        lowshelf_biquad = BiquadSecondOrder(
-            fc=optimized_phon[0], Q=optimized_phon[1], gain_db=optimized_phon[2]
+        lowshelf_biquad = BiquadFirstOrder(
+            fc=optimized_phon[0], gain_db=optimized_phon[1]
         )
         highshelf_biquad = BiquadFirstOrder(
-            fc=optimized_phon[3], gain_db=optimized_phon[4]
+            fc=optimized_phon[2], gain_db=optimized_phon[3]
         )
-        resp = second_order_filter_response(
+        resp = first_order_low_shelf_filter_response(
             lowshelf_biquad, frequencies_hz, sample_rate_hz
-        ) + first_order_filter_response(
+        ) + first_order_high_shelf_filter_response(
             highshelf_biquad, frequencies_hz, sample_rate_hz
         )
 
@@ -460,8 +513,9 @@ def plot_results(
 
         return "\n".join(lines)
 
-    # Set default display for 50 Hz
-    info_box.set_text(generate_box_text(50.0))
+    # Set default display for 150 Hz
+    defaut_frequency_hz = 150.0
+    info_box.set_text(generate_box_text(defaut_frequency_hz))
 
     def on_mouse_move(event):
         if event.inaxes == ax and event.xdata and event.xdata > 0:
@@ -471,20 +525,25 @@ def plot_results(
             info_box.set_text(generate_box_text(freq))
         else:
             vline.set_visible(False)
-            info_box.set_text(generate_box_text(50.0))
+            info_box.set_text(generate_box_text(defaut_frequency_hz))
         fig.canvas.draw_idle()
 
     fig.canvas.mpl_connect("motion_notify_event", on_mouse_move)
 
-    ax.set_xlabel("frequency [Hz]")
-    ax.set_ylabel("magnitude [dB] / loudness [phon]")
-    ax.yaxis.set_major_locator(MultipleLocator(10))
-    ax.grid(True, which="major", axis="y", ls="-", alpha=0.5)
-    ax.xaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0, 2.0, 5.0)))
-    ax.xaxis.set_major_formatter(ScalarFormatter())
-    ax.ticklabel_format(style="plain", axis="x")
     ax.grid(True, which="both", axis="x", ls="-", alpha=0.3)
-
+    ax.set_xlim(20.0, 17000.0)
+    spotify_freqs = [60, 150, 400, 1000, 2400, 15000]    
+    spotify_labels = ["60", "150", "400", "1K", "2.4K", "15K"]
+    ax.set_xticks(spotify_freqs)
+    ax.set_xticklabels(spotify_labels, fontsize=10, weight="bold")
+    ax.grid(True, which="major", axis="y", ls="-", alpha=0.5)
+    for f in spotify_freqs:
+        ax.axvline(x=f, color="#A8C3D4", linestyle="-.", linewidth=0.8, alpha=0.6, zorder=1)
+    ax.set_xlabel("Frekvens [Hz]\n(Spotify EQ-bands)")
+    ax.set_ylabel("magnitude [dB] / loudness [phon]")
+    ax.legend(loc="lower left", fontsize="small", framealpha=0.95)
+    fig.tight_layout(pad=1.0)
+ 
     # Place legend outside on the bottom-right corner
     ax.legend(
         fontsize="small",
@@ -494,15 +553,15 @@ def plot_results(
     )
 
     plt.title(f"Graph type: {args.graph_type} (fs={sample_rate_hz:.0f} Hz)")
-    plt.tight_layout(rect=[0, 0, 0.85, 1])
+    plt.tight_layout(rect=[0, 0, 0.97, 1])
     plt.show()
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Optimize one second order low-shelf and one first order high-shelf ISO 226 loudness biquad per 0.5 phon and "
-            "bake the corresponding -60..0 dB playback volume into b0/b1/b2."
+            "Optimize one first order low-shelf and one first order high-shelf ISO 226 loudness biquad per 0.5 phon and "
+            "bake the corresponding -60..0 dB playback volume into b0/b1."
         )
     )
     parser.add_argument(
@@ -532,7 +591,7 @@ def parse_args() -> argparse.Namespace:
         choices=["filterandvolume", "filter"],
         default="filterandvolume",
         help=(
-            "filterandvolume: bake playback volume into b0/b1/b2; "
+            "filterandvolume: bake playback volume into b0/b1; "
             "filter: low-shelf only, no volume scaling"
         ),
     )
@@ -541,11 +600,18 @@ def parse_args() -> argparse.Namespace:
         choices=["lowshelf", "highshelf"],
         default="lowshelf",
         help=(
-            "choose between the low-shelf or the high-shelf to stdout"
-            "high-shelf does not bake playback volume into b0/b1/b2"
+            "choose between the low-shelf or the high-shelf to stdout; "
+            "high-shelf does not bake playback volume into b0/b1"
         ),
     )
     return parser.parse_args()
+
+
+# Backward compatibility aliases
+biquad_low_shelf = first_order_biquad_low_shelf
+baked_coefficients = first_order_baked_coefficients
+filter_coefficients = first_order_filter_coefficients
+biquad_high_shelf = first_order_biquad_high_shelf
 
 
 def main() -> None:
@@ -561,10 +627,17 @@ def main() -> None:
         for phon in PHON_LEVELS:
             optimized_phon = optimized[phon]
             if args.filter == "lowshelf":
-                coeffs = BiquadSecondOrder(fc=optimized_phon[0], Q=optimized_phon[1], gain_db=optimized_phon[2])
-                second_order_print_row(args, sample_rate_hz, phon, coeffs)
+                params = BiquadFirstOrder(fc=optimized_phon[0], gain_db=optimized_phon[1])
+                coeffs, volume_db = (
+                    first_order_filter_coefficients(params, sample_rate_hz, phon)
+                    if args.coeff_mode == "filter"
+                    else first_order_baked_coefficients(params, sample_rate_hz, phon)
+                )
+                first_order_print_row(args, sample_rate_hz, phon, params, coeffs, volume_db)
             elif args.filter == "highshelf":
-                coeffs = BiquadFirstOrder(fc=optimized_phon[3], gain_db=optimized_phon[4])
-                first_order_print_row(args, sample_rate_hz, phon, coeffs)
+                params = BiquadFirstOrder(fc=optimized_phon[2], gain_db=optimized_phon[3])
+                coeffs = first_order_biquad_high_shelf(params, sample_rate_hz)
+                volume_db = phon - MAXIMUM_PHON
+                first_order_print_row(args, sample_rate_hz, phon, params, coeffs, volume_db)
         if args.graph:
             plot_results(args, optimized, frequencies_hz, sample_rate_hz)
