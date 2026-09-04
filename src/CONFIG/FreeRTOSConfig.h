@@ -179,7 +179,7 @@ to exclude the API function. */
 
 /* USB device Audio task definitions. */
 #define configTSK_USB_DAUDIO_NAME				((const signed portCHAR *)"USB Device Audio")
-#define configTSK_USB_DAUDIO_STACK_SIZE			256
+#define configTSK_USB_DAUDIO_STACK_SIZE		512
 #define configTSK_USB_DAUDIO_PRIORITY			(tskIDLE_PRIORITY + 2)
 #define UAC1_configTSK_USB_DAUDIO_PERIOD		2
 #define UAC2_configTSK_USB_DAUDIO_PERIOD		1
@@ -206,6 +206,12 @@ to exclude the API function. */
 #define configTSK_USB_DAUDIOSTATS_STACK_SIZE		128
 #define configTSK_USB_DAUDIOSTATS_PRIORITY		(tskIDLE_PRIORITY + 2)
 #define configTSK_USB_DAUDIOSTATS_PERIOD_MS	   1000
+
+/* loudness task definitions. */
+#define configTSK_LOUDNESS_NAME				  ((const signed portCHAR *)"LOUDNESS")
+#define configTSK_LOUDNESS_STACK_SIZE		  256
+#define configTSK_LOUDNESS_PRIORITY		     (tskIDLE_PRIORITY + 1)
+#define configTSK_LOUDNESS_PERIOD_MS	     1000
 
 /* taskMoboCtrl definitions. */
 #define configTSK_MoboCtrl_NAME				  ((const signed portCHAR *)"taskMoboCtrl")

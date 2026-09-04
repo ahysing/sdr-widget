@@ -437,12 +437,11 @@ void loudness_rtos_init(void)
             return;
         }
     }
-
     if (xTaskCreate(loudness_update_filter_by_volume_or_frequency,
-                    (const signed char *)"LOUDNESS",
-                    configMINIMAL_STACK_SIZE,
+                    configTSK_LOUDNESS_NAME,
+                    configTSK_LOUDNESS_STACK_SIZE,
                     NULL,
-                    (unsigned portBASE_TYPE)tskIDLE_PRIORITY + 1,
+                    configTSK_LOUDNESS_PRIORITY,
                     NULL) != pdPASS) {
         return;
     }

@@ -638,21 +638,23 @@ const biquad_quotients_fast_t *loudness_lowshelf_quotients(int channel)
     return loudness_fast_channel_quotients(channel);
 }
 
-LOUDNESS_STATIC_INLINE int32_t loudness_lowshelf_inline(int32_t x_n,
-    biquad_state_fast_t *st, const biquad_quotients_fast_t *q)
+LOUDNESS_STATIC_INLINE int32_t loudness_lowshelf_inline(
+    const int32_t x_n,
+    biquad_state_fast_t *const restrict st,
+    const biquad_quotients_fast_t *const restrict q)
 {
     int64_t fb = -((int64_t)q->a1 * (int64_t)st->w1);
             fb = FMS_24BIT(fb, q->a2, st->w2);
 
-    int64_t acc = ((int64_t)x_n << LOUDNESS_DF2_Q28_SHIFT) + (fb << LOUDNESS_DF2_STATE_HEADROOM_M);
-    int64_t w_unscaled = acc >> LOUDNESS_DF2_Q28_SHIFT;
+    const int64_t acc1 = ((int64_t)x_n << LOUDNESS_DF2_Q28_SHIFT) + (fb << LOUDNESS_DF2_STATE_HEADROOM_M);
+    const int64_t w_unscaled = acc1 >> LOUDNESS_DF2_Q28_SHIFT;
 
             fb = FMA_24BIT((int64_t)q->b1 * (int64_t)st->w1, q->b2, st->w2);  
 
-            acc = (int64_t)q->b0 * w_unscaled + (fb << LOUDNESS_DF2_STATE_HEADROOM_M);
+    const int64_t acc2 = (int64_t)q->b0 * w_unscaled + (fb << LOUDNESS_DF2_STATE_HEADROOM_M);
 
-    int32_t y_n = saturate_24bit_s64_to_s32((acc + LOUDNESS_DF2_Q28_ROUND) >> LOUDNESS_DF2_Q28_SHIFT);
-    int32_t w0 = loudness_saturate_s64_to_s32(w_unscaled >> LOUDNESS_DF2_STATE_HEADROOM_M);
+    const int32_t y_n = saturate_24bit_s64_to_s32((acc2 + LOUDNESS_DF2_Q28_ROUND) >> LOUDNESS_DF2_Q28_SHIFT);
+    const int32_t w0 = loudness_saturate_s64_to_s32(w_unscaled >> LOUDNESS_DF2_STATE_HEADROOM_M);
     st->w2 = st->w1;
     st->w1 = w0;
     return y_n;
@@ -665,7 +667,32 @@ int32_t loudness_lowshelf(int32_t x_n, biquad_state_fast_t *st, const biquad_quo
 
 #define LOUDNESS_LOWSHELF loudness_lowshelf_inline
 
-LOUDNESS_STATIC_INLINE int32_t loudness_downsample_filter_to_16bit_container(int32_t y_24)
+LOUDNESS_STATIC_INLINE int32_t loudness_highshelf_inline(
+    const int32_t x_n,
+    biquad_first_order_state_t *const restrict st,
+    const biquad_first_order_quotients_t *const restrict rt)
+{
+    const int64_t fb1 = -((int64_t)rt->a1 * (int64_t)st->w1);
+    
+    const int64_t acc1 = ((int64_t)x_n << LOUDNESS_DF2_Q28_SHIFT) + (fb1 << LOUDNESS_DF2_STATE_HEADROOM_M);
+    const int64_t w_unscaled = acc1 >> LOUDNESS_DF2_Q28_SHIFT;
+
+    const int64_t fb2 = FMA_24BIT(0, rt->b1, st->w1);
+    
+    const int64_t acc2 = (int64_t)rt->b0 * w_unscaled + (fb2 << LOUDNESS_DF2_STATE_HEADROOM_M);
+    
+    const int32_t y_n = saturate_24bit_s64_to_s32((acc2 + LOUDNESS_DF2_Q28_ROUND) >> LOUDNESS_DF2_Q28_SHIFT);
+    const int32_t w0 = loudness_saturate_s64_to_s32(w_unscaled >> LOUDNESS_DF2_STATE_HEADROOM_M);
+    st->w1 = w0;
+    return y_n;
+}
+
+int32_t loudness_highshelf(int32_t x_n, biquad_first_order_state_t *st, const biquad_first_order_quotients_t *rt)
+{
+    return loudness_highshelf_inline(x_n, st, rt);
+}
+
+LOUDNESS_STATIC_INLINE int32_t loudness_downsample_filter_to_16bit_container(const int32_t y_24)
 {
     int32_t s = y_24 >> 8;
     if (s > INT16_MAX) {
@@ -676,40 +703,48 @@ LOUDNESS_STATIC_INLINE int32_t loudness_downsample_filter_to_16bit_container(int
     return s << 16;
 }
 
-LOUDNESS_STATIC_INLINE int32_t loudness_lowshelf_16bit_container_step(int32_t x_container,
-    biquad_state_fast_t *st, const biquad_quotients_fast_t *q)
+LOUDNESS_STATIC_INLINE int32_t loudness_lowshelf_16bit_container_step(
+    const int32_t x_container,
+    biquad_state_fast_t *const restrict st,
+    const biquad_quotients_fast_t *const restrict q)
 {
-    int32_t x_24 = (int32_t)(int16_t)(x_container >> 16) << 8;
-    int32_t y_24 = LOUDNESS_LOWSHELF(x_24, st, q);
+    const int32_t x_24 = (int32_t)(int16_t)(x_container >> 16) << 8;
+    const int32_t y_24 = LOUDNESS_LOWSHELF(x_24, st, q);
     return loudness_downsample_filter_to_16bit_container(y_24);
 }
 
-LOUDNESS_STATIC_INLINE int32_t loudness_lowshelf_24bit_container_step(int32_t x_container,
-    biquad_state_fast_t *st, const biquad_quotients_fast_t *q)
+LOUDNESS_STATIC_INLINE int32_t loudness_lowshelf_24bit_container_step(
+    const int32_t x_container,
+    biquad_state_fast_t *const restrict st,
+    const biquad_quotients_fast_t *const restrict q)
 {
     /*
      * USB 24-bit samples occupy bits 31:8 of the S32 container. The
      * biquad itself uses signed 24-bit sample units, so shift down before
      * filtering and restore the container alignment afterwards.
      */
-    int32_t x_24 = x_container >> 8;
-    int32_t y_24 = LOUDNESS_LOWSHELF(x_24, st, q);
+    const int32_t x_24 = x_container >> 8;
+    const int32_t y_24 = LOUDNESS_LOWSHELF(x_24, st, q);
     return y_24 << 8;
 }
 
-LOUDNESS_STATIC_INLINE int32_t loudness_highshelf_16bit_container_step(int32_t x_container,
-    biquad_first_order_state_t *st, const biquad_first_order_quotients_t *q)
+LOUDNESS_STATIC_INLINE int32_t loudness_highshelf_16bit_container_step(
+    const int32_t x_container,
+    biquad_first_order_state_t *const restrict st,
+    const biquad_first_order_quotients_t *const restrict q)
 {
-    int32_t x_24 = (int32_t)(int16_t)(x_container >> 16) << 8;
-    int32_t y_24 = loudness_highshelf_inline(x_24, st, q);
+    const int32_t x_24 = (int32_t)(int16_t)(x_container >> 16) << 8;
+    const int32_t y_24 = loudness_highshelf_inline(x_24, st, q);
     return loudness_downsample_filter_to_16bit_container(y_24);
 }
 
-LOUDNESS_STATIC_INLINE int32_t loudness_highshelf_24bit_container_step(int32_t x_container,
-    biquad_first_order_state_t *st, const biquad_first_order_quotients_t *q)
+LOUDNESS_STATIC_INLINE int32_t loudness_highshelf_24bit_container_step(
+    const int32_t x_container,
+    biquad_first_order_state_t *const restrict st,
+    const biquad_first_order_quotients_t *const restrict q)
 {
-    int32_t x_24 = x_container >> 8;
-    int32_t y_24 = loudness_highshelf_inline(x_24, st, q);
+    const int32_t x_24 = x_container >> 8;
+    const int32_t y_24 = loudness_highshelf_inline(x_24, st, q);
     return y_24 << 8;
 }
 
@@ -1056,6 +1091,46 @@ Bool filter_is_idle_and_packet_is_silent(S32 *restrict sample_L, S32 *restrict s
 {
     return filter_idle_cached == LOUDNESS_FILTER_ALL && loudness_stereo_packet_all_zero(sample_L, sample_R, num_samples);
 }
+#define PROCESS_SAMPLE(step_low, step_high, i) \
+    do { \
+        int32_t s_L = sample_L[i]; \
+        int32_t s_R = sample_R[i]; \
+        s_L = step_low(s_L, lowshelf_state_L, q_L); \
+        s_L = step_high(s_L, highshelf_state_L, q_high_L); \
+        s_R = step_low(s_R, lowshelf_state_R, q_R); \
+        s_R = step_high(s_R, highshelf_state_R, q_high_R); \
+        sample_L[i] = s_L; \
+        sample_R[i] = s_R; \
+    } while (0)
+
+#define UNROLL_STEP_0(step_low, step_high)  PROCESS_SAMPLE(step_low, step_high, 0);
+#define UNROLL_STEP_1(step_low, step_high)  UNROLL_STEP_0(step_low, step_high)  PROCESS_SAMPLE(step_low, step_high, 1);
+#define UNROLL_STEP_2(step_low, step_high)  UNROLL_STEP_1(step_low, step_high)  PROCESS_SAMPLE(step_low, step_high, 2);
+#define UNROLL_STEP_3(step_low, step_high)  UNROLL_STEP_2(step_low, step_high)  PROCESS_SAMPLE(step_low, step_high, 3);
+#define UNROLL_STEP_4(step_low, step_high)  UNROLL_STEP_3(step_low, step_high)  PROCESS_SAMPLE(step_low, step_high, 4);
+#define UNROLL_STEP_5(step_low, step_high)  UNROLL_STEP_4(step_low, step_high)  PROCESS_SAMPLE(step_low, step_high, 5);
+#define UNROLL_STEP_6(step_low, step_high)  UNROLL_STEP_5(step_low, step_high)  PROCESS_SAMPLE(step_low, step_high, 6);
+#define UNROLL_STEP_7(step_low, step_high)  UNROLL_STEP_6(step_low, step_high)  PROCESS_SAMPLE(step_low, step_high, 7);
+#define UNROLL_STEP_8(step_low, step_high)  UNROLL_STEP_7(step_low, step_high)  PROCESS_SAMPLE(step_low, step_high, 8);
+#define UNROLL_STEP_9(step_low, step_high)  UNROLL_STEP_8(step_low, step_high)  PROCESS_SAMPLE(step_low, step_high, 9);
+#define UNROLL_STEP_10(step_low, step_high) UNROLL_STEP_9(step_low, step_high)  PROCESS_SAMPLE(step_low, step_high, 10);
+#define UNROLL_STEP_11(step_low, step_high) UNROLL_STEP_10(step_low, step_high) PROCESS_SAMPLE(step_low, step_high, 11);
+
+#define UNROLL_11(step_low, step_high) UNROLL_STEP_10(step_low, step_high)
+#define UNROLL_12(step_low, step_high) UNROLL_STEP_11(step_low, step_high)
+
+#define PROCESS_STEREO_PACKET(step_low, step_high) \
+    if (__builtin_expect(num_samples == 11, 1)) \
+    { \
+        UNROLL_11(step_low, step_high) \
+    } \
+    else \
+    { \
+        for (int i = 0; i < num_samples; i++) { \
+            PROCESS_SAMPLE(step_low, step_high, i); \
+        } \
+    }
+
 void loudness_filter_16bit_stereo_packet(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples)
 {
     if (filter_is_idle_and_packet_is_silent(sample_L, sample_R, num_samples)) {
@@ -1065,7 +1140,7 @@ void loudness_filter_16bit_stereo_packet(S32 *restrict sample_L, S32 *restrict s
     biquad_state_fast_t* const restrict lowshelf_state_L = &lowshelf_states[0];
     biquad_state_fast_t* const restrict lowshelf_state_R = &lowshelf_states[1];
     
-    loudness_active_quotients_pair_t q = loudness_snapshot_active_quotients();
+    const loudness_active_quotients_pair_t q = loudness_snapshot_active_quotients();
     const biquad_quotients_fast_t* const restrict q_L = &q.lowshelf[0];
     const biquad_quotients_fast_t* const restrict q_R = &q.lowshelf[1];
     
@@ -1074,116 +1149,7 @@ void loudness_filter_16bit_stereo_packet(S32 *restrict sample_L, S32 *restrict s
     const biquad_first_order_quotients_t* const restrict q_high_L = &q.highshelf[0];
     const biquad_first_order_quotients_t* const restrict q_high_R = &q.highshelf[1];
 
-    int32_t s_L, s_R;
-    if (__builtin_expect(num_samples == 12, 1)) 
-    {
-        // Sample 0
-        s_L = sample_L[0]; s_R = sample_R[0];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[0] = s_L; sample_R[0] = s_R;
-
-        // Sample 1
-        s_L = sample_L[1]; s_R = sample_R[1];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[1] = s_L; sample_R[1] = s_R;
-
-        // Sample 2
-        s_L = sample_L[2]; s_R = sample_R[2];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[2] = s_L; sample_R[2] = s_R;
-
-        // Sample 3
-        s_L = sample_L[3]; s_R = sample_R[3];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[3] = s_L; sample_R[3] = s_R;
-
-        // Sample 4
-        s_L = sample_L[4]; s_R = sample_R[4];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[4] = s_L; sample_R[4] = s_R;
-
-        // Sample 5
-        s_L = sample_L[5]; s_R = sample_R[5];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[5] = s_L; sample_R[5] = s_R;
-
-        // Sample 6
-        s_L = sample_L[6]; s_R = sample_R[6];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[6] = s_L; sample_R[6] = s_R;
-
-        // Sample 7
-        s_L = sample_L[7]; s_R = sample_R[7];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[7] = s_L; sample_R[7] = s_R;
-
-        // Sample 8
-        s_L = sample_L[8]; s_R = sample_R[8];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[8] = s_L; sample_R[8] = s_R;
-
-        // Sample 9
-        s_L = sample_L[9]; s_R = sample_R[9];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[9] = s_L; sample_R[9] = s_R;
-
-        // Sample 10
-        s_L = sample_L[10]; s_R = sample_R[10];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[10] = s_L; sample_R[10] = s_R;
-
-        // Sample 11
-        s_L = sample_L[11]; s_R = sample_R[11];
-        s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[11] = s_L; sample_R[11] = s_R;
-    }
-    else 
-    {
-        for (int i = 0; i < num_samples; i++) {
-            s_L = sample_L[i]; s_R = sample_R[i];
-            s_L = loudness_lowshelf_16bit_container_step(s_L, lowshelf_state_L, q_L);
-            s_L = loudness_highshelf_16bit_container_step(s_L, highshelf_state_L, q_high_L);
-            s_R = loudness_lowshelf_16bit_container_step(s_R, lowshelf_state_R, q_R);
-            s_R = loudness_highshelf_16bit_container_step(s_R, highshelf_state_R, q_high_R);
-            sample_L[i] = s_L; sample_R[i] = s_R;
-        }
-    }
+    PROCESS_STEREO_PACKET(loudness_lowshelf_16bit_container_step, loudness_highshelf_16bit_container_step);
 
     loudness_filter_refresh_idle_cache();
 }
@@ -1197,7 +1163,7 @@ void loudness_filter_24bit_stereo_packet(S32 *restrict sample_L, S32 *restrict s
     biquad_state_fast_t* const restrict lowshelf_state_L = &lowshelf_states[0];
     biquad_state_fast_t* const restrict lowshelf_state_R = &lowshelf_states[1];
     
-    loudness_active_quotients_pair_t q = loudness_snapshot_active_quotients();
+    const loudness_active_quotients_pair_t q = loudness_snapshot_active_quotients();
     const biquad_quotients_fast_t* const restrict q_L = &q.lowshelf[0];
     const biquad_quotients_fast_t* const restrict q_R = &q.lowshelf[1];
     
@@ -1206,116 +1172,7 @@ void loudness_filter_24bit_stereo_packet(S32 *restrict sample_L, S32 *restrict s
     const biquad_first_order_quotients_t* const restrict q_high_L = &q.highshelf[0];
     const biquad_first_order_quotients_t* const restrict q_high_R = &q.highshelf[1];
 
-    int32_t s_L, s_R;
-    if (__builtin_expect(num_samples == 12, 1)) 
-    {
-        // Sample 0
-        s_L = sample_L[0]; s_R = sample_R[0];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[0] = s_L; sample_R[0] = s_R;
-
-        // Sample 1
-        s_L = sample_L[1]; s_R = sample_R[1];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[1] = s_L; sample_R[1] = s_R;
-
-        // Sample 2
-        s_L = sample_L[2]; s_R = sample_R[2];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[2] = s_L; sample_R[2] = s_R;
-
-        // Sample 3
-        s_L = sample_L[3]; s_R = sample_R[3];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[3] = s_L; sample_R[3] = s_R;
-
-        // Sample 4
-        s_L = sample_L[4]; s_R = sample_R[4];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[4] = s_L; sample_R[4] = s_R;
-
-        // Sample 5
-        s_L = sample_L[5]; s_R = sample_R[5];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[5] = s_L; sample_R[5] = s_R;
-
-        // Sample 6
-        s_L = sample_L[6]; s_R = sample_R[6];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[6] = s_L; sample_R[6] = s_R;
-
-        // Sample 7
-        s_L = sample_L[7]; s_R = sample_R[7];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[7] = s_L; sample_R[7] = s_R;
-
-        // Sample 8
-        s_L = sample_L[8]; s_R = sample_R[8];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[8] = s_L; sample_R[8] = s_R;
-
-        // Sample 9
-        s_L = sample_L[9]; s_R = sample_R[9];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[9] = s_L; sample_R[9] = s_R;
-
-        // Sample 10
-        s_L = sample_L[10]; s_R = sample_R[10];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[10] = s_L; sample_R[10] = s_R;
-
-        // Sample 11
-        s_L = sample_L[11]; s_R = sample_R[11];
-        s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-        s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-        s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-        s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-        sample_L[11] = s_L; sample_R[11] = s_R;
-    }
-    else 
-    {
-        for (int i = 0; i < num_samples; i++) {
-            s_L = sample_L[i]; s_R = sample_R[i];
-            s_L = loudness_lowshelf_24bit_container_step(s_L, lowshelf_state_L, q_L);
-            s_L = loudness_highshelf_24bit_container_step(s_L, highshelf_state_L, q_high_L);
-            s_R = loudness_lowshelf_24bit_container_step(s_R, lowshelf_state_R, q_R);
-            s_R = loudness_highshelf_24bit_container_step(s_R, highshelf_state_R, q_high_R);
-            sample_L[i] = s_L; sample_R[i] = s_R;
-        }
-    }
+    PROCESS_STEREO_PACKET(loudness_lowshelf_24bit_container_step, loudness_highshelf_24bit_container_step);
 
     loudness_filter_refresh_idle_cache();
 }

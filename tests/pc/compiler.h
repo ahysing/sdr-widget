@@ -32,6 +32,7 @@ typedef void *xQueueHandle;
 #endif
 
 #ifdef _MSC_VER
+#define inline __inline
 #define PACK( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
 #define __builtin_expect(expr, val) (expr)
 #else

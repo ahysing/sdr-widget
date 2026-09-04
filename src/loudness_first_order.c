@@ -284,23 +284,6 @@ const biquad_first_order_quotients_t *loudness_resolve_highshelf_base_table(uint
 
 biquad_first_order_state_t highshelf_states[LOUDNESS_CHANNELS];
 
-int32_t loudness_highshelf_inline(int32_t x_n, biquad_first_order_state_t *st, const biquad_first_order_quotients_t *rt)
-{
-    int64_t fb = -((int64_t)rt->a1 * (int64_t)st->w1);
-    
-    int64_t acc = ((int64_t)x_n << LOUDNESS_DF2_Q28_SHIFT) + (fb << LOUDNESS_DF2_STATE_HEADROOM_M);
-    int64_t w_unscaled = acc >> LOUDNESS_DF2_Q28_SHIFT;
-
-    fb = FMA_24BIT(0, rt->b1, st->w1);
-    
-    acc = (int64_t)rt->b0 * w_unscaled + (fb << LOUDNESS_DF2_STATE_HEADROOM_M);
-    
-    int32_t y_n = saturate_24bit_s64_to_s32((acc + LOUDNESS_DF2_Q28_ROUND) >> LOUDNESS_DF2_Q28_SHIFT);
-    int32_t w0 = loudness_saturate_s64_to_s32(w_unscaled >> LOUDNESS_DF2_STATE_HEADROOM_M);
-    st->w1 = w0;
-    return y_n;
-}
-
 Bool loudness_highshelf_biquad_is_idle(int channel)
 {
     if (channel < 0 || channel >= LOUDNESS_CHANNELS) {

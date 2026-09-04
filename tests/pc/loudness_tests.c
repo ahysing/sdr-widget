@@ -1065,6 +1065,72 @@ static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
     assert(trans_final_highshelf_state.w1 == ref_final_highshelf_state.w1);
 }
 
+static const biquad_first_order_quotients_t *get_highshelf_quotients(
+    uint32_t sample_rate_hz, int equalizer_step)
+{
+    assert(equalizer_step >= 0 && equalizer_step < LOUDNESS_NUM_EQUALIZER_STEPS);
+    if (sample_rate_hz == 44100) {
+        return &highshelf_no_volume_44100hz[equalizer_step];
+    } else {
+        return &highshelf_no_volume_48000hz[equalizer_step];
+    }
+}
+
+void assert_highshelf_transition_equivalence(uint32_t sample_rate_hz,
+    int step_from, int step_to)
+{
+    int i;
+    biquad_first_order_state_t trans_state = { 0 };
+    biquad_first_order_state_t state_at_switch = { 0 };
+    biquad_first_order_state_t ref_state = { 0 };
+
+    int32_t transition_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
+    int32_t reference_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
+
+    const biquad_first_order_quotients_t *q_from =
+        get_highshelf_quotients(sample_rate_hz, step_from);
+    const biquad_first_order_quotients_t *q_to =
+        get_highshelf_quotients(sample_rate_hz, step_to);
+
+    for (i = 0; i < LOUDNESS_TRANSITION_SWITCH_SAMPLE; i++) {
+        double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
+            (double)i / (double)sample_rate_hz;
+        int32_t input_24 = (int32_t)lrint(
+            (double)SINE_TEST_AMPLITUDE * sin(phase));
+        loudness_highshelf(input_24, &trans_state, q_from);
+    }
+
+    state_at_switch = trans_state;
+
+    for (i = LOUDNESS_TRANSITION_SWITCH_SAMPLE;
+        i < LOUDNESS_TRANSITION_TEST_SAMPLES; i++) {
+        double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
+            (double)i / (double)sample_rate_hz;
+        int32_t input_24 = (int32_t)lrint(
+            (double)SINE_TEST_AMPLITUDE * sin(phase));
+        transition_outputs[i] =
+            loudness_highshelf(input_24, &trans_state, q_to);
+    }
+
+    ref_state = state_at_switch;
+    for (i = LOUDNESS_TRANSITION_SWITCH_SAMPLE;
+        i < LOUDNESS_TRANSITION_TEST_SAMPLES; i++) {
+        double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
+            (double)i / (double)sample_rate_hz;
+        int32_t input_24 = (int32_t)lrint(
+            (double)SINE_TEST_AMPLITUDE * sin(phase));
+        reference_outputs[i] =
+            loudness_highshelf(input_24, &ref_state, q_to);
+    }
+
+    for (i = LOUDNESS_TRANSITION_SWITCH_SAMPLE;
+        i < LOUDNESS_TRANSITION_TEST_SAMPLES; i++) {
+        assert(transition_outputs[i] == reference_outputs[i]);
+    }
+
+    assert(trans_state.w1 == ref_state.w1);
+}
+
 void test_loudness_all_curve_transitions_glitchfree(void)
 {
     size_t num_cases = sizeof(bass_boost_test_cases) /

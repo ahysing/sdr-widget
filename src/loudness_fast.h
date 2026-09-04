@@ -46,18 +46,7 @@ void loudness_test_get_fast_channel(int channel, biquad_state_fast_t *state, biq
 void loudness_test_set_fast_channel(int channel, const biquad_state_fast_t *state);
 #endif
 
-#if defined(__GNUC__) && defined(__AVR32_HAS_DSP__)
-static inline S64 macs_d(S64 d, S32 a, S32 b) {
-    __asm__ ("macs.d %0, %1, %2" : "+r"(d) : "r"(a), "r"(b));
-    return d;
-}
-#define FMA_24BIT(A, B, C) macs_d(A, B, C)
-#define FMS_24BIT(A, B, C) macs_d(A, B, -C)
-#else
-#define FMA_24BIT(A, B, C) \
-    ((S64)(A) + ((S64)(S32)(B) * (S64)(S32)(C)))
-#define FMS_24BIT(A, B, C) \
-    ((S64)(A) - ((S64)(S32)(B) * (S64)(S32)(C)))
-#endif
+#define FMA_24BIT(A, B, C) ((S64)(A) + ((S64)(S32)(B) * (S64)(S32)(C)))
+#define FMS_24BIT(A, B, C) ((S64)(A) - ((S64)(S32)(B) * (S64)(S32)(C)))
 
 #endif /* LOUDNESS_FAST_H_ */
