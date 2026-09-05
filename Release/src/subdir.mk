@@ -24,7 +24,6 @@ C_SRCS += \
 ../src/loudness.c \
 ../src/loudness_fast.c \
 ../src/loudness_first_order.c \
-../src/loudness_highres.c \
 ../src/loudness_inferred_gain.c \
 ../src/loudness_internal.c \
 ../src/rotary_encoder.c \
@@ -71,7 +70,6 @@ OBJS += \
 ./src/loudness.o \
 ./src/loudness_fast.o \
 ./src/loudness_first_order.o \
-./src/loudness_highres.o \
 ./src/loudness_inferred_gain.o \
 ./src/loudness_internal.o \
 ./src/rotary_encoder.o \
@@ -119,7 +117,6 @@ C_DEPS += \
 ./src/loudness.d \
 ./src/loudness_fast.d \
 ./src/loudness_first_order.d \
-./src/loudness_highres.d \
 ./src/loudness_inferred_gain.d \
 ./src/loudness_internal.d \
 ./src/rotary_encoder.d \

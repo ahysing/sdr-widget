@@ -73,7 +73,7 @@ LOUDNESS_DISABLE ?= 0
 USBSTATISTICS_DISABLE ?= 0
 CONFIGURATION ?= Release
 # Peak reported dB SPL at 0 dBFS host gain; must be > LOUDNESS_REF_PHON (80).
-LOUDNESS_DB_SPL_MAX ?= 95
+LOUDNESS_DB_SPL_MAX ?= 85
 CFLAGS_LOUDNESS_DB_SPL_MAX = -DLOUDNESS_DB_SPL_MAX=$(LOUDNESS_DB_SPL_MAX)
 
 CFLAGS_LOUDNESS =
@@ -340,7 +340,6 @@ ifneq ($(LOUDNESS_DISABLE),1)
 RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT)
 RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_first_order_tests$(EXE_EXT)
 RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT)
-RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_highres_tests$(EXE_EXT)
 ifneq ($(USBSTATISTICS_DISABLE),1)
 RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT)
 endif
@@ -370,7 +369,6 @@ endif
 	$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT)
 	$(TEST_BUILD_DIR)/loudness_first_order_tests$(EXE_EXT)
 	$(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT)
-	$(TEST_BUILD_DIR)/loudness_highres_tests$(EXE_EXT)
 endif
 	$(TEST_BUILD_DIR)/usb_statistics_tests$(EXE_EXT)
 

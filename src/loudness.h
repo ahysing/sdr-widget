@@ -15,17 +15,18 @@
 #include "loudness_fast.h"
 
 /* One baked loudness+volume row every 0.5 dB from 35 to 95 phon. */
-#define LOUDNESS_MIN_PHON_X10           350
-#define LOUDNESS_MAX_PHON_X10           950
+#define LOUDNESS_MAX_PHON_X10           (LOUDNESS_DB_SPL_MAX * 10)
+#define LOUDNESS_MIN_PHON_X10           (LOUDNESS_MAX_PHON_X10 - 600)
 #define LOUDNESS_EQUALIZER_STEP_X10       5
 #define LOUDNESS_NUM_EQUALIZER_STEPS    121
 #define LOUDNESS_REF_PHON     80   /* ISO contour shape reference */
 #ifndef LOUDNESS_DB_SPL_MAX
 /* A dB SPL max decides where on the volume know the loudness filters starts.
+ * 85 db SPL max gives 80 dB at 68 out of 100 in windows volume mixer. 35 = 70 dB, 18 = 60 dB
  * 95 db SPL max is common for sonos and other consumer devices.
  * 105 dB SPL max is the default peak level in THX and
  * film industry reference level for standard home theaters and small mixing spaces. */
-#define LOUDNESS_DB_SPL_MAX   95
+#define LOUDNESS_DB_SPL_MAX   85
 #endif
 #if LOUDNESS_DB_SPL_MAX <= LOUDNESS_REF_PHON
 #error LOUDNESS_DB_SPL_MAX must be greater than LOUDNESS_REF_PHON (80)

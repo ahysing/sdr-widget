@@ -1,6 +1,6 @@
 """Generate one first order low-shelf loudness biquad with baked-in playback volume and one first order high-shelf loudness biquad
 
-The 121 output rows pair 35.0..95.0 phon with -60.0..0.0 dB volume in
+The 121 output rows pair 25.0..85.0 phon with -60.0..0.0 dB volume in
 0.5 dB increments.  With --bit-width 32, rows are flat C struct initializers
 using Q4.28 coefficients in {a1, b0, b1} order.
 """
@@ -53,9 +53,11 @@ SAMPLE_RATES_HZ = [
     ("hdmi", 48000.0),
     ("cd", 44100.0),
 ]
-PHON_LEVELS = [step / 2.0 for step in range(70, 191)]
+GAIN_RANGE = 60
 REFERENCE_PHON = 80.0
-MAXIMUM_PHON = 95.0
+MAXIMUM_PHON = 85.0
+MINIMUM_PHON = MAXIMUM_PHON - GAIN_RANGE
+PHON_LEVELS = [step / 2.0 for step in range(int(MINIMUM_PHON * 2), int(MAXIMUM_PHON * 2) + 1)]
 #                           fc      gain
 LOW_SHELF_INITIAL_PARAMS = np.array([120.0, 12.0])
 LOW_SHELF_LOWER_BOUNDS = np.array([20.0, -40.0])
@@ -270,13 +272,14 @@ def first_order_print_row(
     
     if args.bit_width == 32:
         values = [float_to_q4_28(value) for value in (a1, b0, b1)]
+        has_volume = "biquad" if args.coeff_mode == "filter" else "biquad * volume"
         print(
             "    {{ {:11d}, {:11d}, {:11d} }},"
-            "  /* phon={:.1f} volume={:.1f} dB */".format(*values, phon, volume_db)
+            "  /* phon={:.1f} volume={:.1f} dB fs={:.0f} Hz {} */".format(*values, phon, volume_db, sample_rate_hz, has_volume)
         )
     else:
         print(
-            f"phon={phon:4.1f} volume={volume_db:5.1f} dB "
+            f"phon={phon:4.1f} volume={volume_db:5.1f} dB frequency={sample_rate_hz} Hz "
             f"fc={fc:12.8f} gain={gain_db:12.8f} dB "
             f"b0={b0:18.12f} b1={b1:18.12f} "
             f"a1={a1:18.12f}"
@@ -384,7 +387,7 @@ def plot_results(
     fig, ax = plt.subplots(figsize=(13, 8), dpi=100)
     vline = ax.axvline(x=50.0, color="k", linestyle="--", linewidth=0.75, visible=False)
 
-    # Phon levels subset to plot and display (every 5 phon step: 35, 40, ..., 95)
+    # Phon levels subset to plot and display (every 5 phon step: 25, 30, ..., 85)
     plotted_phons = [PHON_LEVELS[i] for i in range(0, len(PHON_LEVELS), 10)]
 
     # Interpolators for interactive lookup
