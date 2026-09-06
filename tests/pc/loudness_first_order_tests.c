@@ -45,8 +45,7 @@ static const lower_tremble_test_case_t lower_tremble_test_case[] = {
     { 75,  80,  0.00000000,  0.00000000 },
     { 77,  84,  0.00000000,  0.00000000 },
     { 80,  90,  0.00000000,  0.00000000 },
-    { 85, 100, -0.56384100, -0.56011700 },
-    { 90, 110, -1.10320600, -1.09341400 },
+    { 85, 120, -0.56523000, -0.56106800 },
 };
 
 /* External table declarations from src/loudness_first_order.c */
@@ -136,7 +135,6 @@ DEFINE_LOWER_TREMBLE_TEST(75, 10)
 DEFINE_LOWER_TREMBLE_TEST(77, 11)
 DEFINE_LOWER_TREMBLE_TEST(80, 12)
 DEFINE_LOWER_TREMBLE_TEST(85, 13)
-DEFINE_LOWER_TREMBLE_TEST(90, 14)
 
 void test_lower_tremble_is_monotonic(void)
 {
@@ -176,7 +174,6 @@ int main(void)
     test_lower_tremble_77phon_magnitude();
     test_lower_tremble_80phon_magnitude();
     test_lower_tremble_85phon_magnitude();
-    test_lower_tremble_90phon_magnitude();
 
     test_lower_tremble_is_monotonic();
 

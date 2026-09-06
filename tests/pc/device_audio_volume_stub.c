@@ -2,6 +2,7 @@
 #include "compiler.h"
 #include "device_audio_volume.h"
 #include "usb_specific_request.h"
+#include "loudness.h"
 
 S32 spk_vol_mult_L = VOL_MULT_UNITY;
 S32 spk_vol_mult_R = VOL_MULT_UNITY;
@@ -20,16 +21,39 @@ void adjust_volume(S32 *sample_L, S32 *sample_R)
 	}
 }
 
+static inline void hard_clip_single(S32 *sample)
+{
+	if (*sample > INT24_MAX)
+		*sample = INT24_MAX;
+	if (*sample < INT24_MIN)
+		*sample = INT24_MIN;
+}
+
+void hard_clip(S32 *sample_L, S32 *sample_R)
+{
+	hard_clip_single(sample_L);
+	hard_clip_single(sample_R);
+}
+
+void adjust_volume_hard_clip(S32 *sample_L, S32 *sample_R)
+{
+	adjust_volume(sample_L, sample_R);
+	hard_clip(sample_L, sample_R);
+}
+
 void keep_volume(S32 *sample_L, S32 *sample_R)
 {
 	(void)sample_L;
 	(void)sample_R;
 }
 
-void device_audio_set_volume_in_biquad(Bool volume_in_biquad)
+void device_audio_set_volume_in_biquad(Bool source_has_volume_control, Bool active_filter_enabled)
 {
-	device_audio_volume_apply_fn = volume_in_biquad
-		? keep_volume : adjust_volume;
+	if (source_has_volume_control) {
+		device_audio_volume_apply_fn = active_filter_enabled ? adjust_volume_hard_clip : adjust_volume;
+	} else {
+		device_audio_volume_apply_fn = active_filter_enabled ? hard_clip : keep_volume;
+	}
 }
 
 void device_audio_volume_update_mult_left(void)

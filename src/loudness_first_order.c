@@ -274,21 +274,15 @@ highshelf_no_volume_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {   -67223785,   251173109,   -49961438 },  /* phon=85.0 volume=0.0 dB fs=48000 Hz biquad */
 };
 
-const biquad_first_order_quotients_t *loudness_resolve_highshelf_base_table(uint32_t frequency)
+const biquad_first_order_quotients_t *active_highshelf_LUT_for_frequency(uint32_t frequency)
 {
-    if (frequency == (uint32_t)FREQ_48 || frequency == 48000) {
-        return highshelf_no_volume_48000hz;
-    }
-    return highshelf_no_volume_44100hz;
+    return (frequency == (uint32_t)FREQ_48) ? highshelf_no_volume_48000hz : highshelf_no_volume_44100hz;
 }
 
 biquad_first_order_state_t highshelf_states[LOUDNESS_CHANNELS];
 
 Bool loudness_highshelf_biquad_is_idle(int channel)
 {
-    if (channel < 0 || channel >= LOUDNESS_CHANNELS) {
-        return TRUE;
-    }
     return highshelf_states[channel].w1 == 0;
 }
 
