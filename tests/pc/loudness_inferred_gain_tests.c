@@ -122,7 +122,8 @@ void test_loudness_inferred_gain_protocol_volume_overrides(void) {
     loudness_test_reset_inferred_gain();
     loudness_test_set_long_memory(1000U);
     loudness_usb_volume_changed_left(-10 * 256);
-    assert(loudness_get_gain_dbfs_channel(0) == -10);
+    assert(loudness_get_gain_dbfs_left() == -10);
+    assert(loudness_get_gain_dbfs_right() == 0);
     printf("test_loudness_inferred_gain_protocol_volume_overrides passed\n");
 }
 

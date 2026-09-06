@@ -17,7 +17,7 @@
 
 #define UAC2_USB_OUT_MAX_STEREO_SAMPLES  (EP_OUT_LENGTH_2_HS / 8u)
 
-#define BASSS_PHON_55_IDX                40
+#define BASSS_PHON_55_IDX                60
 
 extern volatile S16 last_db_spl_left_x10;
 extern volatile S16 last_db_spl_right_x10;
@@ -30,18 +30,13 @@ int32_t loudness_clamp_gain_dbfs_q8(int32_t gain_dbfs_q8);
 int32_t loudness_clamp_gain_dbfs(int32_t gain_dbfs);
 int32_t loudness_gain_dbfs_q8_to_x10(int32_t gain_dbfs_q8);
 int loudness_get_equalizer_step(int32_t db_spl_x10);
-void loudness_internal_current_stereo_db_spl_x10(
-    int32_t *db_spl_left_x10, int32_t *db_spl_right_x10);
+void loudness_internal_current_stereo_db_spl_x10(int32_t *db_spl_left_x10, int32_t *db_spl_right_x10);
 
 void loudness_publish_equalizer_step(int32_t db_spl_left_x10, int32_t db_spl_right_x10);
-void loudness_report_equalizer_step_switch(int32_t prev_db_spl_x10,
-    int32_t db_spl_x10,
-    int prev_step, int equalizer_step);
+void loudness_report_equalizer_step_switch(int32_t prev_db_spl_x10, int32_t db_spl_x10, int prev_step, int equalizer_step);
 void loudness_apply_equalizer_step_if_needed(void);
 
-void loudness_fast_select_equalizer_steps(int32_t db_spl_left_x10,
-    int32_t db_spl_right_x10,
-    int equalizer_step_left, int equalizer_step_right);
+void loudness_fast_select_equalizer_steps(int32_t db_spl_left_x10, int32_t db_spl_right_x10, int equalizer_step_left, int equalizer_step_right);
 void loudness_fast_select_unity_passthrough(void);
 void loudness_fast_reset_states(void);
 void loudness_fast_refresh_idle_cache(void);
@@ -51,10 +46,9 @@ const biquad_quotients_fast_t *loudness_fast_baked_quotient_table_48000hz(void);
 void loudness_fast_refresh_quotient_table_pointers(void);
 const biquad_quotients_fast_t *loudness_fast_no_volume_quotient_table_44100hz(void);
 const biquad_quotients_fast_t *loudness_fast_no_volume_quotient_table_48000hz(void);
-void loudness_fast_set_active_equalizer_step_table(const biquad_quotients_fast_t *table);
 const biquad_quotients_fast_t *loudness_fast_active_equalizer_step_table(void);
 void loudness_fast_prepare_inactive_quotients(const biquad_quotients_fast_t *table, int equalizer_step_left, int equalizer_step_right);
-void loudness_fast_publish_quotients(void);
+void loudness_publish_quotients(void);
 biquad_state_fast_t *loudness_fast_biquad_state(int channel);
 const biquad_quotients_fast_t *loudness_lowshelf_quotients(int channel);
 void loudness_refresh_quotient_table_selection(void);

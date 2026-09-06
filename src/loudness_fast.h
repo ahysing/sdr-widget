@@ -23,21 +23,65 @@ typedef struct {
 
 int32_t loudness_lowshelf(int32_t x_n, biquad_state_fast_t *st, const biquad_quotients_fast_t *q);
 int32_t biquad_step_fast_32bit(int32_t sample, biquad_state_fast_t* biquad_states, const biquad_quotients_fast_t* q);
-S32 loudness_filter_16bit_container(int channel, S32 sample);
-S32 loudness_filter_24bit_container(int channel, S32 sample);
 void loudness_filter_16bit_stereo_packet(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
 void loudness_filter_24bit_stereo_packet(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
 void loudness_change_frequency_fast(uint32_t frequency);
 const biquad_quotients_fast_t *loudness_fast_channel_quotients(int channel);
 const biquad_quotients_fast_t *loudness_lowshelf_quotients(int channel);
 const biquad_quotients_fast_t *loudness_lowshelf_active_quotients(void);
-Bool loudness_channel_biquad_is_idle(int channel);
-Bool loudness_channel_filter_is_idle(int channel);
-Bool loudness_lowshelf_is_active(void);
-Bool loudness_filter_is_active(void);
 
 #ifdef BUILD_TESTING
+#define LOUDNESS_TEST_IDLE_LOWSHELF_LEFT   (1u << 0)
+#define LOUDNESS_TEST_IDLE_LOWSHELF_RIGHT  (1u << 1)
+#define LOUDNESS_TEST_IDLE_HIGHSHELF_LEFT  (1u << 2)
+#define LOUDNESS_TEST_IDLE_HIGHSHELF_RIGHT (1u << 3)
+#define LOUDNESS_TEST_FILTER_IDLE_LEFT \
+    (LOUDNESS_TEST_IDLE_LOWSHELF_LEFT | LOUDNESS_TEST_IDLE_HIGHSHELF_LEFT)
+#define LOUDNESS_TEST_FILTER_IDLE_RIGHT \
+    (LOUDNESS_TEST_IDLE_LOWSHELF_RIGHT | LOUDNESS_TEST_IDLE_HIGHSHELF_RIGHT)
+#define LOUDNESS_TEST_FILTER_IDLE_ALL \
+    (LOUDNESS_TEST_FILTER_IDLE_LEFT | LOUDNESS_TEST_FILTER_IDLE_RIGHT)
+
+uint8_t loudness_test_get_filter_idle_mask(void);
+
+static inline S32 loudness_test_filter_24bit_left(S32 sample)
+{
+    S32 packet_L = sample;
+    S32 packet_R = 0;
+    loudness_filter_24bit_stereo_packet(&packet_L, &packet_R, 1);
+    return packet_L;
+}
+
+static inline S32 loudness_test_filter_16bit_left(S32 sample)
+{
+    S32 packet_L = sample;
+    S32 packet_R = 0;
+    loudness_filter_16bit_stereo_packet(&packet_L, &packet_R, 1);
+    return packet_L;
+}
+
+static inline Bool loudness_test_left_filter_is_idle(void)
+{
+    uint8_t mask = loudness_test_get_filter_idle_mask();
+    return (mask & LOUDNESS_TEST_FILTER_IDLE_LEFT) == LOUDNESS_TEST_FILTER_IDLE_LEFT;
+}
+
+static inline Bool loudness_test_right_filter_is_idle(void)
+{
+    uint8_t mask = loudness_test_get_filter_idle_mask();
+    return (mask & LOUDNESS_TEST_FILTER_IDLE_RIGHT) == LOUDNESS_TEST_FILTER_IDLE_RIGHT;
+}
+
+static inline Bool loudness_test_lowshelf_is_active(void)
+{
+    uint8_t mask = loudness_test_get_filter_idle_mask();
+    return (mask & (LOUDNESS_TEST_IDLE_LOWSHELF_LEFT | LOUDNESS_TEST_IDLE_LOWSHELF_RIGHT)) !=
+        (LOUDNESS_TEST_IDLE_LOWSHELF_LEFT | LOUDNESS_TEST_IDLE_LOWSHELF_RIGHT);
+}
+
 void loudness_test_load_active_quotients_fast(int equalizer_step);
+void loudness_test_load_quotient_table_fast(
+    const biquad_quotients_fast_t *table, int equalizer_step);
 void loudness_test_get_fast_channel(int channel, biquad_state_fast_t *state, biquad_quotients_fast_t *quotients);
 void loudness_test_set_fast_channel(int channel, const biquad_state_fast_t *state);
 #endif
