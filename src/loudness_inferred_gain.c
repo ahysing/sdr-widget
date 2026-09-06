@@ -4,8 +4,10 @@
 
 #if defined(BUILD_TESTING)
 #include "../tests/pc/usb_specific_request.h"
+#include "../tests/pc/device_audio_volume.h"
 #else
 #include "usb_specific_request.h"
+#include "device_audio_task.h"
 #endif
 #include "loudness.h"
 #include "loudness_internal.h"
@@ -266,6 +268,11 @@ void loudness_set_source_has_volume_control(void)
         source_has_volume_control = TRUE;
         loudness_inferred_gain_reset();
         loudness_refresh_quotient_table_selection();
+#ifdef FEATURE_VOLUME_CTRL
+        device_audio_set_volume_in_biquad(
+            TRUE,
+            loudness_active_filter() != FILTER_OFF_MODE);
+#endif
     }
 }
 
@@ -282,6 +289,11 @@ void loudness_test_reset_inferred_gain(void)
 {
     source_has_volume_control = FALSE;
     loudness_inferred_gain_reset();
+#ifdef FEATURE_VOLUME_CTRL
+    device_audio_set_volume_in_biquad(
+        FALSE,
+        loudness_active_filter() != FILTER_OFF_MODE);
+#endif
 }
 
 void loudness_test_set_short_memory(uint32_t value)

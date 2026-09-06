@@ -24,7 +24,7 @@ S16 spk_vol_usb_R = VOL_DEFAULT;			// Forced to default value
 S32 spk_vol_mult_L = 0;						// Full mute for now, re-formated in uac?_device_audio_task_init
 S32 spk_vol_mult_R = 0;
 
-volatile uint8_t input_select;				// BSB 20150501 global variable for input selector
+volatile uint8_t input_select;							// BSB 20150501 global variable for input selector
 
 #ifdef FEATURE_VOLUME_CTRL
 static S16 spk_vol_formatted_L = VOL_INVALID;
@@ -48,16 +48,44 @@ void adjust_volume(S32 *sample_L, S32 *sample_R)
 	}
 }
 
+static inline void hard_clip_single(S32 *sample)
+{
+	if (*sample > INT24_MAX) {
+		*sample = INT24_MAX;
+	}
+	if (*sample < INT24_MIN) {
+		*sample = INT24_MIN;
+	}
+}
+
+static inline void hard_clip(S32 *sample_L, S32 *sample_R)
+{
+	hard_clip_single(sample_L);
+	hard_clip_single(sample_R);
+}
+
+void adjust_volume_hard_clip(S32 *sample_L, S32 *sample_R)
+{
+	adjust_volume(sample_L, sample_R);
+	hard_clip(sample_L, sample_R);
+}
+
 void keep_volume(S32 *sample_L, S32 *sample_R)
 {
 	(void)sample_L;
 	(void)sample_R;
 }
 
-void device_audio_set_volume_in_biquad(Bool volume_in_biquad)
+void device_audio_set_volume_in_biquad(Bool source_has_volume_control,
+	Bool active_filter_enabled)
 {
-	device_audio_volume_apply_fn = volume_in_biquad
-		? keep_volume : adjust_volume;
+	if (source_has_volume_control) {
+		device_audio_volume_apply_fn = active_filter_enabled
+			? adjust_volume_hard_clip : adjust_volume;
+	} else {
+		device_audio_volume_apply_fn = active_filter_enabled
+			? hard_clip : keep_volume;
+	}
 }
 
 void device_audio_volume_update_mult_left(void)
@@ -87,25 +115,23 @@ void device_audio_volume_refresh_mult(void)
 	volatile uint8_t spdif_cmd;				// BSB 20241123 global variable for debugging SPDIF receiver
 #endif
 
-
 #ifdef HW_GEN_SPRX
-// RXMODFIX Global variables for tuning scanning algorithm. Optimized for warm wm8804. Upping all the settings to permit for slow WM8804
-volatile uint8_t wm8804_LINK_MAX_ATTEMPTS = 0x80;//  0x64 0x3d;	// 29 Results after 1st optimization - increase all three to lower risk of noise at cost of longer scan times
-volatile uint8_t wm8804_LINK_DETECTS_OK = 0x10;		// 0x08 05 Results after 1st optimization
-volatile uint8_t wm8804_TRANS_ERR_FAILURE = 0x1d;	// 0x1d 14 Results after 1st optimization - 3d081d testing device "3" with slowest WM8804 to date
+// RXMODFIX Global variables for tuning scanning algorithm. Optimized for warm wm8804.
+volatile uint8_t wm8804_LINK_MAX_ATTEMPTS = 0x80;
+volatile uint8_t wm8804_LINK_DETECTS_OK = 0x10;
+volatile uint8_t wm8804_TRANS_ERR_FAILURE = 0x1d;
 #endif
-
-
 
 #ifdef HW_GEN_SPRX
 volatile uint8_t usb_ch;					// Front or rear USB channel
 volatile uint8_t usb_ch_swap;				// USB channel is about to swap!
 #endif
 
-#if ( (defined HW_GEN_SPRX) || (defined HW_GEN_AB1X) ) // For USB playback, handle semaphores
+#if ( (defined HW_GEN_SPRX) || (defined HW_GEN_AB1X) )
 volatile xSemaphoreHandle input_select_semphr = NULL; // BSB 20150626 audio channel selection semaphore
 #endif
 
 #if (defined HW_GEN_SPRX) || (defined HW_GEN_FMADC)
 volatile xSemaphoreHandle I2C_busy_semphr = NULL;
 #endif
+

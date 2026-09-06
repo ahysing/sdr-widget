@@ -74,7 +74,6 @@
 #include "pcm5142.h"
 #endif
 
-
 #if USB_DEVICE_FEATURE == DISABLED
   #error device_audio_task.h is #included although USB_DEVICE_FEATURE is disabled
 #endif
@@ -108,8 +107,6 @@ extern volatile uint8_t wm8804_LINK_DETECTS_OK;
 extern volatile uint8_t wm8804_TRANS_ERR_FAILURE;
 #endif
 
-
-
 #ifdef HW_GEN_SPRX
 extern volatile uint8_t usb_ch;						// Front or rear USB channel
 extern volatile uint8_t usb_ch_swap;				// Front or rear USB channel
@@ -124,7 +121,6 @@ extern volatile xSemaphoreHandle input_select_semphr; 	// BSB 20150626 audio cha
 extern volatile xSemaphoreHandle I2C_busy_semphr; 			// One semaphore covers entire I2C message, not just function calls. Not yet ported to all I2C callers
 #endif
 
-
 //_____ M A C R O S ________________________________________________________
 
 
@@ -134,8 +130,10 @@ extern volatile xSemaphoreHandle I2C_busy_semphr; 			// One semaphore covers ent
 typedef void (*device_audio_volume_apply_fn_t)(S32 *sample_L, S32 *sample_R);
 
 void adjust_volume(S32 *sample_L, S32 *sample_R);
+void adjust_volume_hard_clip(S32 *sample_L, S32 *sample_R);
 void keep_volume(S32 *sample_L, S32 *sample_R);
-void device_audio_set_volume_in_biquad(Bool volume_in_biquad);
+void device_audio_set_volume_in_biquad(Bool source_has_volume_control,
+	Bool active_filter_enabled);
 
 extern device_audio_volume_apply_fn_t device_audio_volume_apply_fn;
 

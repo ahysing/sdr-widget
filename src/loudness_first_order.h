@@ -26,7 +26,7 @@ extern const biquad_first_order_quotients_t highshelf_no_volume_48000hz[LOUDNESS
 #ifdef BUILD_TESTING
 int32_t loudness_highshelf(int32_t x_n, biquad_first_order_state_t *st, const biquad_first_order_quotients_t *rt);
 #endif
-const biquad_first_order_quotients_t *loudness_resolve_highshelf_base_table(uint32_t frequency);
+const biquad_first_order_quotients_t *active_highshelf_LUT_for_frequency(uint32_t frequency);
 const biquad_first_order_quotients_t *loudness_highshelf_active_quotients(void);
 Bool loudness_highshelf_biquad_is_idle(int channel);
 void loudness_highshelf_reset_states(void);
