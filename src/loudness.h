@@ -58,11 +58,6 @@ void loudness_change_frequency_fast(uint32_t frequency);
     loudness_filter_16bit_stereo_packet((L), (R), (N))
 #define LOUDNESS_FILTER_24BIT_STEREO_PACKET(L, R, N) \
     loudness_filter_24bit_stereo_packet((L), (R), (N))
-#define LOUDNESS_FILTER_24BIT_CONTAINER(ch, sample_32) \
-    loudness_filter_24bit_container((ch), (sample_32))
-
-Bool loudness_lowshelf_is_active(void);
-Bool loudness_channel_filter_is_idle(int channel);
 
 /* Force the active loudness band from an external dBFS estimate (<= 0). */
 void loudness_set_level_dbfs(int32_t db_fs);
@@ -84,7 +79,8 @@ Bool loudness_uac2_packet_filter_enabled(Bool not_muted, uint32_t freq_hz);
 void loudness_update_active_equalizer_step(void);
 
 /* Return per-channel host gain in dBFS (channel 0 = L, 1 = R). Non-positive. */
-int32_t loudness_get_gain_dbfs_channel(int channel);
+int32_t loudness_get_gain_dbfs_left();
+int32_t loudness_get_gain_dbfs_right();
 
 #include "loudness_inferred_gain.h"
 
@@ -92,14 +88,14 @@ int32_t loudness_get_gain_dbfs_channel(int channel);
 /* Current per-channel published level in 0.1 dB SPL units. */
 int16_t loudness_get_last_db_spl_left_x10(void);
 int16_t loudness_get_last_db_spl_right_x10(void);
+int32_t loudness_get_db_spl_left_x10(void);
+int32_t loudness_get_db_spl_right_x10(void);
 
 #else /* LOUDNESS_DISABLE */
 #define LOUDNESS_FILTER_16BIT_STEREO_PACKET(L, R, N) \
     do { (void)(L); (void)(R); (void)(N); } while (0)
 #define LOUDNESS_FILTER_24BIT_STEREO_PACKET(L, R, N) \
     do { (void)(L); (void)(R); (void)(N); } while (0)
-#define LOUDNESS_FILTER_24BIT_CONTAINER(ch, sample_32) \
-    ((void)(ch), (sample_32))
 #endif /* LOUDNESS_DISABLE */
 
 int32_t loudness_apply_noise_shaper_to_output(int32_t sample_32bit, int32_t* noise_shaper_error);
