@@ -1964,30 +1964,6 @@ void mobo_clear_dac_channel(void) {
 			cache_unified[2*i+1] = 0;
 		#endif
 	}
-#endif	
-	
-	
-
-//	gpio_clr_gpio_pin(AVR32_PIN_PX17); // ch3
-}
-
-
-
-
-
-	
-	for (i = 0; i < SPK_CACHE_MAX_SAMPLES; i++) {
-//		cache_L[i] = 0;
-//		cache_R[i] = 0;
-
-		#ifdef I2S_METADATA
-			cache_unified[2*i] = i2s_meta_L;
-			cache_unified[2*i+1] = i2s_meta_R;
-		#else
-			cache_unified[2*i] = 0;
-			cache_unified[2*i+1] = 0;
-		#endif
-	}
 #endif
 
 	// 20261021: RAM copy of the USB OUT bank is cleared along with the other audio buffers

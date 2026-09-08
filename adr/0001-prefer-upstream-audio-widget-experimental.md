@@ -38,8 +38,13 @@ be kept on the fork side.**
   tools, in the smallest diff possible.
 - **Build gate:** after each conflict resolution or replayed commit during
   a rebase, run `./scripts/build-ha128.sh` in the UCRT64 shell before
-  `git rebase --continue`. Optional driver:
-  `scripts/rebase-prefer-audio-widget-experimental.sh --continue-loop`.
+  `git rebase --continue`. To automate the loop: resolve conflicts with
+  upstream (`git checkout --ours` on conflicted paths when rebasing `main`
+  onto `audio-widget-experimental`), stage, run the Mk3 build gate, then
+  `git rebase --continue`; repeat until the rebase finishes. If a merge
+  auto-resolves `makefile.defs` to a stub, restore the full file from the
+  integration branch (`git checkout HEAD -- makefile.defs`) before
+  continuing.
 - **Makefile policy:** root `Makefile` stays aligned with upstream
   (DA256 / SPRX defaults); Mk3 product selection stays in
   `build-ha128.sh` overrides, not permanent fork drift in upstream-owned

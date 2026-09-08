@@ -29,29 +29,8 @@
 # -DLOOSE_SIGNAL_LED			Use front LED to indicate SPDIF signal loss
 # -DI2S_METADATA				Send 8 bits of metadata below each 24-bit audio data sample
 # -DI2S_POLARITY_CHECK			Output SDATA in phase with LRCK for debugging. It will override -DI2S_METADATA for paused content
-# Top-level build for AVR32 firmware (Release/widget.elf), host tools, and PC unit tests.
-#
-# Firmware profiles (pick one target):
-#   make audio-widget         Default: DA256 + HW_GEN_SPRX (upstream audio-widget-experimental).
-#   make audio-widget-mk3     Henry Audio USB DAC 128 Mk3: FEATURE_PRODUCT_AB1x + HW_GEN_AB1X.
-#   scripts/build-ha128.sh    Same as audio-widget-mk3 (clean Release + relink).
-#   make audio-widget-84mhz   audio-widget + FEATURE_84MHz (experimental clock).
-#
-# After changing AUDIO_WIDGET_DEFAULTS or product flags, rebuild features.o (targets rm it) or use mk3 clean.
-#
-# Variables (override on command line):
-#   PARTNAME                  AVR32 -mpart=... (default uc3a3128).
-#   AUDIO_WIDGET_FEATURE_FLAGS  Board/image/feature defaults + product macros (see features.h).
-#   AUDIO_WIDGET_DEFAULTS     PARTNAME + feature flags + BUILD_INFO_DEFS; full CFLAGS prefix for firmware.
-#   AUDIO_WIDGET_MK3_DEFAULTS Mk3 profile: undef DA256/SPRX/HID, add AB1x + volume + ALT2 + cfg + VDD_SENSE.
-#   CONFIGURATION             Release (adds -DRELEASE) or Debug.
-#   LOUDNESS_DISABLE=1        -DLOUDNESS_DISABLE
-#   USBSTATISTICS_DISABLE=1   -DUSBSTATISTICS_DISABLE
-#   LOUDNESS_DB_SPL_MAX       Peak SPL at 0 dBFS (default 85; must exceed firmware ref 80).
-#   WIDGET_MAKE_ENV           Exported CFLAGS/ASFLAGS/optimization bundle passed to ./make-widget.
-#   WIDGET_CONTROL_CFLAGS     Host builds only (no -mpart); should match flashed feature flags.
-#
-# BUILD_* tokens are bare numbers/strings for the C preprocessor (see device_mouse_hid_task.c).
+# Targets: audio-widget (HA256), audio-widget-mk3, audio-widget-84mhz, henryctl, test.
+# Optional: LOUDNESS_DISABLE=1 USBSTATISTICS_DISABLE=1 LOUDNESS_DB_SPL_MAX=N CONFIGURATION=Release|Debug
 
 # -DINDICATE_EXTREME_SI			Indication of extreme skip/insert events
 include makefile.msys2
@@ -80,11 +59,9 @@ endif
 
 BUILD_INFO_DEFS = -DBUILD_DATE=$(BUILD_DATE) -DBUILD_TIME=$(BUILD_TIME) -DBUILD_TZ=$(BUILD_TZ) -DBUILD_COMMIT=$(BUILD_COMMIT) -DBUILD_DIRTY=$(BUILD_DIRTY) \
 	-DBUILD_HHMM_NUM=1$(BUILD_TIME)
-# 20261101: BUILD_HHMM_NUM = 1HHMM for arithmetic use (USB serial number in usb_descriptors.h). The leading 1 keeps
-# a time like 0915 from being an invalid octal constant in C
+# 20261101: BUILD_HHMM_NUM = 1HHMM for USB serial in usb_descriptors.h (leading 1 avoids invalid octal).
 
-
-AUDIO_WIDGET_DEFAULTS = \
+AUDIO_WIDGET_FEATURE_FLAGS = \
 	-DFEATURE_BOARD_DEFAULT=feature_board_usbi2s \
 	-DFEATURE_IMAGE_DEFAULT=feature_image_uac2_audio \
 	-DFEATURE_IN_DEFAULT=feature_in_normal \
@@ -97,18 +74,16 @@ AUDIO_WIDGET_DEFAULTS = \
 	-DFEATURE_QUIRK_DEFAULT=feature_quirk_none \
 	-DUSB_STATE_MACHINE_GPIO \
 	-DFEATURE_HID \
-	$(BUILD_INFO_DEFS) \
-	$(PRODUCT_NAMES_DEFS) \
-	-DFEATURE_PRODUCT_OEM01 \
+	-DFEATURE_PRODUCT_DA256 \
 	-DFEATURE_ALT2_16BIT \
 	-DFEATURE_SPDIF_CMD \
 	-DHW_GEN_SPRX
 
+AUDIO_WIDGET_DEFAULTS ?= $(PARTNAME) \
+	$(AUDIO_WIDGET_FEATURE_FLAGS) \
+	$(BUILD_INFO_DEFS) \
+	$(PRODUCT_NAMES_DEFS)
 
-# 20261027: FEATURE_PRODUCT_OEM01 takes its USB manufacturer and product names from the make command line
-# only (not the environment), so they are never committed before launch:
-#   make clean audio-widget OEM_MANUFACTURER="Manufacturer" OEM_PRODUCT="Product"
-# make-names.sh turns them into src/product_names_local.h (ignored by git). Other products are unaffected
 ifneq (,$(findstring -DFEATURE_PRODUCT_OEM01,$(AUDIO_WIDGET_DEFAULTS)))
   ifneq ($(MAKECMDGOALS),clean)
     ifneq ($(origin OEM_MANUFACTURER),command line)
@@ -130,6 +105,9 @@ else
   PRODUCT_NAMES_DEFS =
   PRODUCT_NAMES_GEN = true
 endif
+
+HA128_MK3_PARTNAME = -mpart=uc3a3128
+HA128_MK3_UNDEF_FLAGS = -UFEATURE_PRODUCT_DA256 -UFEATURE_SPDIF_CMD -UHW_GEN_SPRX -UFEATURE_HID
 HA128_MK3_DEF_FLAGS = -DFEATURE_PRODUCT_AB1x -DHW_GEN_AB1X -DFEATURE_VOLUME_CTRL \
 	-DFEATURE_ALT2_16BIT -DFEATURE_CFG_INTERFACE -DVDD_SENSE
 AUDIO_WIDGET_MK3_DEFAULTS = $(HA128_MK3_PARTNAME) $(AUDIO_WIDGET_FEATURE_FLAGS) \
@@ -274,7 +252,7 @@ ifdef IS_MSYS
   WIN_CURDIR = $(shell cygpath -m '$(CURDIR)')
 endif
 
-.PHONY: all test run-test clean clean-test help check-libusb \
+.PHONY: all test run-test clean clean-test check-libusb \
 	audio-widget audio-widget-mk3 ha128 audio-widget-84mhz sdr-widget build-audio-widget build-sdr-widget test-avr32 \
 	widget-control henryctl print-audio-widget-defaults print-audio-widget-mk3-defaults
 
@@ -338,14 +316,10 @@ Release/widget.elf::
 	
 
 audio-widget::
-	@echo "WARNING: DA256/SPRX profile ΓÇö not for Henry Audio USB DAC 128 Mk3; use: make audio-widget-mk3"
+	@echo "WARNING: DA256/SPRX profile - not for Henry Audio USB DAC 128 Mk3; use: make audio-widget-mk3"
 	@echo $(CONFIGURATION_MSG)
 	rm -f Release/widget.elf Release/src/features.o
 	$(PRODUCT_NAMES_GEN)
-	CFLAGS="$(AUDIO_WIDGET_DEFAULTS)" ASFLAGS="$(PARTNAME)" ./make-widget
-
-# 20260915: 84MHz CPU clock bring-up for 384kHz UAC2 work. Same defaults as audio-widget,
-# plus FEATURE_84MHz. Source-verified, NOT yet bench-verified - see checklist.
 	$(WIDGET_MAKE_ENV) ./make-widget
 
 audio-widget-mk3 ha128::
@@ -356,9 +330,11 @@ audio-widget-mk3 ha128::
 		AUDIO_WIDGET_DEFAULTS="$(AUDIO_WIDGET_MK3_DEFAULTS)"
 	$(MAKE) -C Release all ASFLAGS="$(HA128_MK3_PARTNAME)"
 
+# 20260915: 84MHz CPU clock bring-up for 384kHz UAC2 work. Same as audio-widget + FEATURE_84MHz.
 audio-widget-84mhz::
 	@echo $(CONFIGURATION_MSG)
 	rm -f Release/widget.elf Release/src/features.o
+	$(PRODUCT_NAMES_GEN)
 	CFLAGS="$(AUDIO_WIDGET_CFLAGS) -DFEATURE_84MHz" ASFLAGS="$(PARTNAME)" \
 		CFLAGS_APP_OPTIMIZATIONS="$(CFLAGS_OPTIMIZATIONS)" \
 		CFLAGS_FREERTOS_OPTIMIZATIONS="$(CFLAGS_FREERTOS_OPTIMIZATIONS)" \
@@ -368,7 +344,7 @@ audio-widget-84mhz::
 
 widget-control: widget-control$(EXE_EXT)
 
-henryctl:
+henryctl henryctl$(EXE_EXT):
 	+$(MAKE) -C henryctl henryctl$(EXE_EXT)
 
 check-libusb:
@@ -390,9 +366,6 @@ endif
 
 widget-control$(EXE_EXT): widget-control.c src/features.h | check-libusb
 	$(CC) $(WIDGET_CONTROL_CFLAGS) $(CFLAGS_COMMON) $(OUT_FLAG)$@ widget-control.c $(LINK_USB)
-
-henryctl$(EXE_EXT):
-	+$(MAKE) -C henryctl henryctl$(EXE_EXT)
 
 clean:: clean-test
 	rm -f widget-control widget-control.exe henryctl.exe
@@ -482,42 +455,3 @@ tests/avr32/statistics_avr32_tests.o: tests/avr32/statistics_avr32_tests.c
 
 tests/avr32/loudness_fast_avr32.o: src/loudness_fast.c
 	$(if $(AVR32BIN),"$(AVR32BIN)/avr32-gcc",avr32-gcc) -std=gnu99 -DBOARD=SDRwdgtLite -DFREERTOS_USED -Isrc/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/include -Isrc/SOFTWARE_FRAMEWORK/SERVICES/FREERTOS/Source/portable/GCC/AVR32_UC3 -Isrc/SOFTWARE_FRAMEWORK/DRIVERS/INTC -Isrc/SOFTWARE_FRAMEWORK/UTILS/DEBUG -Isrc/SOFTWARE_FRAMEWORK/SERVICES/USB -Isrc/CONFIG -Isrc/SOFTWARE_FRAMEWORK/UTILS/PREPROCESSOR -Isrc/SOFTWARE_FRAMEWORK/UTILS -Isrc/SOFTWARE_FRAMEWORK/BOARDS -Isrc -mpart=uc3a3256 -c -o $@ $<
-
-help:
-	@echo "Firmware targets:"
-	@echo "  make audio-widget              DA256 / SPRX only (NOT Mk3 ΓÇö wrong USB identity on HA128)"
-	@echo "  make audio-widget-mk3          Henry Audio USB DAC 128 Mk3 (FEATURE_PRODUCT_AB1x)"
-	@echo "  make audio-widget-84mhz        Build Release/widget.elf (DA256 / SPRX + FEATURE_84MHz)"
-	@echo "  scripts/build-ha128.sh         Same as make audio-widget-mk3 (clean + Mk3 flags)"
-	@echo "  make all                       widget.elf + widget-control.exe + henryctl.exe"
-	@echo "  make clean                     Remove firmware and test build artifacts"
-	@echo ""
-	@echo "Loudness / statistics options (all features enabled by default):"
-	@echo "  LOUDNESS_DB_SPL_MAX=N        Peak dB SPL at 0 dBFS gain (default: 85, must be > 80)"
-	@echo "  LOUDNESS_DISABLE=1           Omit loudness filter from firmware"
-	@echo "  USBSTATISTICS_DISABLE=1"
-	@echo "                               Omit loudness equalizer-step USB events"
-	@echo "  CONFIGURATION=Release|Debug  App src/*.c optimization level (default: Release)"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make audio-widget LOUDNESS_DB_SPL_MAX=106"
-	@echo "  make audio-widget LOUDNESS_DISABLE=1"
-	@echo "  make audio-widget USBSTATISTICS_DISABLE=1"
-	@echo "  make test LOUDNESS_DISABLE=1"
-	@echo "  make test USBSTATISTICS_DISABLE=1"
-	@echo ""
-	@echo "Host tools (widget-control & henryctl):"
-	@echo "  make widget-control            Build widget-control$(EXE_EXT) (SDR-Widget features API)"
-	@echo "  make henryctl                  Build henryctl$(EXE_EXT) in henryctl/ (bass boost / loudness gate)"
-	@echo "  MSYS2: use the UCRT64 terminal (not plain MSYS) ΓÇö pacman -S mingw-w64-ucrt-x86_64-{gcc,libusb} make"
-	@echo "  PowerShell:   vcpkg install libusb:x64-windows-static, run .\vcvars64.ps1, then make henryctl (or .\henryctl\build.ps1)"
-	@echo "  Override:     make henryctl VCPKG_DIR=C:/path/to/vcpkg"
-	@echo ""
-	@echo "PC unit tests (MSVC on Windows):"
-	@echo "  make test                      Build and run applicable test suites"
-	@echo "  make clean-test                Remove Release/tests/pc"
-	@echo ""
-	@echo "Current settings:"
-	@echo "  LOUDNESS_DISABLE=$(LOUDNESS_DISABLE)"
-	@echo "  USBSTATISTICS_DISABLE=$(USBSTATISTICS_DISABLE)"
-	@echo "  CONFIGURATION=$(CONFIGURATION)"

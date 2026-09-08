@@ -5,14 +5,6 @@
 #include "taskAK5394A.h"
 #include <string.h>
 
-/* Coefficients and the DF-II accumulator use Q4.28 throughout. */
-#define LOUDNESS_DF2_Q28_SHIFT          28
-#define LOUDNESS_DF2_Q28_ROUND          (1LL << (LOUDNESS_DF2_Q28_SHIFT - 1))
-#ifndef LOUDNESS_Q28_ONE
-#define LOUDNESS_Q28_ONE                ((int32_t)1 << LOUDNESS_DF2_Q28_SHIFT)
-#endif
-
-
 /*
  * Canonical DF-II accumulates pole gain before zeros attenuate. At 50 Hz the
  * internal delay line can grow ~5000x larger than x[n] (~13 bits), overflowing
@@ -21,10 +13,8 @@
  * Fix: store w1/w2 right-shifted by M bits (w' = w >> M). Stored history
  * products are lifted by M before the Q4.28 pole and zero sums.
  */
-#define LOUDNESS_DF2_STATE_HEADROOM_M   13
-#define LOUDNESS_EQUALIZER_STEP_UNSET   UINT8_MAX
 
-const biquad_first_order_quotients_t
+const biquad_first_order_coefficients_t
 highshelf_no_volume_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {  -182898219,   268435456,  -182898219 },  /* phon=25.0 volume=-60.0 dB fs=44100 Hz biquad */
     {   -45138489,   268435456,   -45138489 },  /* phon=25.5 volume=-59.5 dB fs=44100 Hz biquad */
@@ -149,7 +139,7 @@ highshelf_no_volume_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {   -53148613,   251875800,   -36588957 },  /* phon=85.0 volume=0.0 dB fs=44100 Hz biquad */
 };
 
-const biquad_first_order_quotients_t
+const biquad_first_order_coefficients_t
 highshelf_no_volume_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {  -192754160,   268435456,  -192754160 },  /* phon=25.0 volume=-60.0 dB fs=48000 Hz biquad */
     {  -205904895,   268435456,  -205904895 },  /* phon=25.5 volume=-59.5 dB fs=48000 Hz biquad */
@@ -274,7 +264,7 @@ highshelf_no_volume_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {   -67223785,   251173109,   -49961438 },  /* phon=85.0 volume=0.0 dB fs=48000 Hz biquad */
 };
 
-const biquad_first_order_quotients_t *active_highshelf_LUT_for_frequency(uint32_t frequency)
+const biquad_first_order_coefficients_t *active_highshelf_LUT_for_frequency(uint32_t frequency)
 {
     return (frequency == (uint32_t)FREQ_48) ? highshelf_no_volume_48000hz : highshelf_no_volume_44100hz;
 }
