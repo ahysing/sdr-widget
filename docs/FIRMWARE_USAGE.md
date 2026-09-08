@@ -3,7 +3,7 @@
 This document describes how to control loudness and bass boost on SDR-Widget /
 audiophile-widget firmware from the host.
 
-**Host tools:** [`henryctl`](../henryctl.c) exposes bass boost and loudness
+**Host tools:** [`henryctl`](../henryctl) exposes bass boost and loudness
 preferences (`--bassboost`, `--loudness`). [`widget-control`](../widget-control.c) is the
 original SDR-Widget features utility (NVRAM features `-g`/`-s`, etc.) and does
 **not** include those loudness controls.
@@ -35,11 +35,11 @@ Windows UAC2 driver does not expose in its UI today.
 
 ## Loudness CLI (`henryctl`)
 
-`henryctl` is a host-side command-line utility built from
-[`henryctl.c`](../henryctl.c). It talks to the device over USB using libusb.
+`henryctl` is a host-side command-line utility in the [`henryctl/`](../henryctl) subfolder,
+built from [`henryctl/henryctl.c`](../henryctl/henryctl.c). It talks to the device over USB using libusb.
 
-Build it with the root `Makefile` (`make henryctl` or `make all`). On Windows
-the output is `henryctl.exe`; on Linux it is `henryctl`.
+Build it with the root `Makefile` (`make henryctl` or `make all`), or in the subfolder (`cd henryctl && make henryctl.exe` or `.\henryctl\build.ps1`). On Windows
+the output is `henryctl.exe`; on Linux it is `henryctl`. It links static `libusb` on Windows for portable deployment without extra DLLs.
 
 Rebuilding `henryctl.exe` alone is **not** enough: the device must be running
 firmware that includes the DG8SAQ config interface and vendor command `0x72`

@@ -5,13 +5,13 @@ Firmware exposes a 1 Hz statistics stream over a vendor HID interface (`usage_pa
 ## Transport
 
 - **Report ID:** `1`
-- **HID transfer size:** 64 bytes (45-byte wire payload + zero padding to 63 bytes after report ID)
+- **HID transfer size:** 64 bytes (49-byte wire payload + zero padding to 63 bytes after report ID)
 - **Rate:** one report per second (`statistics_task`, FreeRTOS priority `tskIDLE_PRIORITY + 2`)
 - **HID send wait:** up to 50 ms per report for EP6 IN ready; counters are preserved and retried on the next tick if send fails
 - **Endianness:** little-endian for multi-byte fields
 - **Checksum:** byte index 3 is XOR of all other wire bytes
 
-## Wire layout (version 6, 45 bytes)
+## Wire layout (version 6, 49 bytes)
 
 | Offset | Field | Type | Semantics |
 |--------|-------|------|-----------|
@@ -26,26 +26,26 @@ Firmware exposes a 1 Hz statistics stream over a vendor HID interface (`usage_pa
 | 16–17 | `min_fifo` | U16 LE | Minimum gap; `0xFFFF` = idle sentinel |
 | 18–21 | `deadline_misses` | U32 LE | Audio-task scheduler slips > 10 ms |
 | 22–23 | `frequency_100hz` | U16 LE | USB sample rate divided by 100; Python exposes `frequency_hz` |
-| 24 | `gain_dbfs_left` | S8 | Effective left-channel gain (dBFS relative to `LOUDNESS_DB_SPL_MAX`) |
-| 25 | `gain_dbfs_right` | S8 | Effective right-channel gain |
-| 26 | `db_spl_left` | S8 | Left listening level (dB SPL) |
-| 27 | `db_spl_right` | S8 | Right listening level (dB SPL) |
-| 28–31 | `event_count` | U32 LE | Tagged events in this 1 s period |
-| 32 | `last_tag` | U8 | Tag of the most recent event |
-| 33 | `last_arg0` | U8 | Tag-specific payload |
-| 34 | `last_arg1` | U8 | Tag-specific payload |
-| 35 | `last_arg2` | U8 | Tag-specific payload |
-| 36 | `equalizer_step_left` | U8 | Left active loudness row (0–120); fixed 40 in bass boost |
-| 37 | `equalizer_step_right` | U8 | Right active loudness row (0–120) |
-| 38 | `source_has_volume_control` | U8 | `1` when USB SET_CUR host volume is authoritative |
-| 39 | `bass_boost_enabled` | U8 | `1` when **active** DSP mode is bass boost |
-| 40 | `gain_inferred_dbfs_left` | S8 | Peak-tracked inferred left gain |
-| 41 | `gain_inferred_dbfs_right` | S8 | Peak-tracked inferred right gain |
-| 42 | `loudness_enabled` | U8 | `1` when **active** DSP mode is loudness contour |
-| 43 | `sample_bits` | U8 | `16` = ALT2 (16-bit), `24` = ALT1 (24-bit), `0` = stream inactive |
-| 44 | `num_samples` | U8 | Stereo frames in the last received USB OUT packet (`0` when inactive) |
+| 24–25 | `gain_dbfs_left_x10` | S16 LE | Effective left-channel gain (0.1 dBFS units) |
+| 26–27 | `gain_dbfs_right_x10` | S16 LE | Effective right-channel gain (0.1 dBFS units) |
+| 28–29 | `db_spl_left_x10` | S16 LE | Left listening level (0.1 dB SPL units) |
+| 30–31 | `db_spl_right_x10` | S16 LE | Right listening level (0.1 dB SPL units) |
+| 32–35 | `event_count` | U32 LE | Tagged events in this 1 s period |
+| 36 | `last_tag` | U8 | Tag of the most recent event |
+| 37 | `last_arg0` | U8 | Tag-specific payload |
+| 38 | `last_arg1` | U8 | Tag-specific payload |
+| 39 | `last_arg2` | U8 | Tag-specific payload |
+| 40 | `equalizer_step_left` | U8 | Left active loudness row (0–120); fixed 40 in bass boost |
+| 41 | `equalizer_step_right` | U8 | Right active loudness row (0–120) |
+| 42 | `source_has_volume_control` | U8 | `1` when USB SET_CUR host volume is authoritative |
+| 43 | `bass_boost_enabled` | U8 | `1` when **active** DSP mode is bass boost |
+| 44 | `gain_inferred_dbfs_left` | S8 | Peak-tracked inferred left gain |
+| 45 | `gain_inferred_dbfs_right` | S8 | Peak-tracked inferred right gain |
+| 46 | `loudness_enabled` | U8 | `1` when **active** DSP mode is loudness contour |
+| 47 | `sample_bits` | U8 | `16` = ALT2 (16-bit), `24` = ALT1 (24-bit), `0` = stream inactive |
+| 48 | `num_samples` | U8 | Stereo frames in the last received USB OUT packet (`0` when inactive) |
 
-Python struct format: `"<BBBBIIHHHIHbbbbIBBBBBBBBbbBBB"`
+Python struct format: `"<BBBBIIHHHIHhhhhIBBBBBBBBbbBBB"`
 
 `bass_boost_enabled` and `loudness_enabled` reflect **active mode** (mutually
 exclusive), not the raw UAC preference flags — both preferences can be `GET_CUR=1`.

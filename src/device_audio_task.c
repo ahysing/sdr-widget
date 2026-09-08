@@ -28,6 +28,8 @@ S32 spk_vol_mult_R = 0;
 volatile uint8_t input_select;							// BSB 20150501 global variable for input selector
 
 #ifdef FEATURE_VOLUME_CTRL
+#include "loudness.h"
+
 static S16 spk_vol_formatted_L = VOL_INVALID;
 static S16 spk_vol_formatted_R = VOL_INVALID;
 
