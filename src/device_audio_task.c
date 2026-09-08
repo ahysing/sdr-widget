@@ -27,6 +27,87 @@ S32 spk_vol_mult_R = 0;
 
 volatile uint16_t input_select;				// BSB 20150501 global variable for input selector. 20261011: one bit per MOBO_SRC_
 
+#ifdef FEATURE_VOLUME_CTRL
+static S16 spk_vol_formatted_L = VOL_INVALID;
+static S16 spk_vol_formatted_R = VOL_INVALID;
+
+device_audio_volume_apply_fn_t device_audio_volume_apply_fn = adjust_volume;
+
+void adjust_volume(S32 *sample_L, S32 *sample_R)
+{
+	if (spk_vol_mult_L != VOL_MULT_UNITY) {
+		*sample_L = (S32)((int64_t)(*sample_L) * (int64_t)spk_vol_mult_L
+			>> VOL_MULT_SHIFT);
+	}
+	if (spk_vol_mult_R != VOL_MULT_UNITY) {
+		*sample_R = (S32)((int64_t)(*sample_R) * (int64_t)spk_vol_mult_R
+			>> VOL_MULT_SHIFT);
+	}
+}
+
+static inline void hard_clip_single(S32 *sample)
+{
+	if (*sample > INT24_MAX) {
+		*sample = INT24_MAX;
+	}
+	if (*sample < INT24_MIN) {
+		*sample = INT24_MIN;
+	}
+}
+
+static inline void hard_clip(S32 *sample_L, S32 *sample_R)
+{
+	hard_clip_single(sample_L);
+	hard_clip_single(sample_R);
+}
+
+void adjust_volume_hard_clip(S32 *sample_L, S32 *sample_R)
+{
+	adjust_volume(sample_L, sample_R);
+	hard_clip(sample_L, sample_R);
+}
+
+void keep_volume(S32 *sample_L, S32 *sample_R)
+{
+	(void)sample_L;
+	(void)sample_R;
+}
+
+void device_audio_set_volume_in_biquad(Bool source_has_volume_control,
+	Bool active_filter_enabled)
+{
+	if (source_has_volume_control) {
+		device_audio_volume_apply_fn = active_filter_enabled
+			? adjust_volume_hard_clip : adjust_volume;
+	} else {
+		device_audio_volume_apply_fn = active_filter_enabled
+			? hard_clip : keep_volume;
+	}
+}
+
+void device_audio_volume_update_mult_left(void)
+{
+	if (spk_vol_usb_L != spk_vol_formatted_L) {
+		spk_vol_mult_L = usb_volume_format(spk_vol_usb_L);
+		spk_vol_formatted_L = spk_vol_usb_L;
+	}
+}
+
+void device_audio_volume_update_mult_right(void)
+{
+	if (spk_vol_usb_R != spk_vol_formatted_R) {
+		spk_vol_mult_R = usb_volume_format(spk_vol_usb_R);
+		spk_vol_formatted_R = spk_vol_usb_R;
+	}
+}
+
+void device_audio_volume_refresh_mult(void)
+{
+	device_audio_volume_update_mult_left();
+	device_audio_volume_update_mult_right();
+}
+#endif
+
 #ifdef FEATURE_SPDIF_CMD
 	volatile uint8_t spdif_cmd;				// BSB 20241123 global variable for debugging SPDIF receiver
 #endif
