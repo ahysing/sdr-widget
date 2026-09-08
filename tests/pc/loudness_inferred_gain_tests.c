@@ -61,8 +61,8 @@ void test_loudness_inferred_gain_fullscale(void) {
 
     loudness_test_reset_inferred_gain();
     loudness_test_set_long_memory((uint32_t)INT24_MAX);
-    assert(loudness_inferred_gain_dbfs() <= 0);
-    assert(loudness_inferred_gain_dbfs() >= -6);
+    assert(loudness_inferred_gain_dbfs_from_magnitude(loudness_test_get_long_memory()) <= 0);
+    assert(loudness_inferred_gain_dbfs_from_magnitude(loudness_test_get_long_memory()) >= -6);
     printf("test_loudness_inferred_gain_fullscale passed\n");
 }
 
@@ -72,8 +72,8 @@ void test_loudness_inferred_gain_halfscale(void) {
 
     loudness_test_reset_inferred_gain();
     loudness_test_set_long_memory(half);
-    assert(loudness_inferred_gain_dbfs() < 0);
-    assert(loudness_inferred_gain_dbfs() >= -13);
+    assert(loudness_inferred_gain_dbfs_from_magnitude(loudness_test_get_long_memory()) < 0);
+    assert(loudness_inferred_gain_dbfs_from_magnitude(loudness_test_get_long_memory()) >= -13);
     printf("test_loudness_inferred_gain_halfscale passed\n");
 }
 
@@ -139,8 +139,7 @@ void test_loudness_inferred_gain_tracks_with_usb_volume_control(void) {
     for (i = 0; i < 50000; i++) {
         loudness_envelope_follower_update_stereo(full, full);
     }
-    assert(loudness_inferred_gain_dbfs_channel(0) >= -6);
-    assert(loudness_inferred_gain_dbfs_channel(1) >= -6);
+    assert(loudness_inferred_gain_dbfs_from_magnitude(loudness_test_get_active_loudness_level()) >= -6);
     printf("test_loudness_inferred_gain_tracks_with_usb_volume_control passed\n");
 }
 

@@ -414,6 +414,10 @@ def parse_stats_payload(payload):
         raise ValueError("stats packet header mismatch")
 
     frequency_hz = frequency_100hz * 100
+    gain_dbfs_left = gain_dbfs_left_x10 / 10.0
+    gain_dbfs_right = gain_dbfs_right_x10 / 10.0
+    db_spl_left = db_spl_left_x10 / 10.0
+    db_spl_right = db_spl_right_x10 / 10.0
 
     stats = {
         "version": version,

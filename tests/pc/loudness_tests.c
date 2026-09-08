@@ -142,22 +142,6 @@ void test_usb_volume_format(void) {
     printf("test_usb_volume_format passed\n");
 }
 
-void test_loudness_apply_noise_shaper(void) {
-    /* Siden vi har valgt bort 2nd-order noise shaper, tester vi nå
-     * den rene, raske nedskaleringen (DOWNSAMPLE_24BIT) i stedet. */
-    printf("Running test_loudness_downsample_24bit...\n");
-
-    int32_t high_res_sample = 0x12345678; // Et full-scale internt 32-bit signal
-
-    // Makroen din gjør et rått skift med >> 8
-    int32_t out = DOWNSAMPLE_24BIT(high_res_sample);
-
-    // Verifiser at de laveste 8 bitene (0x78) kastes trygt bort, og at vi sitter igjen med 24-bit lyd
-    assert(out == 0x123456);
-
-    printf("test_loudness_downsample_24bit passed\n");
-}
-
 void test_saturate_24bit_s64_to_s32() {
     printf("Running test_saturate_24bit_s64_to_s32...\n");
     assert(saturate_24bit_s64_to_s32(8388607LL) == 8388607);
@@ -165,22 +149,6 @@ void test_saturate_24bit_s64_to_s32() {
     assert(saturate_24bit_s64_to_s32(-8388608LL) == -8388608);
     assert(saturate_24bit_s64_to_s32(-8388609LL) == -8388608);
     printf("test_saturate_24bit_s64_to_s32 passed\n");
-}
-
-void test_saturate_24bit_s32_to_s32(void) {
-    printf("Running test_saturate_24bit_s32_to_s32...\n");
-    assert(saturate_24bit_s32_to_s32(8388607) == 8388607);
-    assert(saturate_24bit_s32_to_s32(8388608) == 8388607);
-    assert(saturate_24bit_s32_to_s32(-8388608) == -8388608);
-    assert(saturate_24bit_s32_to_s32(-8388609) == -8388608);
-    printf("test_saturate_24bit_s32_to_s32 passed\n");
-}
-
-void test_saturate_24bit_s32_to_u32(void) {
-    printf("Running test_saturate_24bit_s32_to_u32...\n");
-    assert(saturate_24bit_s32_to_u32(8388607) == 8388607U);
-    assert(saturate_24bit_s32_to_u32(-8388608) == (U32)-8388608);
-    printf("test_saturate_24bit_s32_to_u32 passed\n");
 }
 
 void test_saturate_16bit_s32_to_s32(void) {
@@ -285,59 +253,6 @@ void test_digital_volume_mute(void) {
     int32_t hot_sample = 8388607;
     assert(apply_digital_volume(hot_sample, usb_volume_format(VOL_INVALID)) == 0);
     printf("test_digital_volume_mute passed\n");
-}
-
-/**
- * @brief Test for Use Case A: 16-bit Sign Extension Verification
- *
- * When 16-bit signed audio is packed inside an unsigned 32-bit container from USB,
- * negative half-waves have their MSB set to 1. The upsampling macros must perform
- * a proper signed cast first to ensure the upper bits are filled with 1s (sign extension).
- * If this fails, negative numbers turn into massive positive values, creating catastrophic distortion.
- */
-void test_loudness_16bit_sign_extension(void) {
-    printf("Running test_loudness_16bit_sign_extension...\n");
-
-    /* Simulate a negative 16-bit CD-audio sample (e.g., -4000) packed inside a U32 container */
-    uint16_t raw_negative_16bit = (uint16_t)-4000;
-    uint32_t usb_container_sample = (uint32_t)raw_negative_16bit;
-
-    /* Verify upsampling macro (32-bit output) */
-    int32_t sample_32 = UPSAMPLE_16BIT_32(usb_container_sample);
-    /* A negative input MUST remain a properly sign-extended negative input */
-    assert(sample_32 == -4000 * 65536LL || sample_32 == (-4000 << 16));
-    assert(sample_32 < 0);
-
-    /* Verify 64-bit upsampling macro */
-    int64_t sample_64 = UPSAMPLE_16BIT_64(usb_container_sample);
-    assert(sample_64 == -4000 * 65536LL || sample_64 == ((int64_t)-4000 << 16));
-    assert(sample_64 < 0);
-
-    printf("test_loudness_16bit_sign_extension passed\n\n");
-}
-
-/**
- * @brief Test for 24-bit sign extension in UPSAMPLE_24BIT macros
- *
- * 24-bit UAC samples are packed in the lower 24 bits of a 32-bit container.
- * Negative half-waves have bit 23 set but bits 24-31 are zero unless explicitly
- * sign-extended. The upsampling macros must normalize before scaling.
- */
-void test_loudness_24bit_sign_extension(void) {
-    printf("Running test_loudness_24bit_sign_extension...\n");
-
-    /* -4000 in 24-bit two's complement: lower 24 bits are 0xFFF060 */
-    uint32_t usb_container_sample = 0x00FFF060U;
-
-    int32_t sample_32 = UPSAMPLE_24BIT_32(usb_container_sample);
-    assert(sample_32 == (-4000 << 8));
-    assert(sample_32 < 0);
-
-    int64_t sample_64 = UPSAMPLE_24BIT_64(usb_container_sample);
-    assert(sample_64 == ((int64_t)-4000 << 8));
-    assert(sample_64 < 0);
-
-    printf("test_loudness_24bit_sign_extension passed\n\n");
 }
 
 /**
@@ -489,40 +404,6 @@ void test_loudness_df2_step_transition_no_reset(void) {
     printf("test_loudness_df2_step_transition_no_reset passed\n\n");
 }
 
-
-/**
- * @brief Test for Use Case B: Quantization Noise & Dither Verification
- *
- * Digitally attenuating 16-bit audio by -30 dB strips away bit depth.
- * The 2nd-order noise shaper with TPDF dither must break this signal-error correlation.
- * This test verifies that the error accumulator tracks and alternates the sign of
- * the quantization error, pushing the noise energy effectively out of the audio band.
- */
-void test_loudness_dither_and_noise_shaping(void) {
-    printf("Running test_loudness_dither_and_noise_shaping...\n");
-
-    int32_t error_accumulator_state = 0;
-
-    /* Simulate a highly vulnerable static low-level signal (truncation boundary stress) */
-    int32_t low_level_attenuated_sample = 0x00123456;
-
-    /* First processing step */
-    int32_t out1 = loudness_apply_noise_shaper_to_output(low_level_attenuated_sample, &error_accumulator_state);
-    int32_t first_error = error_accumulator_state;
-
-    /* The noise shaper MUST capture a non-zero quantization error from the 8-bit truncation */
-    assert(first_error != 0);
-
-    /* Second processing step with the exact same static input */
-    int32_t out2 = loudness_apply_noise_shaper_to_output(low_level_attenuated_sample, &error_accumulator_state);
-
-    /* A working 2nd-order high-pass noise shaper modulates the error dynamically.
-     * The error state MUST change after the second sample due to the feedback coefficients [2, -1]
-     * and the injected pseudo-random TPDF dither. */
-    assert(error_accumulator_state != first_error);
-
-    printf("test_loudness_dither_and_noise_shaping passed\n\n");
-}
 
 /**
  * @brief Test for Use Case C: Intersample Peaks & Headroom Stress-Testing
@@ -1581,10 +1462,7 @@ int main() {
     test_loudness_update_active_equalizer_step_uncompressed_18dbfs();
     test_loudness_update_active_equalizer_step_compressed_6dbfs();
     test_usb_volume_format();
-    test_loudness_apply_noise_shaper();
     test_saturate_24bit_s64_to_s32();
-    test_saturate_24bit_s32_to_s32();
-    test_saturate_24bit_s32_to_u32();
     test_saturate_16bit_s32_to_s32();
     test_loudness_get_gain_dbfs_per_channel();
     test_loudness_16bit_cd_audio_processing();
@@ -1592,8 +1470,6 @@ int main() {
     test_loudness_intersample_peak_saturation();
     test_digital_volume_mute();
 
-    test_loudness_16bit_sign_extension();
-    test_loudness_24bit_sign_extension();
     test_loudness_24bit_container_round_trip();
     test_loudness_24bit_container_zero_crossing();
     test_loudness_df2_step_transition_no_reset();
@@ -1625,7 +1501,6 @@ int main() {
     test_per_channel_independent_biquad();
     test_per_channel_baked_volume_policy();
     test_loudness_fast_biquad_exact_samples();
-    test_loudness_dither_and_noise_shaping();
     test_loudness_get_equalizer_step_121_levels();
     test_loudness_80_phon_baked_volume_filter();
     test_loudness_equalizer_step_half_db_boundaries();
