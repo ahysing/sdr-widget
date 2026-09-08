@@ -20,7 +20,6 @@ typedef struct {
     int32_t b1;
 } biquad_quotients_fast_t;
 
-int32_t loudness_lowshelf(int32_t x_n, biquad_state_fast_t *st, const biquad_quotients_fast_t *q);
 void loudness_filter_16bit_stereo_packet(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
 void loudness_filter_24bit_stereo_packet(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
 void loudness_filter_16bit_stereo_packet_2x_hz(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
@@ -30,6 +29,8 @@ const biquad_quotients_fast_t *loudness_fast_channel_quotients(int channel);
 const biquad_quotients_fast_t *loudness_lowshelf_active_quotients(void);
 
 #ifdef BUILD_TESTING
+int32_t loudness_lowshelf(int32_t x_n, biquad_state_fast_t *st, const biquad_quotients_fast_t *q);
+
 #define LOUDNESS_TEST_IDLE_LOWSHELF_LEFT   (1u << 0)
 #define LOUDNESS_TEST_IDLE_LOWSHELF_RIGHT  (1u << 1)
 #define LOUDNESS_TEST_IDLE_HIGHSHELF_LEFT  (1u << 2)

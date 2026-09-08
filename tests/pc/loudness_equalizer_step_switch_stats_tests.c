@@ -278,8 +278,8 @@ static void test_bass_boost_telemetry_reports_equalizer_step_40(void) {
     loudness_usb_volume_changed_stereo(0);
     loudness_update_active_equalizer_step();
     telemetry = stats_telemetry_read_best_effort();
-    assert(telemetry.equalizer_step_left == BASSS_PHON_55_IDX);
-    assert(telemetry.equalizer_step_right == BASSS_PHON_55_IDX);
+    assert(telemetry.equalizer_step_left == BASS_PHON_55_IDX);
+    assert(telemetry.equalizer_step_right == BASS_PHON_55_IDX);
     assert(telemetry.bass_boost_enabled == 1);
     assert(telemetry.loudness_enabled == 0);
     printf("test_bass_boost_telemetry_reports_equalizer_step_40 passed\n");

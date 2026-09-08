@@ -103,7 +103,7 @@ henryctl$(EXE_EXT): henryctl.c | check-libusb
 
 clean:
 ifeq ($(OS),Windows_NT)
-	-cmd /c del /f /q henryctl henryctl.exe *.obj *.o 2>nul
+	-cmd /c "del /f /q henryctl henryctl.exe *.obj *.o 2>NUL"
 else
 	rm -f henryctl henryctl.exe *.o *.obj
 endif

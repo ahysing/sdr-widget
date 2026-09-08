@@ -543,7 +543,7 @@ void uac2_freq_change_handler() {
 		loudness_request_frequency_change(spk_current_freq.frequency);
 #else
 		if (spk_current_freq.frequency != 0) {
-			loudness_change_frequency(spk_current_freq.frequency);
+			loudness_change_frequency_fast(spk_current_freq.frequency);
 		}
 #endif
 #endif

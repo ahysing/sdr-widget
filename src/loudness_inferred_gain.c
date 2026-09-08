@@ -249,9 +249,7 @@ void loudness_set_source_has_volume_control(void)
         loudness_inferred_gain_reset();
         loudness_refresh_quotient_table_selection();
 #ifdef FEATURE_VOLUME_CTRL
-        device_audio_set_volume_in_biquad(
-            TRUE,
-            loudness_active_filter() != FILTER_OFF_MODE);
+        loudness_refresh_volume_apply_fn();
 #endif
     }
 }
@@ -270,9 +268,7 @@ void loudness_test_reset_inferred_gain(void)
     source_has_volume_control = FALSE;
     loudness_inferred_gain_reset();
 #ifdef FEATURE_VOLUME_CTRL
-    device_audio_set_volume_in_biquad(
-        FALSE,
-        loudness_active_filter() != FILTER_OFF_MODE);
+    loudness_refresh_volume_apply_fn();
 #endif
 }
 

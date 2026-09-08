@@ -5,14 +5,6 @@
 #include "taskAK5394A.h"
 #include <string.h>
 
-/* Coefficients and the DF-II accumulator use Q4.28 throughout. */
-#define LOUDNESS_DF2_Q28_SHIFT          28
-#define LOUDNESS_DF2_Q28_ROUND          (1LL << (LOUDNESS_DF2_Q28_SHIFT - 1))
-#ifndef LOUDNESS_Q28_ONE
-#define LOUDNESS_Q28_ONE                ((int32_t)1 << LOUDNESS_DF2_Q28_SHIFT)
-#endif
-
-
 /*
  * Canonical DF-II accumulates pole gain before zeros attenuate. At 50 Hz the
  * internal delay line can grow ~5000x larger than x[n] (~13 bits), overflowing
@@ -21,8 +13,6 @@
  * Fix: store w1/w2 right-shifted by M bits (w' = w >> M). Stored history
  * products are lifted by M before the Q4.28 pole and zero sums.
  */
-#define LOUDNESS_DF2_STATE_HEADROOM_M   13
-#define LOUDNESS_EQUALIZER_STEP_UNSET   UINT8_MAX
 
 const biquad_first_order_quotients_t
 highshelf_no_volume_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
