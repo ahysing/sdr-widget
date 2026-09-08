@@ -242,26 +242,6 @@ Bool loudness_inferred_gain_has_source_volume_control(void)
     return source_has_volume_control;
 }
 
-int32_t loudness_inferred_gain_dbfs_channel(int channel)
-{
-    if (channel < 0 || channel >= LOUDNESS_CHANNELS) {
-        return LOUDNESS_DBFS_MIN;
-    }
-    return loudness_inferred_gain_dbfs_from_magnitude(
-        loudness_get_active_loudness_level(channel));
-}
-
-int32_t loudness_inferred_gain_dbfs(void)
-{
-    uint32_t mag = loudness_get_active_loudness_level(0);
-    uint32_t mag_right = loudness_get_active_loudness_level(1);
-
-    if (mag_right > mag) {
-        mag = mag_right;
-    }
-    return loudness_inferred_gain_dbfs_from_magnitude(mag);
-}
-
 void loudness_set_source_has_volume_control(void)
 {
     if (!source_has_volume_control) {

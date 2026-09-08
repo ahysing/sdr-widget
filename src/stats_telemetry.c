@@ -4,10 +4,10 @@
 
 static volatile U8 stats_telemetry_generation;
 static volatile U16 stats_telemetry_frequency_100hz;
-static volatile S8 stats_telemetry_gain_dbfs_left;
-static volatile S8 stats_telemetry_gain_dbfs_right;
-static volatile S8 stats_telemetry_db_spl_left;
-static volatile S8 stats_telemetry_db_spl_right;
+static volatile S16 stats_telemetry_gain_dbfs_left_x10;
+static volatile S16 stats_telemetry_gain_dbfs_right_x10;
+static volatile S16 stats_telemetry_db_spl_left_x10;
+static volatile S16 stats_telemetry_db_spl_right_x10;
 static volatile U8 stats_telemetry_equalizer_step_left;
 static volatile U8 stats_telemetry_equalizer_step_right;
 static volatile U8 stats_telemetry_source_has_volume_control;
@@ -22,10 +22,10 @@ void stats_telemetry_init(void)
 {
     stats_telemetry_generation = 0;
     stats_telemetry_frequency_100hz = 0;
-    stats_telemetry_gain_dbfs_left = 0;
-    stats_telemetry_gain_dbfs_right = 0;
-    stats_telemetry_db_spl_left = 0;
-    stats_telemetry_db_spl_right = 0;
+    stats_telemetry_gain_dbfs_left_x10 = 0;
+    stats_telemetry_gain_dbfs_right_x10 = 0;
+    stats_telemetry_db_spl_left_x10 = 0;
+    stats_telemetry_db_spl_right_x10 = 0;
     stats_telemetry_equalizer_step_left = 0;
     stats_telemetry_equalizer_step_right = 0;
     stats_telemetry_source_has_volume_control = 0;
@@ -45,21 +45,21 @@ void stats_telemetry_set_frequency_hz(U32 frequency_hz)
 }
 
 void stats_telemetry_set_gain_dbfs_stereo(
-    S8 gain_dbfs_left, S8 gain_dbfs_right)
+    S16 gain_dbfs_left_x10, S16 gain_dbfs_right_x10)
 {
     stats_telemetry_generation++;
-    stats_telemetry_gain_dbfs_left = gain_dbfs_left;
-    stats_telemetry_gain_dbfs_right = gain_dbfs_right;
+    stats_telemetry_gain_dbfs_left_x10 = gain_dbfs_left_x10;
+    stats_telemetry_gain_dbfs_right_x10 = gain_dbfs_right_x10;
     stats_telemetry_generation++;
 }
 
 void stats_telemetry_set_equalizer_state_stereo(
-    S8 db_spl_left, U8 equalizer_step_left,
-    S8 db_spl_right, U8 equalizer_step_right)
+    S16 db_spl_left_x10, U8 equalizer_step_left,
+    S16 db_spl_right_x10, U8 equalizer_step_right)
 {
     stats_telemetry_generation++;
-    stats_telemetry_db_spl_left = db_spl_left;
-    stats_telemetry_db_spl_right = db_spl_right;
+    stats_telemetry_db_spl_left_x10 = db_spl_left_x10;
+    stats_telemetry_db_spl_right_x10 = db_spl_right_x10;
     stats_telemetry_equalizer_step_left = equalizer_step_left;
     stats_telemetry_equalizer_step_right = equalizer_step_right;
     stats_telemetry_generation++;
@@ -117,10 +117,10 @@ stats_telemetry_snapshot_t stats_telemetry_read_best_effort(void)
     do {
         g1 = stats_telemetry_generation;
         snap.frequency_100hz = stats_telemetry_frequency_100hz;
-        snap.gain_dbfs_left = stats_telemetry_gain_dbfs_left;
-        snap.gain_dbfs_right = stats_telemetry_gain_dbfs_right;
-        snap.db_spl_left = stats_telemetry_db_spl_left;
-        snap.db_spl_right = stats_telemetry_db_spl_right;
+        snap.gain_dbfs_left_x10 = stats_telemetry_gain_dbfs_left_x10;
+        snap.gain_dbfs_right_x10 = stats_telemetry_gain_dbfs_right_x10;
+        snap.db_spl_left_x10 = stats_telemetry_db_spl_left_x10;
+        snap.db_spl_right_x10 = stats_telemetry_db_spl_right_x10;
         snap.equalizer_step_left = stats_telemetry_equalizer_step_left;
         snap.equalizer_step_right = stats_telemetry_equalizer_step_right;
         snap.source_has_volume_control = stats_telemetry_source_has_volume_control;
@@ -141,10 +141,10 @@ void stats_telemetry_test_reset(void)
 {
     stats_telemetry_generation = 0;
     stats_telemetry_frequency_100hz = 0;
-    stats_telemetry_gain_dbfs_left = 0;
-    stats_telemetry_gain_dbfs_right = 0;
-    stats_telemetry_db_spl_left = 0;
-    stats_telemetry_db_spl_right = 0;
+    stats_telemetry_gain_dbfs_left_x10 = 0;
+    stats_telemetry_gain_dbfs_right_x10 = 0;
+    stats_telemetry_db_spl_left_x10 = 0;
+    stats_telemetry_db_spl_right_x10 = 0;
     stats_telemetry_equalizer_step_left = 0;
     stats_telemetry_equalizer_step_right = 0;
     stats_telemetry_source_has_volume_control = 0;

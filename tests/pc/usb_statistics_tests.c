@@ -131,9 +131,9 @@ void test_statistics_wire_packet_is_little_endian() {
     buf->event_count = 3;
 
     stats_telemetry_set_frequency_hz(192000);
-    stats_telemetry_set_gain_dbfs_stereo((S8)-10, (S8)-20);
+    stats_telemetry_set_gain_dbfs_stereo((S16)-60, (S16)-200);
     stats_telemetry_set_equalizer_state_stereo(
-        (S8)80, 90, (S8)70, 70);
+        (S16)890, 90, (S16)750, 70);
     stats_telemetry_set_source_has_volume_control(1);
     stats_telemetry_set_bass_boost_enabled(1);
     stats_telemetry_set_loudness_enabled(0);
@@ -144,7 +144,7 @@ void test_statistics_wire_packet_is_little_endian() {
     statistics_test_build_wire_packet(wire, buf, 7);
 
     assert(USB_STATS_PACKET_VERSION == 6);
-    assert(USB_STATS_PACKET_WIRE_SIZE == 45);
+    assert(USB_STATS_PACKET_WIRE_SIZE == 49);
     assert(sizeof(usb_stats_packet_t) == USB_STATS_PACKET_WIRE_SIZE);
     assert(wire[0] == USB_STATS_PACKET_HID_ANCHOR);
     assert(wire[1] == USB_STATS_PACKET_VERSION);
@@ -161,17 +161,17 @@ void test_statistics_wire_packet_is_little_endian() {
     assert(wire[21] == 0x00);
     assert(wire[22] == 0x80);
     assert(wire[23] == 0x07);
-    assert((int8_t)wire[24] == -10);
-    assert((int8_t)wire[25] == -20);
-    assert((int8_t)wire[26] == 80);
-    assert((int8_t)wire[27] == 70);
-    assert(wire[28] == 0x03);
-    assert(wire[29] == 0x00);
-    assert(wire[30] == 0x00);
-    assert(wire[31] == 0x00);
-    assert(wire[36] == 90);
-    assert(wire[37] == 70);
-    assert(wire[38] == 1);
+    assert((int16_t)(wire[24] | (wire[25] << 8)) == -60);
+    assert((int16_t)(wire[26] | (wire[27] << 8)) == -200);
+    assert((int16_t)(wire[28] | (wire[29] << 8)) == 890);
+    assert((int16_t)(wire[30] | (wire[31] << 8)) == 750);
+    assert(wire[32] == 0x03);
+    assert(wire[33] == 0x00);
+    assert(wire[34] == 0x00);
+    assert(wire[35] == 0x00);
+    assert(wire[40] == 90);
+    assert(wire[41] == 70);
+    assert(wire[42] == 1);
     assert(wire[USB_STATS_WIRE_OFFSET_BASS_BOOST_ENABLED] == 1);
     assert(wire[USB_STATS_WIRE_OFFSET_LOUDNESS_ENABLED] == 0);
     assert((int8_t)wire[USB_STATS_WIRE_OFFSET_GAIN_INFERRED_LEFT] == -3);

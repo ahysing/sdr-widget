@@ -23,10 +23,10 @@ def build_v6_payload():
         90,
         3,
         1920,
-        -6,
-        -20,
-        89,
-        75,
+        -60,
+        -200,
+        890,
+        750,
         4,
         usbstatistics.USB_STATS_TAG_EQUALIZER_STEP_SWITCH,
         95,
@@ -58,10 +58,10 @@ class UsbStatisticsV6Tests(unittest.TestCase):
 
         self.assertEqual(stats["version"], 6)
         self.assertEqual(stats["frequency_hz"], 192000)
-        self.assertEqual(stats["gain_dbfs_left"], -6)
-        self.assertEqual(stats["gain_dbfs_right"], -20)
-        self.assertEqual(stats["db_spl_left"], 89)
-        self.assertEqual(stats["db_spl_right"], 75)
+        self.assertAlmostEqual(stats["gain_dbfs_left"], -6.0)
+        self.assertAlmostEqual(stats["gain_dbfs_right"], -20.0)
+        self.assertAlmostEqual(stats["db_spl_left"], 89.0)
+        self.assertAlmostEqual(stats["db_spl_right"], 75.0)
         self.assertEqual(stats["equalizer_step_left"], 108)
         self.assertEqual(stats["equalizer_step_right"], 80)
         self.assertEqual(stats["bass_boost_enabled"], 1)
