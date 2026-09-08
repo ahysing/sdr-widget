@@ -212,6 +212,12 @@ to exclude the API function. */
 #define configTSK_MoboCtrl_PRIORITY			  (tskIDLE_PRIORITY + 1) // mobodebug: +2 works, but we prefer imrpoved UAC2 code // Was 0 // (tskIDLE_PRIORITY + 1) // Was 0
 #define configTSK_MoboCtrl_PERIOD			  120
 
+/* loudness task definitions. */
+#define configTSK_LOUDNESS_NAME				  ((const signed portCHAR *)"LOUDNESS")
+#define configTSK_LOUDNESS_STACK_SIZE		  512
+#define configTSK_LOUDNESS_PRIORITY		     (tskIDLE_PRIORITY + 1)
+#define configTSK_LOUDNESS_PERIOD_MS	     1000
+
 /* taskExercise definitions */
 #define configTSK_EXERCISE_STACK_SIZE		256
 #define configTSK_EXERCISE_PRIORITY			(tskIDLE_PRIORITY + 1 )

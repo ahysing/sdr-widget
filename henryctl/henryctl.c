@@ -151,7 +151,7 @@ int find_feature_value(int index, char *value) {
 char *usb_serial_id = NULL;
 libusb_device_handle *usb_handle;
 char *usb_device = "none";
-char usb_data[1024];
+unsigned char usb_data[1024];
 unsigned int usb_timeout = 2000;
 
 
@@ -751,8 +751,11 @@ static void henryctl_print_vendor_failure(const henryctl_bool_feature_t *feature
 			feature->label, error_string(res));
 	} else if (!cfg_claimed) {
 		fprintf(stderr,
-			"henryctl: vendor %s failed: %s (could not claim config interface %d; see docs/FIRMWARE_USAGE.md USBView section)\n",
+			"henryctl: vendor %s failed: %s (could not claim config interface %d)\n",
 			feature->label, error_string(res), cfg_if);
+		fprintf(stderr,
+			"henryctl: on Windows install WinUSB on MI_%02d only via Zadig (see docs/FIRMWARE_USAGE.md); then reflash if vendor 0x%02x still fails\n",
+			cfg_if, feature->dg8saq_request);
 	} else if (verbose) {
 		fprintf(stderr,
 			"henryctl: vendor %s failed (%s), trying UAC2 SET_CUR\n",

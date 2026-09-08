@@ -84,8 +84,16 @@
 #include "pm.h"
 #include "Mobo_config.h"
 #include "features.h"
+#ifndef LOUDNESS_DISABLE
+#include "loudness.h"
+#endif
 // #include "usb_audio.h"
 // #include "device_audio_task.h"
+
+/* Henry Audio / henryctl vendor commands (interface 0, REQTYPE_VENDOR). */
+#define DG8SAQ_SET_BASS_BOOST  0x72u
+#define DG8SAQ_SET_LOUDNESS    0x73u
+#define DG8SAQ_CTL_BUFFER_SIZE 8u
 
 
 //_____ M A C R O S ________________________________________________________
@@ -121,7 +129,56 @@ volatile Bool freq_changed = FALSE;
 extern const    void *pbuffer;
 extern          U16   data_to_transfer;
 
+static U8 dg8saq_ctl_buffer[DG8SAQ_CTL_BUFFER_SIZE];
 
+static U8 dg8saq_vendor_setup_reply(U8 command, U16 wValue, U16 wIndex)
+{
+#ifndef LOUDNESS_DISABLE
+	(void)wValue;
+	(void)wIndex;
+	switch (command) {
+	case DG8SAQ_SET_BASS_BOOST:
+		dg8saq_ctl_buffer[0] = loudness_bass_boost_is_enabled() ? 1u : 0u;
+		return 1u;
+	case DG8SAQ_SET_LOUDNESS:
+		dg8saq_ctl_buffer[0] = loudness_loudness_is_enabled() ? 1u : 0u;
+		return 1u;
+	default:
+		break;
+	}
+#else
+	(void)command;
+	(void)wValue;
+	(void)wIndex;
+#endif
+	dg8saq_ctl_buffer[0] = 0u;
+	return 1u;
+}
+
+static void dg8saq_vendor_write(U8 command, U16 wValue, U16 wIndex, U8 len)
+{
+#ifndef LOUDNESS_DISABLE
+	(void)wValue;
+	(void)wIndex;
+	switch (command) {
+	case DG8SAQ_SET_BASS_BOOST:
+		if (len >= 1u)
+			loudness_bass_boost_set(dg8saq_ctl_buffer[0] != 0u);
+		break;
+	case DG8SAQ_SET_LOUDNESS:
+		if (len >= 1u)
+			loudness_loudness_set(dg8saq_ctl_buffer[0] != 0u);
+		break;
+	default:
+		break;
+	}
+#else
+	(void)command;
+	(void)wValue;
+	(void)wIndex;
+	(void)len;
+#endif
+}
 
 //_____ D E C L A R A T I O N S ____________________________________________
 
@@ -373,18 +430,24 @@ Bool usb_user_DG8SAQ(U8 type, U8 command) {
 	// Process USB Host to Device transmissions.  No result is returned.
 	//-------------------------------------------------------------------------------
 	if (type == (DRD_OUT | DRT_STD | DRT_VENDOR)) {
+		U16 read_len = wLength;
+
+		if (read_len > DG8SAQ_CTL_BUFFER_SIZE)
+			read_len = DG8SAQ_CTL_BUFFER_SIZE;
+
 		Usb_ack_setup_received_free();
 		while (!Is_usb_control_out_received());
 		Usb_reset_endpoint_fifo_access(EP_CONTROL);
-		
-		// This function is stripped down. Go back in commits to determine original version!
 
-		//for (x = 0; x<wLength;x++)
-		if (wLength>0)
-			for (x = wLength-1; x>=0;x--) {
-				Usb_read_endpoint_data(EP_CONTROL, 8);
+		if (read_len > 0) {
+			for (x = (int)read_len - 1; x >= 0; x--) {
+				dg8saq_ctl_buffer[x] = Usb_read_endpoint_data(EP_CONTROL, 8);
 			}
+		}
 		Usb_ack_control_out_received_free();
+
+		dg8saq_vendor_write(command, wValue, wIndex, (U8)read_len);
+
 		Usb_ack_control_in_ready_send();
 		while (!Is_usb_control_in_ready());
 	}
@@ -392,20 +455,20 @@ Bool usb_user_DG8SAQ(U8 type, U8 command) {
 	// Process USB query commands and return a result (flexible size data payload)
 	//-------------------------------------------------------------------------------
 	else if (type == (DRD_IN | DRT_STD | DRT_VENDOR)) {
-		// This is our all important hook - Process and execute command, read CW paddle state etc...
-		
-		// This function is stripped down. Go back in commits to determine original version!
+		U8 payload_len;
 
-		replyLen = 1; 
+		payload_len = dg8saq_vendor_setup_reply(command, wValue, wIndex);
+		if (wLength > 0 && wLength < payload_len)
+			payload_len = (U8)wLength;
+		replyLen = payload_len;
 
 		Usb_ack_setup_received_free();
 
 		Usb_reset_endpoint_fifo_access(EP_CONTROL);
 
-		// Write out if packet is larger than zero
 		if (replyLen) {
-			for (x = replyLen-1; x>=0;x--) {
-				Usb_write_endpoint_data(EP_CONTROL, 8, 0);	// send the reply
+			for (x = replyLen - 1; x >= 0; x--) {
+				Usb_write_endpoint_data(EP_CONTROL, 8, dg8saq_ctl_buffer[x]);
 			}
 		}
 
