@@ -17,7 +17,15 @@
 
 #define UAC2_USB_OUT_MAX_STEREO_SAMPLES  (EP_OUT_LENGTH_2_HS / 8u)
 
-#define BASSS_PHON_55_IDX                60
+#define BASS_PHON_55_IDX                 60
+
+/* Coefficients and the DF-II accumulator use Q4.28 throughout. */
+#define LOUDNESS_DF2_Q28_SHIFT          28
+#define LOUDNESS_DF2_Q28_ROUND          (1LL << (LOUDNESS_DF2_Q28_SHIFT - 1))
+#ifndef LOUDNESS_Q28_ONE
+#define LOUDNESS_Q28_ONE                ((int32_t)1 << LOUDNESS_DF2_Q28_SHIFT)
+#endif
+#define LOUDNESS_DF2_STATE_HEADROOM_M   13
 
 extern volatile S16 last_db_spl_left_x10;
 extern volatile S16 last_db_spl_right_x10;
@@ -32,14 +40,16 @@ int loudness_get_equalizer_step(int32_t db_spl_x10);
 
 void loudness_publish_equalizer_step(int32_t db_spl_left_x10, int32_t db_spl_right_x10);
 void loudness_report_equalizer_step_switch(int32_t prev_db_spl_x10, int32_t db_spl_x10, int prev_step, int equalizer_step);
-void loudness_apply_equalizer_step_if_needed(void);
+void loudness_equalizer_steps_for_mode(
+    int32_t db_spl_left_x10, int32_t db_spl_right_x10,
+    int *equalizer_step_left, int *equalizer_step_right);
 
 void loudness_fast_select_equalizer_steps(int32_t db_spl_left_x10, int32_t db_spl_right_x10, int equalizer_step_left, int equalizer_step_right);
 void loudness_fast_select_unity_passthrough(void);
 void loudness_fast_reset_states(void);
-void loudness_fast_refresh_idle_cache(void);
 
 const biquad_quotients_fast_t *loudness_fast_baked_quotient_table_48000hz(void);
+const biquad_quotients_fast_t *loudness_fast_baked_quotient_table_44100hz(void);
 void loudness_fast_refresh_quotient_table_pointers(void);
 const biquad_quotients_fast_t *loudness_fast_no_volume_quotient_table_48000hz(void);
 void loudness_fast_prepare_inactive_quotients(const biquad_quotients_fast_t *table, int equalizer_step_left, int equalizer_step_right);

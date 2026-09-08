@@ -48,11 +48,14 @@ void loudness_usb_statistics_init(void);
 void loudness_filter_init(void);
 
 #ifndef LOUDNESS_DISABLE
+void loudness_refresh_volume_apply_fn(void);
+#endif
+
+#ifndef LOUDNESS_DISABLE
 void loudness_rtos_init(void);
 Bool loudness_rtos_is_ready(void);
 void loudness_request_frequency_change(uint32_t frequency);
 void loudness_change_frequency_fast(uint32_t frequency);
-#define loudness_change_frequency loudness_change_frequency_fast
 
 #define LOUDNESS_FILTER_16BIT_STEREO_PACKET(L, R, N) \
     loudness_filter_16bit_stereo_packet((L), (R), (N))

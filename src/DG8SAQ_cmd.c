@@ -803,7 +803,7 @@ uint8_t dg8saqFunctionSetup(uint8_t type, uint16_t wValue, uint16_t wIndex, U8* 
 						loudness_request_frequency_change(current_freq.frequency);
 #else
 						if (current_freq.frequency != 0) {
-							loudness_change_frequency(current_freq.frequency);
+							loudness_change_frequency_fast(current_freq.frequency);
 						}
 #endif
 #endif
@@ -818,7 +818,7 @@ uint8_t dg8saqFunctionSetup(uint8_t type, uint16_t wValue, uint16_t wIndex, U8* 
 						loudness_request_frequency_change(current_freq.frequency);
 #else
 						if (current_freq.frequency != 0) {
-							loudness_change_frequency(current_freq.frequency);
+							loudness_change_frequency_fast(current_freq.frequency);
 						}
 #endif
 #endif
@@ -833,7 +833,7 @@ uint8_t dg8saqFunctionSetup(uint8_t type, uint16_t wValue, uint16_t wIndex, U8* 
 						loudness_request_frequency_change(current_freq.frequency);
 #else
 						if (current_freq.frequency != 0) {
-							loudness_change_frequency(current_freq.frequency);
+							loudness_change_frequency_fast(current_freq.frequency);
 						}
 #endif
 #endif

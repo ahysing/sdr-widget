@@ -300,8 +300,12 @@ henryctl$(EXE_EXT):
 
 clean:: clean-test
 	rm -f widget-control widget-control.exe henryctl.exe
-	$(MAKE) -C henryctl clean
-	cd Release && make clean
+ifeq ($(OS),Windows_NT)
+	-cmd /c "del /f /q henryctl\henryctl henryctl\henryctl.exe henryctl\*.obj henryctl\*.o 2>NUL"
+else
+	rm -f henryctl/henryctl henryctl/henryctl.exe henryctl/*.obj henryctl/*.o
+endif
+	$(MAKE) -C Release clean
 
 clean-test:
 	$(TEST_RMDIR)

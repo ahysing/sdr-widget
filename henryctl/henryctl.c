@@ -151,7 +151,7 @@ int find_feature_value(int index, char *value) {
 char *usb_serial_id = NULL;
 libusb_device_handle *usb_handle;
 char *usb_device = "none";
-char usb_data[1024];
+unsigned char usb_data[1024];
 unsigned int usb_timeout = 2000;
 
 
