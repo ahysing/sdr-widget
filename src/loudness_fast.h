@@ -9,7 +9,6 @@
 #include <stdint.h>
 #include "compiler.h"
 
-#define LOUDNESS_FAST_FILTERS 1
 #define LOUDNESS_CHANNELS     2
 typedef struct {
     int32_t w1;  /* canonical DF-II delay state 1, stored with M-bit headroom */
@@ -22,12 +21,12 @@ typedef struct {
 } biquad_quotients_fast_t;
 
 int32_t loudness_lowshelf(int32_t x_n, biquad_state_fast_t *st, const biquad_quotients_fast_t *q);
-int32_t biquad_step_fast_32bit(int32_t sample, biquad_state_fast_t* biquad_states, const biquad_quotients_fast_t* q);
 void loudness_filter_16bit_stereo_packet(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
 void loudness_filter_24bit_stereo_packet(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
+void loudness_filter_16bit_stereo_packet_2x_hz(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
+void loudness_filter_24bit_stereo_packet_2x_hz(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
 void loudness_change_frequency_fast(uint32_t frequency);
 const biquad_quotients_fast_t *loudness_fast_channel_quotients(int channel);
-const biquad_quotients_fast_t *loudness_lowshelf_quotients(int channel);
 const biquad_quotients_fast_t *loudness_lowshelf_active_quotients(void);
 
 #ifdef BUILD_TESTING
