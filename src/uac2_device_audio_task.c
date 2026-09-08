@@ -713,11 +713,15 @@ void uac2_device_audio_task(void *pvParameters)
 								usb_out_R[i]);
 						}
 						if (audio_out_alt == ALT2_AS_INTERFACE_INDEX) {
-							LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L,
-								usb_out_R, num_samples);
+							if (current_freq.frequency <= FREQ_48)
+								LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L, usb_out_R, num_samples);
+							else
+								LOUDNESS_FILTER_16BIT_STEREO_PACKET_2X_HZ(usb_out_L, usb_out_R, num_samples);
 						} else if (audio_out_alt == ALT1_AS_INTERFACE_INDEX) {
-							LOUDNESS_FILTER_24BIT_STEREO_PACKET(usb_out_L,
-								usb_out_R, num_samples);
+							if (current_freq.frequency <= FREQ_48)
+								LOUDNESS_FILTER_24BIT_STEREO_PACKET(usb_out_L, usb_out_R, num_samples);
+							else
+								LOUDNESS_FILTER_24BIT_STEREO_PACKET_2X_HZ(usb_out_L, usb_out_R, num_samples);
 						}
 					}
 #endif

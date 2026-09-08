@@ -59,6 +59,11 @@ void loudness_change_frequency_fast(uint32_t frequency);
 #define LOUDNESS_FILTER_24BIT_STEREO_PACKET(L, R, N) \
     loudness_filter_24bit_stereo_packet((L), (R), (N))
 
+#define LOUDNESS_FILTER_16BIT_STEREO_PACKET_2X_HZ(L, R, N) \
+    loudness_filter_16bit_stereo_packet_2x_hz((L), (R), (N))
+#define LOUDNESS_FILTER_24BIT_STEREO_PACKET_2X_HZ(L, R, N) \
+    loudness_filter_24bit_stereo_packet_2x_hz((L), (R), (N))
+
 /* Force the active loudness band from an external dBFS estimate (<= 0). */
 void loudness_set_level_dbfs(int32_t db_fs);
 
@@ -96,9 +101,12 @@ int32_t loudness_get_db_spl_right_x10(void);
     do { (void)(L); (void)(R); (void)(N); } while (0)
 #define LOUDNESS_FILTER_24BIT_STEREO_PACKET(L, R, N) \
     do { (void)(L); (void)(R); (void)(N); } while (0)
-#endif /* LOUDNESS_DISABLE */
 
-int32_t loudness_apply_noise_shaper_to_output(int32_t sample_32bit, int32_t* noise_shaper_error);
+#define LOUDNESS_FILTER_16BIT_STEREO_PACKET_2X_HZ(L, R, N) \
+    do { (void)(L); (void)(R); (void)(N); } while (0)
+#define LOUDNESS_FILTER_24BIT_STEREO_PACKET_2X_HZ(L, R, N) \
+    do { (void)(L); (void)(R); (void)(N); } while (0)
+#endif /* LOUDNESS_DISABLE */
 
 /* --- Helpers --- */
 
@@ -127,27 +135,10 @@ static inline int CLZ(uint32_t x) {
 
 /* Clamp wide accumulators/samples to the 24-bit DAC range. */
 S32 saturate_24bit_s64_to_s32(S64 acc);
-S32 saturate_24bit_s32_to_s32(S32 acc);
-U32 saturate_24bit_s32_to_u32(S32 acc);
 S32 saturate_16bit_s32_to_s32(S32 acc);
-
-/* Correct macros for upsampling/downsampling */
-#define UPSAMPLE_16BIT_64(sample) (((int64_t)(int16_t)(sample)) << 16)
-#define UPSAMPLE_24BIT_64(sample) (((int64_t)(((int32_t)(sample) << 8) >> 8)) << 8)
-#define UPSAMPLE_16BIT_32(sample) (((int32_t)(int16_t)(sample)) << 16)
-#define UPSAMPLE_24BIT_32(sample) ((((int32_t)(sample) << 8) >> 8) << 8)
-#define UPSAMPLE_16BIT_TO_FILTER_32(sample) (((int32_t)(int16_t)((sample) >> 16)) << 8)
-#define DOWNSAMPLE_FILTER_TO_16BIT_CONTAINER(sample) \
-    ((int32_t)(((int64_t)saturate_16bit_s32_to_s32((sample) >> 8) << 16)))
-#define DOWNSAMPLE_24BIT(sample) ((int32_t)((sample) >> 8))
-#define DOWNSAMPLE_16BIT(sample) ((int16_t)((sample) >> 16))
 
 /* Round-half-up right-shift for signed 64-bit values. */
 #define ROUND_SHIFT_S64(x, n) \
     (((int64_t)(x) + (1LL << ((n) - 1))) >> (n))
-
-/* Quantize internal 32.8 fixed sample to 24-bit DAC word (round, not truncate). */
-#define DOWNSAMPLE_24BIT_ROUND(sample) \
-    ((int32_t)ROUND_SHIFT_S64((sample), 8))
 
 #endif

@@ -83,20 +83,6 @@ S32 saturate_24bit_s64_to_s32(S64 acc) {
     return (S32)acc;
 }
 
-S32 saturate_24bit_s32_to_s32(S32 acc) {
-    if (acc > INT24_MAX) {
-        return (S32)INT24_MAX;
-    }
-    if (acc < INT24_MIN) {
-        return (S32)INT24_MIN;
-    }
-    return acc;
-}
-
-U32 saturate_24bit_s32_to_u32(S32 acc) {
-    return (U32)saturate_24bit_s32_to_s32(acc);
-}
-
 S32 saturate_16bit_s32_to_s32(S32 acc) {
     if (acc > INT16_MAX) {
         return (S32)INT16_MAX;
@@ -258,13 +244,6 @@ int32_t loudness_gain_dbfs_q8_to_x10(int32_t gain_dbfs_q8)
     return (int32_t)((scaled - 128) / 256);
 }
 
-int32_t loudness_usb_volume_q8_to_gain_dbfs(S16 volume_q8)
-{
-    int32_t gain_q8 = loudness_clamp_gain_dbfs_q8(
-        (int32_t)volume_q8 - (int32_t)VOL_MAX);
-    return loudness_clamp_gain_dbfs(gain_q8 / 256);
-}
-
 #if !defined(USBSTATISTICS_DISABLE)
 
 static void loudness_record_event_tag(U8 tag, U8 arg0, U8 arg1, U8 arg2)
@@ -282,17 +261,6 @@ static void loudness_record_equalizer_step_switch_event(
             (U8)((db_spl_x10 + 5) / 10),
             (U8)equalizer_step);
     }
-}
-
-static int8_t loudness_clamp_s8(int32_t value)
-{
-    if (value < -128) {
-        return (int8_t)-128;
-    }
-    if (value > 127) {
-        return (int8_t)127;
-    }
-    return (int8_t)value;
 }
 #endif
 
@@ -505,12 +473,10 @@ static void loudness_publish_equalizer_telemetry(void)
 #if !defined(USBSTATISTICS_DISABLE)
     int32_t db_spl_left_x10 = loudness_get_db_spl_left_x10();
     int32_t db_spl_right_x10 = loudness_get_db_spl_right_x10();
-    int32_t db_spl_left;
-    int32_t db_spl_right;
+    int32_t gain_dbfs_left_x10 = loudness_get_gain_dbfs_left_x10();
+    int32_t gain_dbfs_right_x10 = loudness_get_gain_dbfs_right_x10();
     U8 equalizer_step_left;
     U8 equalizer_step_right;
-    db_spl_left = (db_spl_left_x10 + 5) / 10;
-    db_spl_right = (db_spl_right_x10 + 5) / 10;
     if (last_filter_enabled == BASS_BOOST_MODE) {
         equalizer_step_left = (U8)BASSS_PHON_55_IDX;
         equalizer_step_right = (U8)BASSS_PHON_55_IDX;
@@ -519,14 +485,14 @@ static void loudness_publish_equalizer_telemetry(void)
         equalizer_step_right = (U8)loudness_get_equalizer_step(db_spl_right_x10);
     }
     stats_telemetry_set_gain_dbfs_stereo(
-        loudness_clamp_s8(db_spl_left - LOUDNESS_DB_SPL_MAX),
-        loudness_clamp_s8(db_spl_right - LOUDNESS_DB_SPL_MAX));
+        (S16)gain_dbfs_left_x10,
+        (S16)gain_dbfs_right_x10);
     stats_telemetry_set_source_has_volume_control(
         loudness_inferred_gain_has_source_volume_control() ? 1u : 0u);
     stats_telemetry_set_equalizer_state_stereo(
-        loudness_clamp_s8(db_spl_left),
+        (S16)db_spl_left_x10,
         equalizer_step_left,
-        loudness_clamp_s8(db_spl_right),
+        (S16)db_spl_right_x10,
         equalizer_step_right);
 #endif
 }
@@ -739,21 +705,6 @@ Bool loudness_uac2_packet_filter_enabled(Bool not_muted, uint32_t freq_hz)
         && loudness_active_filter() != FILTER_OFF_MODE;
 }
 #endif
-
-int32_t loudness_apply_noise_shaper_to_output(int32_t sample_32bit, int32_t* noise_shaper_error) {
-    int32_t error = *noise_shaper_error;
-    int64_t accumulated_sample = (int64_t)sample_32bit - (int64_t)error;
-    int32_t sample_24bit = DOWNSAMPLE_24BIT_ROUND(accumulated_sample);
-    int32_t reconstructed_32bit = sample_24bit << 8;
-    *noise_shaper_error = reconstructed_32bit - sample_32bit;
-    if (sample_24bit > INT24_MAX) {
-        return (int32_t)INT24_MAX;
-    }
-    if (sample_24bit < INT24_MIN) {
-        return (int32_t)INT24_MIN;
-    }
-    return sample_24bit;
-}
 
 #ifdef LOUDNESS_DISABLE
 

@@ -45,7 +45,7 @@ USB_STATS_HID_TRANSFER_SIZE = 64
 USB_STATS_PACKET_HID_ANCHOR = 0x53
 USB_STATS_PACKET_MAGIC = USB_STATS_PACKET_HID_ANCHOR  # backward-compatible alias
 USB_STATS_PACKET_VERSION = 6
-USB_STATS_PACKET_FORMAT = "<BBBBIIHHHIHbbbbIBBBBBBBBbbBBB"
+USB_STATS_PACKET_FORMAT = "<BBBBIIHHHIHhhhhIBBBBBBBBbbBBB"
 USB_STATS_PACKET_SIZE = struct.calcsize(USB_STATS_PACKET_FORMAT)
 USB_STATS_PACKET_CHECKSUM_INDEX = 3
 USB_STATS_HID_REPORT_SIZE = 63
@@ -409,10 +409,10 @@ def parse_stats_payload(payload):
         min_fifo,
         deadline_misses,
         frequency_100hz,
-        gain_dbfs_left,
-        gain_dbfs_right,
-        db_spl_left,
-        db_spl_right,
+        gain_dbfs_left_x10,
+        gain_dbfs_right_x10,
+        db_spl_left_x10,
+        db_spl_right_x10,
         event_count,
         last_tag,
         last_arg0,
@@ -433,6 +433,10 @@ def parse_stats_payload(payload):
         raise ValueError("stats packet header mismatch")
 
     frequency_hz = frequency_100hz * 100
+    gain_dbfs_left = gain_dbfs_left_x10 / 10.0
+    gain_dbfs_right = gain_dbfs_right_x10 / 10.0
+    db_spl_left = db_spl_left_x10 / 10.0
+    db_spl_right = db_spl_right_x10 / 10.0
 
     stats = {
         "version": version,

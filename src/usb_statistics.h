@@ -46,10 +46,10 @@ PACK(struct usb_stats_packet {
     U16 min_fifo;
     U32 deadline_misses;
     U16 frequency_100hz;
-    S8 gain_dbfs_left;
-    S8 gain_dbfs_right;
-    S8 db_spl_left;
-    S8 db_spl_right;
+    S16 gain_dbfs_left_x10;
+    S16 gain_dbfs_right_x10;
+    S16 db_spl_left_x10;
+    S16 db_spl_right_x10;
     U32 event_count;
     U8 last_tag;
     U8 last_arg0;

@@ -28,20 +28,21 @@ The output is `widget-control.exe` on Windows.
 
 ### `henryctl`
 
-`henryctl` controls the firmware loudness bass boost flag (`--bassboost 0|1`).
+`henryctl` controls the firmware loudness bass boost flag (`--bassboost 0|1`) and loudness filter (`--loudness 0|1`).
+It lives in its own dedicated subfolder [`henryctl/`](../henryctl) with a standalone `Makefile` and PowerShell build script, and links `libusb` statically on Windows for easy redistribution.
 See [FIRMWARE_USAGE.md](FIRMWARE_USAGE.md) for behaviour, Zadig setup, and
 troubleshooting.
 
 ```bash
+# Build from repo root
 make henryctl
+
+# Or build from henryctl/ subfolder
+cd henryctl
+make henryctl.exe
 ```
 
-The output is `henryctl.exe` on Windows.
-
-Both tools default to `AUDIO_WIDGET_DEFAULTS` — the same feature defines as
-`make audio-widget` (Henry Audio USB DAC 128 / Mk II / Mk III, QNKTC AB-1.x).
-To match a different firmware profile, override `WIDGET_DEFAULTS` (see root
-`Makefile` for `AUDIO_WIDGET_DEFAULTS` and `SDR_WIDGET_DEFAULTS`).
+The output is `henryctl.exe` on Windows (or `henryctl` on Linux).
 
 ### MSYS2 (UCRT64) — recommended on Windows
 
@@ -51,15 +52,19 @@ Install dependencies once:
 pacman -S --needed mingw-w64-ucrt-x86_64-gcc make mingw-w64-ucrt-x86_64-libusb
 ```
 
-From the repo root in the **UCRT64** shell:
+From the **UCRT64** shell:
 
 ```bash
+# From repo root:
 make henryctl widget-control
+
+# Or from henryctl/ directory:
+cd henryctl
+make henryctl.exe
 ./henryctl.exe -v --bassboost 1
 ```
 
-Use `make henryctl` (not a bare `cl`/`gcc` line). The Makefile picks MinGW `gcc`
-and libusb from the UCRT64 prefix automatically.
+The `henryctl` Makefile links `libusb` statically so `libusb-1.0.dll` does not need to be distributed.
 
 On Windows, `henryctl` needs a one-time **Zadig** step (WinUSB on USB interface 0
 only) so libusb can claim the DG8SAQ config interface. Audio playback and
@@ -68,28 +73,30 @@ only) so libusb can claim the DG8SAQ config interface. Audio playback and
 
 ### MSVC (PowerShell / Developer Command Prompt)
 
-1. Install [libusb via vcpkg](https://vcpkg.io/):
+1. Install static libusb via vcpkg:
 
    ```powershell
-   vcpkg install libusb:x64-windows
+   vcpkg install libusb:x64-windows-static
    ```
 
 2. Load the Visual Studio environment and build:
 
    ```powershell
    .\vcvars64.ps1
-   make henryctl widget-control VCPKG_DIR=C:\path\to\vcpkg
+   .\henryctl\build.ps1
+   # Or using make:
+   make henryctl
    ```
 
-   Default `VCPKG_DIR` is `C:/Users/AHysing/code/vcpkg` if unset.
-
-If you see `Cannot open include file: 'libusb-1.0/libusb.h'`, libusb is not installed in `VCPKG_DIR/installed/x64-windows`, or `VCPKG_DIR` points at the wrong tree.
+   `henryctl.exe` is statically linked against `libusb:x64-windows-static` with no runtime DLL dependencies.
 
 ### Linux
 
 ```bash
-sudo apt install libusb-1.0-0-dev   # Debian/Ubuntu
+sudo apt install libusb-1.0-0-dev make gcc   # Debian/Ubuntu
 make henryctl widget-control
+# Or:
+cd henryctl && make
 ```
 
 ## Compilation

@@ -107,18 +107,18 @@ static void statistics_build_wire_packet(U8 *wire, const volatile usb_stats_t *s
     statistics_write_le16(&wire[16], s->min_fifo);
     statistics_write_le32(&wire[18], s->deadline_misses);
     statistics_write_le16(&wire[22], telemetry->frequency_100hz);
-    wire[24] = (U8)telemetry->gain_dbfs_left;
-    wire[25] = (U8)telemetry->gain_dbfs_right;
-    wire[26] = (U8)telemetry->db_spl_left;
-    wire[27] = (U8)telemetry->db_spl_right;
-    statistics_write_le32(&wire[28], s->event_count);
-    wire[32] = s->last_tag;
-    wire[33] = s->last_arg0;
-    wire[34] = s->last_arg1;
-    wire[35] = s->last_arg2;
-    wire[36] = telemetry->equalizer_step_left;
-    wire[37] = telemetry->equalizer_step_right;
-    wire[38] = telemetry->source_has_volume_control ? 1u : 0u;
+    statistics_write_le16(&wire[24], (U16)telemetry->gain_dbfs_left_x10);
+    statistics_write_le16(&wire[26], (U16)telemetry->gain_dbfs_right_x10);
+    statistics_write_le16(&wire[28], (U16)telemetry->db_spl_left_x10);
+    statistics_write_le16(&wire[30], (U16)telemetry->db_spl_right_x10);
+    statistics_write_le32(&wire[32], s->event_count);
+    wire[36] = s->last_tag;
+    wire[37] = s->last_arg0;
+    wire[38] = s->last_arg1;
+    wire[39] = s->last_arg2;
+    wire[40] = telemetry->equalizer_step_left;
+    wire[41] = telemetry->equalizer_step_right;
+    wire[42] = telemetry->source_has_volume_control ? 1u : 0u;
     wire[USB_STATS_WIRE_OFFSET_BASS_BOOST_ENABLED] =
         telemetry->bass_boost_enabled ? 1u : 0u;
     wire[USB_STATS_WIRE_OFFSET_GAIN_INFERRED_LEFT] =

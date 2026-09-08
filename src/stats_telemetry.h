@@ -5,10 +5,10 @@
 
 typedef struct {
     U16 frequency_100hz;
-    S8 gain_dbfs_left;
-    S8 gain_dbfs_right;
-    S8 db_spl_left;
-    S8 db_spl_right;
+    S16 gain_dbfs_left_x10;
+    S16 gain_dbfs_right_x10;
+    S16 db_spl_left_x10;
+    S16 db_spl_right_x10;
     U8 equalizer_step_left;
     U8 equalizer_step_right;
     U8 source_has_volume_control;
@@ -23,10 +23,10 @@ typedef struct {
 void stats_telemetry_init(void);
 void stats_telemetry_set_frequency_hz(U32 frequency_hz);
 void stats_telemetry_set_gain_dbfs_stereo(
-    S8 gain_dbfs_left, S8 gain_dbfs_right);
+    S16 gain_dbfs_left_x10, S16 gain_dbfs_right_x10);
 void stats_telemetry_set_equalizer_state_stereo(
-    S8 db_spl_left, U8 equalizer_step_left,
-    S8 db_spl_right, U8 equalizer_step_right);
+    S16 db_spl_left_x10, U8 equalizer_step_left,
+    S16 db_spl_right_x10, U8 equalizer_step_right);
 void stats_telemetry_set_source_has_volume_control(U8 source_has_volume_control);
 void stats_telemetry_set_bass_boost_enabled(U8 bass_boost_enabled);
 void stats_telemetry_set_loudness_enabled(U8 loudness_enabled);

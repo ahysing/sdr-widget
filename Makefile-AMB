@@ -113,10 +113,11 @@ sdr-widget::
 widget-control: widget-control.c src/features.h
 	gcc $(AUDIO_WIDGET_DEFAULTS) -o widget-control widget-control.c -lusb-1.0
 
-henryctl: henryctl.c src/features.h src/widget_control_usb_ids.h
-	gcc $(AUDIO_WIDGET_DEFAULTS) -o henryctl henryctl.c -lusb-1.0
+henryctl:
+	$(MAKE) -C henryctl henryctl
 
 clean::
-	rm -f widget-control widget-control.exe henryctl henryctl.exe
+	rm -f widget-control widget-control.exe henryctl.exe
+	$(MAKE) -C henryctl clean
 	cd Release && make clean
-	rm -f widget-control henryctl
+	rm -f widget-control

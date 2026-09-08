@@ -272,7 +272,8 @@ audio-widget::
 
 widget-control: widget-control$(EXE_EXT)
 
-henryctl: henryctl$(EXE_EXT)
+henryctl:
+	$(MAKE) -C henryctl henryctl$(EXE_EXT)
 
 check-libusb:
 ifeq ($(wildcard $(LIBUSB_HEADER)),)
@@ -294,11 +295,12 @@ endif
 widget-control$(EXE_EXT): widget-control.c src/features.h | check-libusb
 	$(CC) $(WIDGET_DEFAULTS) $(CFLAGS_COMMON) $(OUT_FLAG)$@ widget-control.c $(LINK_USB)
 
-henryctl$(EXE_EXT): henryctl.c src/features.h src/widget_control_usb_ids.h | check-libusb
-	$(CC) $(WIDGET_DEFAULTS) $(CFLAGS_COMMON) $(OUT_FLAG)$@ henryctl.c $(LINK_USB)
+henryctl$(EXE_EXT):
+	$(MAKE) -C henryctl henryctl$(EXE_EXT)
 
 clean:: clean-test
-	rm -f widget-control widget-control.exe henryctl henryctl.exe
+	rm -f widget-control widget-control.exe henryctl.exe
+	$(MAKE) -C henryctl clean
 	cd Release && make clean
 
 clean-test:
@@ -400,13 +402,12 @@ help:
 	@echo "  make test LOUDNESS_DISABLE=1"
 	@echo "  make test USBSTATISTICS_DISABLE=1"
 	@echo ""
-	@echo "Host tool widget-control:"
+	@echo "Host tools (widget-control & henryctl):"
 	@echo "  make widget-control            Build widget-control$(EXE_EXT) (SDR-Widget features API)"
-	@echo "  make henryctl                  Build henryctl$(EXE_EXT) (bass boost / loudness gate)"
+	@echo "  make henryctl                  Build henryctl$(EXE_EXT) in henryctl/ (bass boost / loudness gate)"
 	@echo "  MSYS2/UCRT64: pacman -S mingw-w64-ucrt-x86_64-libusb make"
-	@echo "  MSVC:         vcpkg install libusb:x64-windows, run vcvars64, then make"
+	@echo "  PowerShell:   vcpkg install libusb:x64-windows-static, run .\vcvars64.ps1, then make henryctl (or .\henryctl\build.ps1)"
 	@echo "  Override:     make henryctl VCPKG_DIR=C:/path/to/vcpkg"
-	@echo "  Other board:  make henryctl WIDGET_DEFAULTS=\"\$$(SDR_WIDGET_DEFAULTS)\""
 	@echo ""
 	@echo "PC unit tests (MSVC on Windows):"
 	@echo "  make test                      Build and run applicable test suites"

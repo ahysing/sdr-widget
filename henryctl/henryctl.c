@@ -15,8 +15,30 @@ const char usage[] = {
 #include <stdio.h>
 #include <string.h>
 #include <libusb-1.0/libusb.h>
-#include "src/features.h"
+
+#if defined(__has_include)
+#if __has_include("widget_control_usb_ids.h")
+#include "widget_control_usb_ids.h"
+#elif __has_include("src/widget_control_usb_ids.h")
 #include "src/widget_control_usb_ids.h"
+#else
+#include "../src/widget_control_usb_ids.h"
+#endif
+#else
+#include "src/widget_control_usb_ids.h"
+#endif
+
+/* DG8SAQ features API constants */
+#ifndef FEATURE_DG8SAQ_COMMAND
+#define FEATURE_DG8SAQ_COMMAND        0x71
+#define FEATURE_DG8SAQ_SET_NVRAM      3
+#define FEATURE_DG8SAQ_GET_NVRAM      4
+#define FEATURE_DG8SAQ_SET_RAM        5
+#define FEATURE_DG8SAQ_GET_RAM        6
+#define FEATURE_DG8SAQ_GET_INDEX_NAME 7
+#define FEATURE_DG8SAQ_GET_VALUE_NAME 8
+#define FEATURE_DG8SAQ_GET_DEFAULT    9
+#endif
 
 int verbose = 0;
 static int require_features = 1;

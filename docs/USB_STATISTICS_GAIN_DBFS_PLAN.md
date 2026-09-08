@@ -68,9 +68,11 @@ In [`loudness_update_active_equalizer_step()`](../src/loudness.c) (~20 ms loudne
 On snapshot, write all three loudness fields in [`loudness_record_stats_snapshots()`](../src/loudness.c):
 
 ```c
-stats->track_dbfs = loudness_clamp_s8(loudness_get_track_dbfs());
-stats->gain_dbfs  = loudness_clamp_s8(gain_dbfs);
-stats->db_spl     = loudness_clamp_s8(snap->db_spl);
+stats->track_dbfs_x10 = (S16)loudness_get_track_dbfs();
+stats->gain_dbfs_left_x10 = (S16)gain_dbfs_left_x10;
+stats->gain_dbfs_right_x10 = (S16)gain_dbfs_right_x10;
+stats->db_spl_left_x10 = (S16)snap->db_spl_left_x10;
+stats->db_spl_right_x10 = (S16)snap->db_spl_right_x10;
 ```
 
 Extend `loudness_stats_snapshot_ctx_t` to carry `gain_dbfs` (or pass both values in the context struct).

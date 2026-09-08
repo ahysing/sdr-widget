@@ -157,16 +157,16 @@ static void test_usb_volume_change_updates_telemetry_immediately(void) {
     loudness_usb_volume_changed_left((S16)((84 - LOUDNESS_DB_SPL_MAX) * 256));
     telemetry = stats_telemetry_read_best_effort();
     assert(telemetry.source_has_volume_control == 1);
-    assert(telemetry.gain_dbfs_left == 84 - LOUDNESS_DB_SPL_MAX);
-    assert(telemetry.db_spl_left == 84);
+    assert(telemetry.gain_dbfs_left_x10 == (84 - LOUDNESS_DB_SPL_MAX) * 10);
+    assert(telemetry.db_spl_left_x10 == 840);
     assert(telemetry.equalizer_step_left ==
         (U8)loudness_test_get_equalizer_step(840));
 
     /* Every 0.5 dB has a dedicated loudness+volume row. */
     loudness_usb_volume_changed_left((S16)((83 - LOUDNESS_DB_SPL_MAX) * 256));
     telemetry = stats_telemetry_read_best_effort();
-    assert(telemetry.gain_dbfs_left == 83 - LOUDNESS_DB_SPL_MAX);
-    assert(telemetry.db_spl_left == 83);
+    assert(telemetry.gain_dbfs_left_x10 == (83 - LOUDNESS_DB_SPL_MAX) * 10);
+    assert(telemetry.db_spl_left_x10 == 830);
     assert(telemetry.equalizer_step_left ==
         (U8)loudness_test_get_equalizer_step(830));
 
@@ -175,30 +175,30 @@ static void test_usb_volume_change_updates_telemetry_immediately(void) {
 
     loudness_usb_volume_changed_left((S16)((75 - LOUDNESS_DB_SPL_MAX) * 256));
     telemetry = stats_telemetry_read_best_effort();
-    assert(telemetry.gain_dbfs_left == 75 - LOUDNESS_DB_SPL_MAX);
-    assert(telemetry.db_spl_left == 75);
+    assert(telemetry.gain_dbfs_left_x10 == (75 - LOUDNESS_DB_SPL_MAX) * 10);
+    assert(telemetry.db_spl_left_x10 == 750);
     assert(telemetry.equalizer_step_left ==
         (U8)loudness_test_get_equalizer_step(750));
 
     /* Values observed in the device log must update both SPL and filter step. */
     loudness_usb_volume_changed_left((S16)((77 - LOUDNESS_DB_SPL_MAX) * 256));
     telemetry = stats_telemetry_read_best_effort();
-    assert(telemetry.gain_dbfs_left == 77 - LOUDNESS_DB_SPL_MAX);
-    assert(telemetry.db_spl_left == 77);
+    assert(telemetry.gain_dbfs_left_x10 == (77 - LOUDNESS_DB_SPL_MAX) * 10);
+    assert(telemetry.db_spl_left_x10 == 770);
     assert(telemetry.equalizer_step_left ==
         (U8)loudness_test_get_equalizer_step(770));
 
     loudness_usb_volume_changed_left((S16)((81 - LOUDNESS_DB_SPL_MAX) * 256));
     telemetry = stats_telemetry_read_best_effort();
-    assert(telemetry.gain_dbfs_left == 81 - LOUDNESS_DB_SPL_MAX);
-    assert(telemetry.db_spl_left == 81);
+    assert(telemetry.gain_dbfs_left_x10 == (81 - LOUDNESS_DB_SPL_MAX) * 10);
+    assert(telemetry.db_spl_left_x10 == 810);
     assert(telemetry.equalizer_step_left ==
         (U8)loudness_test_get_equalizer_step(810));
 
     loudness_usb_volume_changed_left(VOL_MIN);
     telemetry = stats_telemetry_read_best_effort();
-    assert(telemetry.gain_dbfs_left == LOUDNESS_GAIN_DBFS_MIN);
-    assert(telemetry.db_spl_left == LOUDNESS_DB_SPL_MAX + LOUDNESS_GAIN_DBFS_MIN);
+    assert(telemetry.gain_dbfs_left_x10 == LOUDNESS_GAIN_DBFS_MIN * 10);
+    assert(telemetry.db_spl_left_x10 == (LOUDNESS_DB_SPL_MAX + LOUDNESS_GAIN_DBFS_MIN) * 10);
     assert(telemetry.equalizer_step_left == 0);
     printf("test_usb_volume_change_updates_telemetry_immediately passed\n");
 }
@@ -215,10 +215,10 @@ static void test_stereo_telemetry_policies(void)
     loudness_usb_volume_changed_left((S16)(-6 * 256));
     loudness_usb_volume_changed_right((S16)(-20 * 256));
     telemetry = stats_telemetry_read_best_effort();
-    assert(telemetry.gain_dbfs_left == -6);
-    assert(telemetry.gain_dbfs_right == -20);
-    assert(telemetry.db_spl_left == LOUDNESS_DB_SPL_MAX - 6);
-    assert(telemetry.db_spl_right == LOUDNESS_DB_SPL_MAX - 20);
+    assert(telemetry.gain_dbfs_left_x10 == -60);
+    assert(telemetry.gain_dbfs_right_x10 == -200);
+    assert(telemetry.db_spl_left_x10 == (LOUDNESS_DB_SPL_MAX - 6) * 10);
+    assert(telemetry.db_spl_right_x10 == (LOUDNESS_DB_SPL_MAX - 20) * 10);
     assert(telemetry.equalizer_step_left ==
         (U8)loudness_test_get_equalizer_step((LOUDNESS_DB_SPL_MAX - 6) * 10));
     assert(telemetry.equalizer_step_right ==
@@ -229,10 +229,10 @@ static void test_stereo_telemetry_policies(void)
     loudness_update_active_equalizer_step();
     telemetry = stats_telemetry_read_best_effort();
     /* Base-rate loudness telemetry is unchanged when frequency is highres. */
-    assert(telemetry.gain_dbfs_left == -6);
-    assert(telemetry.gain_dbfs_right == -20);
-    assert(telemetry.db_spl_left == LOUDNESS_DB_SPL_MAX - 6);
-    assert(telemetry.db_spl_right == LOUDNESS_DB_SPL_MAX - 20);
+    assert(telemetry.gain_dbfs_left_x10 == -60);
+    assert(telemetry.gain_dbfs_right_x10 == -200);
+    assert(telemetry.db_spl_left_x10 == (LOUDNESS_DB_SPL_MAX - 6) * 10);
+    assert(telemetry.db_spl_right_x10 == (LOUDNESS_DB_SPL_MAX - 20) * 10);
     assert(telemetry.equalizer_step_left ==
         (U8)loudness_test_get_equalizer_step((LOUDNESS_DB_SPL_MAX - 6) * 10));
     assert(telemetry.equalizer_step_right ==
@@ -244,10 +244,10 @@ static void test_stereo_telemetry_policies(void)
     loudness_change_frequency_fast(48000);
     loudness_update_active_equalizer_step();
     telemetry = stats_telemetry_read_best_effort();
-    assert(telemetry.gain_dbfs_left == LOUDNESS_GAIN_DBFS_MIN);
-    assert(telemetry.gain_dbfs_right == LOUDNESS_GAIN_DBFS_MIN);
-    assert(telemetry.db_spl_left == LOUDNESS_MIN_PHON_X10 / 10);
-    assert(telemetry.db_spl_right == LOUDNESS_MIN_PHON_X10 / 10);
+    assert(telemetry.gain_dbfs_left_x10 == LOUDNESS_GAIN_DBFS_MIN * 10);
+    assert(telemetry.gain_dbfs_right_x10 == LOUDNESS_GAIN_DBFS_MIN * 10);
+    assert(telemetry.db_spl_left_x10 == LOUDNESS_MIN_PHON_X10);
+    assert(telemetry.db_spl_right_x10 == LOUDNESS_MIN_PHON_X10);
     assert(telemetry.equalizer_step_left == 0);
     assert(telemetry.equalizer_step_right == 0);
     printf("test_stereo_telemetry_policies passed\n");
