@@ -133,14 +133,43 @@ void test_loudness_inferred_gain_tracks_with_usb_volume_control(void) {
     int32_t full = (int32_t)INT24_MAX << 8;
 
     loudness_test_reset_inferred_gain();
-    loudness_inferred_gain_set_rate(48000);
+    loudness_inferred_gain_set_rate(44100);
     loudness_set_source_has_volume_control();
+    assert(loudness_envelope_follower_tracks_diagnostics());
 
     for (i = 0; i < 50000; i++) {
         loudness_envelope_follower_update_stereo(full, full);
     }
     assert(loudness_inferred_gain_dbfs_from_magnitude(loudness_test_get_active_loudness_level()) >= -6);
     printf("test_loudness_inferred_gain_tracks_with_usb_volume_control passed\n");
+}
+
+void test_loudness_inferred_gain_diagnostics_rate_gating(void) {
+    printf("Running test_loudness_inferred_gain_diagnostics_rate_gating...\n");
+
+    loudness_test_reset_inferred_gain();
+    loudness_set_source_has_volume_control();
+
+    loudness_inferred_gain_set_rate(48000);
+    assert(!loudness_envelope_follower_tracks_diagnostics());
+    assert(!loudness_envelope_follower_is_active());
+
+    loudness_inferred_gain_set_rate(44100);
+    assert(loudness_envelope_follower_tracks_diagnostics());
+    assert(!loudness_envelope_follower_is_active());
+
+    loudness_set_source_has_volume_control();
+    loudness_inferred_gain_set_rate(44100);
+    assert(loudness_envelope_follower_tracks_diagnostics());
+    loudness_inferred_gain_set_rate(48000);
+    assert(!loudness_envelope_follower_tracks_diagnostics());
+
+    loudness_test_reset_inferred_gain();
+    loudness_inferred_gain_set_rate(48000);
+    assert(loudness_envelope_follower_is_active());
+    assert(!loudness_envelope_follower_tracks_diagnostics());
+
+    printf("test_loudness_inferred_gain_diagnostics_rate_gating passed\n");
 }
 
 int main(void) {
@@ -151,6 +180,7 @@ int main(void) {
     test_loudness_inferred_gain_slow_rise();
     test_loudness_inferred_gain_protocol_volume_overrides();
     test_loudness_inferred_gain_tracks_with_usb_volume_control();
+    test_loudness_inferred_gain_diagnostics_rate_gating();
     printf("\nAll loudness inferred gain tests completed!\n");
     return 0;
 }

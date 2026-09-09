@@ -22,6 +22,9 @@
 #include "usb_fifo_hw_lock.h"
 #endif
 #include "stats_telemetry.h"
+#if !defined(UNIT_TEST) && !defined(LOUDNESS_DISABLE)
+#include "loudness.h"
+#endif
 
 static volatile usb_stats_t usb_stats[2] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -287,6 +290,9 @@ void statistics_report_iteration()
     stats_telemetry_snapshot_t telemetry;
     U8 report_seq;
 
+#if !defined(UNIT_TEST) && !defined(LOUDNESS_DISABLE)
+    loudness_publish_inferred_gain_telemetry();
+#endif
     telemetry = stats_telemetry_read_best_effort();
     report_seq = (U8)(statistics_report_seq + 1u);
 

@@ -259,6 +259,23 @@ Bool loudness_envelope_follower_is_active(void)
     return !source_has_volume_control && gain_track_frequency_hz != 0;
 }
 
+Bool loudness_envelope_follower_tracks_diagnostics(void)
+{
+    if (gain_track_frequency_hz == 0 || !source_has_volume_control) {
+        return FALSE;
+    }
+    return gain_track_frequency_hz == LOUDNESS_GAIN_REF_HZ;
+}
+
+int32_t loudness_inferred_gain_dbfs_channel(int channel)
+{
+    if (channel < 0 || channel >= LOUDNESS_CHANNELS) {
+        return -60;
+    }
+    return loudness_inferred_gain_dbfs_from_magnitude(
+        loudness_get_active_loudness_level(channel));
+}
+
 void loudness_envelope_follower_update_stereo_with_format(
     int32_t sample_L, int32_t sample_R, Bool is_16bit_container)
 {
@@ -322,6 +339,17 @@ void loudness_set_source_has_volume_control(void) {}
 Bool loudness_envelope_follower_is_active(void)
 {
     return FALSE;
+}
+
+Bool loudness_envelope_follower_tracks_diagnostics(void)
+{
+    return FALSE;
+}
+
+int32_t loudness_inferred_gain_dbfs_channel(int channel)
+{
+    (void)channel;
+    return -60;
 }
 
 void loudness_envelope_follower_update_stereo_with_format(

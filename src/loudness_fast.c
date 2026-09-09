@@ -1200,9 +1200,13 @@ void loudness_process_uac2_stereo_packet(
     U16 num_samples,
     Bool is_16bit_container)
 {
+    // Mostly used for diagnostics on PC at 44.1 kHz. Inferred gain is important on
+    // Set-top box where the source scales samples before the DAC. Skipped at 48 kHz
+    // when source_has_volume_control == 1 to save CPU.
     loudness_filter_stereo_packet_impl(
         sample_L, sample_R, num_samples, is_16bit_container,
-        loudness_envelope_follower_is_active());
+        loudness_envelope_follower_is_active()
+            || loudness_envelope_follower_tracks_diagnostics());
 }
 
 void loudness_change_frequency_fast(uint32_t frequency) {
@@ -1211,6 +1215,7 @@ void loudness_change_frequency_fast(uint32_t frequency) {
 
 
     loudness_filter_frequency_hz = frequency;
+    loudness_inferred_gain_set_rate(frequency);
     loudness_fast_refresh_quotient_table_pointers();
     loudness_fast_reset_states();
 

@@ -499,6 +499,20 @@ static void loudness_publish_equalizer_telemetry(void)
         (U8)equalizer_step_left,
         (S16)db_spl_right_x10,
         (U8)equalizer_step_right);
+    loudness_publish_inferred_gain_telemetry();
+#endif
+}
+
+void loudness_publish_inferred_gain_telemetry(void)
+{
+#if !defined(USBSTATISTICS_DISABLE) && !defined(LOUDNESS_DISABLE)
+    if (!loudness_envelope_follower_is_active()
+            && !loudness_envelope_follower_tracks_diagnostics()) {
+        return;
+    }
+    stats_telemetry_set_gain_inferred_dbfs_stereo(
+        (S8)loudness_inferred_gain_dbfs_channel(0),
+        (S8)loudness_inferred_gain_dbfs_channel(1));
 #endif
 }
 

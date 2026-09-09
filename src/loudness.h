@@ -84,6 +84,8 @@ Bool loudness_uac2_packet_filter_enabled(Bool not_muted, uint32_t freq_hz);
 /* Update the active equalizer step based on current host gain level. */
 void loudness_update_active_equalizer_step(void);
 
+void loudness_publish_inferred_gain_telemetry(void);
+
 /* Return per-channel host gain in dBFS (channel 0 = L, 1 = R). Non-positive. */
 int32_t loudness_get_gain_dbfs_left();
 int32_t loudness_get_gain_dbfs_right();
