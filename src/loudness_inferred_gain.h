@@ -19,6 +19,11 @@ void loudness_inferred_gain_set_rate(uint32_t frequency_hz);
 Bool loudness_inferred_gain_has_source_volume_control(void);
 void loudness_set_source_has_volume_control(void);
 void loudness_envelope_follower_update_stereo(int32_t sample_L, int32_t sample_R);
+void loudness_envelope_follower_update_stereo_with_format(
+    int32_t sample_L, int32_t sample_R, Bool is_16bit_container);
+Bool loudness_envelope_follower_is_active(void);
+Bool loudness_envelope_follower_tracks_diagnostics(void);
+int32_t loudness_inferred_gain_dbfs_channel(int channel);
 
 #ifdef BUILD_TESTING
 void loudness_test_reset_inferred_gain(void);
@@ -35,6 +40,11 @@ int32_t loudness_inferred_gain_dbfs_from_magnitude(uint32_t mag);
 
 void loudness_set_source_has_volume_control(void);
 void loudness_envelope_follower_update_stereo(int32_t sample_L, int32_t sample_R);
+void loudness_envelope_follower_update_stereo_with_format(
+    int32_t sample_L, int32_t sample_R, Bool is_16bit_container);
+Bool loudness_envelope_follower_is_active(void);
+Bool loudness_envelope_follower_tracks_diagnostics(void);
+int32_t loudness_inferred_gain_dbfs_channel(int channel);
 
 #endif /* LOUDNESS_DISABLE */
 

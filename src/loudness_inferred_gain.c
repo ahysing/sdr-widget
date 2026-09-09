@@ -254,12 +254,39 @@ void loudness_set_source_has_volume_control(void)
     }
 }
 
-void loudness_envelope_follower_update_stereo(int32_t sample_L, int32_t sample_R)
+Bool loudness_envelope_follower_is_active(void)
 {
-    Bool is_16bit_container = (usb_alternate_setting_out == 0x02);
+    return !source_has_volume_control && gain_track_frequency_hz != 0;
+}
 
+Bool loudness_envelope_follower_tracks_diagnostics(void)
+{
+    if (gain_track_frequency_hz == 0 || !source_has_volume_control) {
+        return FALSE;
+    }
+    return gain_track_frequency_hz == LOUDNESS_GAIN_REF_HZ;
+}
+
+int32_t loudness_inferred_gain_dbfs_channel(int channel)
+{
+    if (channel < 0 || channel >= LOUDNESS_CHANNELS) {
+        return -60;
+    }
+    return loudness_inferred_gain_dbfs_from_magnitude(
+        loudness_get_active_loudness_level(channel));
+}
+
+void loudness_envelope_follower_update_stereo_with_format(
+    int32_t sample_L, int32_t sample_R, Bool is_16bit_container)
+{
     envelope_follower_update_sample(sample_L, is_16bit_container, 0);
     envelope_follower_update_sample(sample_R, is_16bit_container, 1);
+}
+
+void loudness_envelope_follower_update_stereo(int32_t sample_L, int32_t sample_R)
+{
+    loudness_envelope_follower_update_stereo_with_format(
+        sample_L, sample_R, (usb_alternate_setting_out == 0x02));
 }
 
 #ifdef BUILD_TESTING
@@ -308,6 +335,30 @@ uint32_t loudness_test_get_active_loudness_level(void)
 #else /* LOUDNESS_DISABLE */
 
 void loudness_set_source_has_volume_control(void) {}
+
+Bool loudness_envelope_follower_is_active(void)
+{
+    return FALSE;
+}
+
+Bool loudness_envelope_follower_tracks_diagnostics(void)
+{
+    return FALSE;
+}
+
+int32_t loudness_inferred_gain_dbfs_channel(int channel)
+{
+    (void)channel;
+    return -60;
+}
+
+void loudness_envelope_follower_update_stereo_with_format(
+    int32_t sample_L, int32_t sample_R, Bool is_16bit_container)
+{
+    (void)sample_L;
+    (void)sample_R;
+    (void)is_16bit_container;
+}
 
 void loudness_envelope_follower_update_stereo(int32_t sample_L, int32_t sample_R)
 {

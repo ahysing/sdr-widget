@@ -56,14 +56,21 @@ void device_audio_set_volume_in_biquad(Bool source_has_volume_control, Bool acti
 	}
 }
 
+extern S16 spk_vol_usb_L;
+extern S16 spk_vol_usb_R;
+
 void device_audio_volume_update_mult_left(void)
 {
+	spk_vol_mult_L = usb_volume_format(spk_vol_usb_L);
 }
 
 void device_audio_volume_update_mult_right(void)
 {
+	spk_vol_mult_R = usb_volume_format(spk_vol_usb_R);
 }
 
 void device_audio_volume_refresh_mult(void)
 {
+	device_audio_volume_update_mult_left();
+	device_audio_volume_update_mult_right();
 }

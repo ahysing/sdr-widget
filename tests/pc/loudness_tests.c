@@ -265,7 +265,7 @@ void test_container_sign_preservation(void) {
     printf("Sign preservation for negative samples\n");
     loudness_fast_reset_states();
     
-    loudness_test_load_active_quotients_fast(90);
+    loudness_test_load_active_coefficients(90);
 
     // Et typisk negativt signal i en 32-bit container (bits 31:8)
     // Eksempel: -1000 i 24-bit er 0xFFFF18. Skiftet opp: 0xFFF18000
@@ -289,7 +289,7 @@ void test_full_scale_boundaries(void) {
     printf("Running test_full_scal_boundaries...\n\n");
     printf("Full scale bounary values (0 dBFS)\n");
     loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(120);
+    loudness_test_load_active_coefficients(120);
 
     // Maks positiv 24-bit i 32-bit container: 0x7FFFFF00
     S32 max_pos = (S32)0x7FFFFF00;
@@ -318,7 +318,7 @@ void test_dc_silence_response(void) {
     loudness_fast_reset_states();
     
     // Sett et trinn med kraftig bassboost (f.eks 55 phon)
-    loudness_test_load_active_quotients_fast(0); 
+    loudness_test_load_active_coefficients(0); 
 
     // Kjør 1000 sampler med ren stillhet gjennom filteret
     for (int i = 0; i < 1000; i++) {
@@ -479,6 +479,7 @@ void test_loudness_default_enabled(void) {
     loudness_init();
     assert(loudness_loudness_is_enabled() == TRUE);
     assert(loudness_bass_boost_is_enabled() == FALSE);
+    assert(loudness_active_filter() == LOUDNESS_MODE);
     printf("test_loudness_default_enabled passed\n\n");
 }
 
@@ -527,12 +528,15 @@ void test_loudness_bass_boost_mirror_and_gate(void) {
     loudness_usb_volume_changed_left(-20 * 256);
     loudness_usb_volume_changed_right(-20 * 256);
     loudness_update_active_equalizer_step();
-    assert(loudness_test_volume_in_biquad() == FALSE);
+    assert(loudness_test_volume_in_biquad() == TRUE);
     {
-        const biquad_quotients_fast_t *no_vol =
+        const biquad_coefficients_t *no_vol =
             loudness_fast_no_volume_quotient_table_48000hz();
-        const biquad_quotients_fast_t *low_q = loudness_lowshelf_active_quotients();
-        assert(low_q[0].b0 == no_vol[BASS_PHON_55_IDX].b0);
+        const biquad_coefficients_t *low_q = loudness_lowshelf_active_coefficients();
+        int32_t expected_b0 = (int32_t)(
+            ((int64_t)no_vol[BASS_PHON_55_IDX].b0 * (int64_t)spk_vol_mult_L)
+            >> VOL_MULT_SHIFT);
+        assert(low_q[0].b0 == expected_b0);
         assert(low_q[0].a1 == no_vol[BASS_PHON_55_IDX].a1);
     }
 
@@ -565,7 +569,7 @@ void test_loudness_bass_boost_unity_passthrough(void) {
 
 void test_loudness_bass_boost_reenable_resets_states(void) {
     printf("Running test_loudness_bass_boost_reenable_resets_states...\n");
-    biquad_state_fast_t state;
+    biquad_state_t state;
 
     loudness_init();
     loudness_set_source_has_volume_control();
@@ -585,7 +589,7 @@ void test_loudness_bass_boost_reenable_resets_states(void) {
 
     loudness_test_get_fast_channel(0, &state, NULL);
     assert(state.w1 == 0);
-    assert(loudness_test_volume_in_biquad() == FALSE);
+    assert(loudness_test_volume_in_biquad() == TRUE);
 
     printf("test_loudness_bass_boost_reenable_resets_states passed\n\n");
 }
@@ -623,13 +627,13 @@ void test_loudness_highshelf_and_lowshelf_share_runtime_slot_and_swap_simultaneo
     /* Publish step 100 on left (85 phon), step 40 on right (55 phon) */
     loudness_fast_select_equalizer_steps(850, 550, 100, 40);
 
-    const biquad_quotients_fast_t *low_q = loudness_lowshelf_active_quotients();
-    const biquad_first_order_quotients_t *high_q = loudness_highshelf_active_quotients();
+    const biquad_coefficients_t *low_q = loudness_lowshelf_active_coefficients();
+    const biquad_first_order_coefficients_t *high_q = loudness_highshelf_active_coefficients();
 
     /* Check that left matches step 100 and right matches step 40 from 48kHz baked tables */
-    const biquad_quotients_fast_t *table_low = loudness_fast_baked_quotient_table_48000hz();
-    const biquad_first_order_quotients_t *expected_high_100 = &highshelf_no_volume_48000hz[100];
-    const biquad_first_order_quotients_t *expected_high_40 = &highshelf_no_volume_48000hz[40];
+    const biquad_coefficients_t *table_low = loudness_fast_baked_quotient_table_48000hz();
+    const biquad_first_order_coefficients_t *expected_high_100 = &highshelf_no_volume_48000hz[100];
+    const biquad_first_order_coefficients_t *expected_high_40 = &highshelf_no_volume_48000hz[40];
 
     assert(low_q[0].b0 == table_low[100].b0);
     assert(low_q[0].a1 == table_low[100].a1);
@@ -653,20 +657,24 @@ void test_bass_boost_mode_selects_index_40_with_12db_boost(void) {
 
     loudness_bass_boost_set(TRUE);
     loudness_usb_volume_changed_left(0); /* 0 dBFS */
+    loudness_usb_volume_changed_right(0);
     loudness_update_active_equalizer_step();
 
-    const biquad_quotients_fast_t *low_q = loudness_lowshelf_active_quotients();
-    const biquad_first_order_quotients_t *high_q = loudness_highshelf_active_quotients();
+    const biquad_coefficients_t *low_q = loudness_lowshelf_active_coefficients();
+    const biquad_first_order_coefficients_t *high_q = loudness_highshelf_active_coefficients();
 
-    const biquad_quotients_fast_t *table_low =
+    const biquad_coefficients_t *table_low =
         loudness_fast_no_volume_quotient_table_48000hz();
+    int32_t expected_b0 = (int32_t)(
+        ((int64_t)table_low[BASS_PHON_55_IDX].b0 * (int64_t)spk_vol_mult_L)
+        >> VOL_MULT_SHIFT);
 
-    assert(low_q[0].b0 == table_low[BASS_PHON_55_IDX].b0);
+    assert(low_q[0].b0 == expected_b0);
     assert(low_q[0].a1 == table_low[BASS_PHON_55_IDX].a1);
     assert(high_q[0].b0 == LOUDNESS_Q28_ONE);
     assert(high_q[0].a1 == 0);
     assert(high_q[0].b1 == 0);
-    assert(loudness_test_volume_in_biquad() == FALSE);
+    assert(loudness_test_volume_in_biquad() == TRUE);
 
     printf("test_bass_boost_mode_selects_index_40_with_12db_boost passed\n\n");
 }
@@ -674,27 +682,73 @@ void test_bass_boost_mode_selects_index_40_with_12db_boost(void) {
 void test_bass_boost_external_volume_scales_output(void) {
     printf("Running test_bass_boost_external_volume_scales_output...\n");
     const int32_t test_sample = 1000000 << 8;
-    int32_t filtered;
-    S32 sample_L;
-    S32 sample_R;
+    int32_t filtered_full;
+    int32_t filtered_half;
 
     loudness_init();
     loudness_set_source_has_volume_control();
     spk_current_freq.frequency = 48000;
     loudness_change_frequency_fast(48000);
     loudness_bass_boost_set(TRUE);
+    loudness_usb_volume_changed_left(0);
+    loudness_usb_volume_changed_right(0);
     loudness_update_active_equalizer_step();
-    assert(loudness_test_volume_in_biquad() == FALSE);
+    assert(loudness_test_volume_in_biquad() == TRUE);
 
-    filtered = loudness_test_filter_24bit_left( test_sample);
-    spk_vol_mult_L = VOL_MULT_UNITY / 2;
-    spk_vol_mult_R = VOL_MULT_UNITY / 2;
-    sample_L = filtered;
-    sample_R = filtered;
-    adjust_volume(&sample_L, &sample_R);
-    assert(labs(sample_L) < labs(filtered));
+    filtered_full = loudness_test_filter_24bit_left(test_sample);
+
+    loudness_usb_volume_changed_left(-6 * 256);
+    loudness_usb_volume_changed_right(-6 * 256);
+    loudness_update_active_equalizer_step();
+    filtered_half = loudness_test_filter_24bit_left(test_sample);
+    assert(labs(filtered_half) < labs(filtered_full));
 
     printf("test_bass_boost_external_volume_scales_output passed\n\n");
+}
+
+void test_bass_boost_no_clip_at_reference_level(void) {
+    printf("Running test_bass_boost_no_clip_at_reference_level...\n");
+    const int32_t test_sample = (INT24_MAX - 1024) << 8;
+    int32_t filtered;
+    int32_t passthrough;
+    int32_t boosted;
+    int differs = 0;
+    int i;
+
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    spk_current_freq.frequency = 48000;
+    loudness_change_frequency_fast(48000);
+
+    loudness_bass_boost_set(TRUE);
+    loudness_usb_volume_changed_left(-6 * 256);
+    loudness_usb_volume_changed_right(-6 * 256);
+    loudness_update_active_equalizer_step();
+
+    filtered = loudness_test_filter_24bit_left(test_sample);
+    assert(labs(filtered >> 8) < INT24_MAX);
+
+    loudness_bass_boost_set(FALSE);
+    loudness_loudness_set(FALSE);
+    loudness_update_active_equalizer_step();
+    loudness_fast_reset_states();
+    passthrough = loudness_test_filter_24bit_left(test_sample);
+    assert(passthrough != 0);
+
+    loudness_bass_boost_set(TRUE);
+    loudness_update_active_equalizer_step();
+    for (i = 0; i < 200; i++) {
+        int32_t sample = ((i & 1) ? 1 : -1) * (700000 << 8);
+        passthrough = sample;
+        boosted = loudness_test_filter_24bit_left(sample);
+        if (boosted != passthrough) {
+            differs = 1;
+        }
+        assert(labs(boosted >> 8) < INT24_MAX);
+    }
+    assert(differs);
+
+    printf("test_bass_boost_no_clip_at_reference_level passed\n\n");
 }
 
 void test_active_filter_mode_fallback_to_bass_boost(void) {
@@ -758,20 +812,17 @@ void test_device_audio_set_volume_in_biquad_hard_clip_switching(void) {
     assert(loudness_active_filter() != FILTER_OFF_MODE);
     assert(device_audio_volume_apply_fn == hard_clip);
 
-    /* 5. Set source volume control while bass boost is active -> adjust_volume_hard_clip */
+    /* 5. Set source volume control while bass boost is active -> keep_volume */
     loudness_set_source_has_volume_control();
     assert(loudness_inferred_gain_has_source_volume_control() == TRUE);
     assert(loudness_active_filter() != FILTER_OFF_MODE);
-    assert(device_audio_volume_apply_fn == adjust_volume_hard_clip);
+    assert(device_audio_volume_apply_fn == keep_volume);
 
-    /* Verify adjust_volume_hard_clip with unity gain */
-    spk_vol_mult_L = VOL_MULT_UNITY;
-    spk_vol_mult_R = VOL_MULT_UNITY;
     sL = INT24_MAX + 500;
     sR = INT24_MIN - 500;
     device_audio_volume_apply_fn(&sL, &sR);
-    assert(sL == INT24_MAX);
-    assert(sR == INT24_MIN);
+    assert(sL == INT24_MAX + 500);
+    assert(sR == INT24_MIN - 500);
 
     /* 6. Switch to LOUDNESS_MODE with source volume control -> keep_volume only */
     loudness_loudness_set(TRUE);
@@ -806,10 +857,15 @@ void test_uac2_loudness_filter_enabled_filter_off(void) {
     loudness_loudness_set(TRUE);
     assert(loudness_uac2_packet_filter_enabled(TRUE, 44100) == TRUE);
     assert(loudness_uac2_packet_filter_enabled(TRUE, 48000) == TRUE);
+    assert(loudness_uac2_packet_filter_enabled(TRUE, 88200) == FALSE);
+    assert(loudness_uac2_packet_filter_enabled(TRUE, 96000) == FALSE);
 
     loudness_loudness_set(FALSE);
     loudness_bass_boost_set(TRUE);
     assert(loudness_uac2_packet_filter_enabled(TRUE, 48000) == TRUE);
+    assert(loudness_uac2_packet_filter_enabled(TRUE, 88200) == FALSE);
+    assert(loudness_uac2_packet_filter_enabled(TRUE, 96000) == FALSE);
+    assert(loudness_uac2_packet_filter_enabled(TRUE, 192000) == FALSE);
 
     printf("test_uac2_loudness_filter_enabled_filter_off passed\n\n");
 }
@@ -861,7 +917,7 @@ static double measure_fast_50hz_gain_db(
     spk_current_freq.frequency = sample_rate_hz;
     loudness_change_frequency_fast(sample_rate_hz);
     loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(equalizer_step);
+    loudness_test_load_active_coefficients(equalizer_step);
 
     for (i = 0; i < SINE_TEST_SAMPLE_COUNT; i++) {
         double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
@@ -949,10 +1005,10 @@ static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
     int step_from, int step_to)
 {
     int i;
-    biquad_state_fast_t state_at_switch;
+    biquad_state_t state_at_switch;
     biquad_first_order_state_t highshelf_state_at_switch;
-    biquad_state_fast_t ref_final_state;
-    biquad_state_fast_t trans_final_state;
+    biquad_state_t ref_final_state;
+    biquad_state_t trans_final_state;
     biquad_first_order_state_t ref_final_highshelf_state;
     biquad_first_order_state_t trans_final_highshelf_state;
 
@@ -966,7 +1022,7 @@ static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
     loudness_change_frequency_fast(sample_rate_hz);
 
     loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(step_from);
+    loudness_test_load_active_coefficients(step_from);
 
     for (i = 0; i < LOUDNESS_TRANSITION_SWITCH_SAMPLE; i++) {
         double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
@@ -998,7 +1054,7 @@ static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
     trans_final_highshelf_state = highshelf_states[0];
 
     loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(step_to);
+    loudness_test_load_active_coefficients(step_to);
     loudness_test_set_fast_channel(0, &state_at_switch);
     highshelf_states[0] = highshelf_state_at_switch;
 
@@ -1026,7 +1082,7 @@ static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
     assert(trans_final_highshelf_state.w1 == ref_final_highshelf_state.w1);
 }
 
-static const biquad_first_order_quotients_t *get_highshelf_quotients(
+static const biquad_first_order_coefficients_t *get_highshelf_coefficients(
     uint32_t sample_rate_hz, int equalizer_step)
 {
     assert(equalizer_step >= 0 && equalizer_step < LOUDNESS_NUM_EQUALIZER_STEPS);
@@ -1048,10 +1104,10 @@ void assert_highshelf_transition_equivalence(uint32_t sample_rate_hz,
     int32_t transition_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
     int32_t reference_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
 
-    const biquad_first_order_quotients_t *q_from =
-        get_highshelf_quotients(sample_rate_hz, step_from);
-    const biquad_first_order_quotients_t *q_to =
-        get_highshelf_quotients(sample_rate_hz, step_to);
+    const biquad_first_order_coefficients_t *q_from =
+        get_highshelf_coefficients(sample_rate_hz, step_from);
+    const biquad_first_order_coefficients_t *q_to =
+        get_highshelf_coefficients(sample_rate_hz, step_to);
 
     for (i = 0; i < LOUDNESS_TRANSITION_SWITCH_SAMPLE; i++) {
         double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
@@ -1129,10 +1185,11 @@ void test_loudness_fast_biquad_exact_samples(void)
     printf("Running test_loudness_fast_biquad_exact_samples...\n");
 
     loudness_init();
+    loudness_loudness_set(TRUE);
     loudness_set_source_has_volume_control();
     loudness_change_frequency_fast(48000);
     loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(0);
+    loudness_test_load_active_coefficients(0);
 
     packet_L[0] = 2097152 << 8;
     packet_L[1] = 2097152 << 8;
@@ -1172,7 +1229,7 @@ static double measure_fast_50hz_gain_db_stereo_packet(uint32_t sample_rate_hz,
     spk_current_freq.frequency = sample_rate_hz;
     loudness_change_frequency_fast(sample_rate_hz);
     loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(equalizer_step);
+    loudness_test_load_active_coefficients(equalizer_step);
 
     for (i = 0; i < HIRES_HALF_DELTA_TEST_SAMPLES; i += HIRES_HALF_DELTA_PACKET_SAMPLES) {
         int j;
@@ -1221,8 +1278,8 @@ static void drain_zeros_stereo_packet(uint32_t sample_rate_hz)
 {
     S32 zeros[48];
     int p;
-    biquad_state_fast_t l_state;
-    biquad_state_fast_t r_state;
+    biquad_state_t l_state;
+    biquad_state_t r_state;
 
     memset(zeros, 0, sizeof(zeros));
     spk_current_freq.frequency = sample_rate_hz;
@@ -1285,7 +1342,7 @@ void test_filter_active_during_hires_interp(void)
     spk_current_freq.frequency = 88200;
     loudness_change_frequency_fast(88200);
     loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(10);
+    loudness_test_load_active_coefficients(10);
 
     drive_stereo_impulse(packet_L, packet_R, 4);
     assert(!loudness_test_left_filter_is_idle());
@@ -1305,7 +1362,7 @@ void test_filter_idle_after_zeros_stride2(void)
     spk_current_freq.frequency = 88200;
     loudness_change_frequency_fast(88200);
     loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(80);
+    loudness_test_load_active_coefficients(80);
 
     for (i = 0; i < 8; i++) {
         packet_L[i] = 0;
@@ -1331,7 +1388,7 @@ void test_filter_idle_after_zeros_stride4(void)
     spk_current_freq.frequency = 192000;
     loudness_change_frequency_fast(192000);
     loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(80);
+    loudness_test_load_active_coefficients(80);
 
     for (i = 0; i < 16; i++) {
         packet_L[i] = 0;
@@ -1350,8 +1407,8 @@ void test_per_channel_zero_bypass(void)
 {
     S32 packet_L[8];
     S32 packet_R[8];
-    biquad_state_fast_t r_state_before;
-    biquad_state_fast_t r_state_after;
+    biquad_state_t r_state_before;
+    biquad_state_t r_state_after;
     int i;
 
     printf("Running test_per_channel_zero_bypass...\n");
@@ -1359,7 +1416,7 @@ void test_per_channel_zero_bypass(void)
     spk_current_freq.frequency = 44100;
     loudness_change_frequency_fast(44100);
     loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(10);
+    loudness_test_load_active_coefficients(10);
 
     for (i = 0; i < 8; i++) {
         packet_L[i] = (1000 + i * 100) << 16;
@@ -1382,8 +1439,8 @@ void test_per_channel_independent_biquad(void)
 {
     S32 packet_L[32];
     S32 packet_R[32];
-    biquad_state_fast_t l_state;
-    biquad_state_fast_t r_state;
+    biquad_state_t l_state;
+    biquad_state_t r_state;
     int i;
 
     printf("Running test_per_channel_independent_biquad...\n");
@@ -1391,7 +1448,7 @@ void test_per_channel_independent_biquad(void)
     spk_current_freq.frequency = 44100;
     loudness_change_frequency_fast(44100);
     loudness_fast_reset_states();
-    loudness_test_load_active_quotients_fast(10);
+    loudness_test_load_active_coefficients(10);
 
     for (i = 0; i < 32; i++) {
         double phase = 2.0 * SINE_TEST_PI * 50.0 * (double)i / 44100.0;
@@ -1413,11 +1470,11 @@ void test_per_channel_independent_biquad(void)
 
 void test_per_channel_baked_volume_policy(void)
 {
-    biquad_state_fast_t state;
-    biquad_quotients_fast_t left;
-    biquad_quotients_fast_t right;
-    biquad_quotients_fast_t shared_actual;
-    biquad_quotients_fast_t shared_expected;
+    biquad_state_t state;
+    biquad_coefficients_t left;
+    biquad_coefficients_t right;
+    biquad_coefficients_t shared_actual;
+    biquad_coefficients_t shared_expected;
     const uint32_t independent_rates[] = { 44100, 48000,  88200, 96000, 176400, 192000 };
     size_t i;
 
@@ -1459,8 +1516,8 @@ void test_per_channel_baked_volume_policy(void)
 void test_frequency_change_snaps_equalizer_step(void)
 {
     int step;
-    const biquad_quotients_fast_t *table_44;
-    const biquad_quotients_fast_t *low_q;
+    const biquad_coefficients_t *table_44;
+    const biquad_coefficients_t *low_q;
 
     printf("Running test_frequency_change_snaps_equalizer_step...\n");
 
@@ -1483,7 +1540,7 @@ void test_frequency_change_snaps_equalizer_step(void)
     loudness_change_frequency_fast(44100);
 
     table_44 = loudness_fast_baked_quotient_table_44100hz();
-    low_q = loudness_lowshelf_active_quotients();
+    low_q = loudness_lowshelf_active_coefficients();
     assert(low_q[0].b0 == table_44[step].b0);
     assert(low_q[0].a1 == table_44[step].a1);
     assert(low_q[0].b0 != table_44[0].b0);
@@ -1544,6 +1601,7 @@ int main() {
     test_loudness_highshelf_and_lowshelf_share_runtime_slot_and_swap_simultaneously();
     test_bass_boost_mode_selects_index_40_with_12db_boost();
     test_bass_boost_external_volume_scales_output();
+    test_bass_boost_no_clip_at_reference_level();
     test_active_filter_mode_fallback_to_bass_boost();
     test_device_audio_set_volume_in_biquad_hard_clip_switching();
     test_uac2_loudness_filter_enabled_filter_off();

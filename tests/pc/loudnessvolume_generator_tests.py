@@ -65,6 +65,14 @@ class LoudnessVolumeGeneratorTests(unittest.TestCase):
             self.assertEqual(baked_volume_db, phon - GENERATOR.MAXIMUM_PHON)
             self.assertEqual(baked.a1, filtered.a1)
 
+    def test_iso226_contour_ends_at_12_5_khz_without_20khz_point(self):
+        for phon in [25.0, 60.0, 80.0, 90.0, 95.0]:
+            f, spl = GENERATOR.iso226_contour(phon)
+            self.assertEqual(f[0], 20.0)
+            self.assertEqual(f[-1], 12500.0)
+            self.assertEqual(len(f), 29)
+            self.assertNotIn(20000.0, f)
+
 
 if __name__ == "__main__":
     unittest.main()

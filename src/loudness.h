@@ -62,10 +62,8 @@ void loudness_change_frequency_fast(uint32_t frequency);
 #define LOUDNESS_FILTER_24BIT_STEREO_PACKET(L, R, N) \
     loudness_filter_24bit_stereo_packet((L), (R), (N))
 
-#define LOUDNESS_FILTER_16BIT_STEREO_PACKET_2X_HZ(L, R, N) \
-    loudness_filter_16bit_stereo_packet_2x_hz((L), (R), (N))
-#define LOUDNESS_FILTER_24BIT_STEREO_PACKET_2X_HZ(L, R, N) \
-    loudness_filter_24bit_stereo_packet_2x_hz((L), (R), (N))
+#define LOUDNESS_PROCESS_UAC2_STEREO_PACKET(L, R, N, IS_16BIT) \
+    loudness_process_uac2_stereo_packet((L), (R), (N), (IS_16BIT))
 
 /* Force the active loudness band from an external dBFS estimate (<= 0). */
 void loudness_set_level_dbfs(int32_t db_fs);
@@ -86,6 +84,8 @@ Bool loudness_uac2_packet_filter_enabled(Bool not_muted, uint32_t freq_hz);
 /* Update the active equalizer step based on current host gain level. */
 void loudness_update_active_equalizer_step(void);
 
+void loudness_publish_inferred_gain_telemetry(void);
+
 /* Return per-channel host gain in dBFS (channel 0 = L, 1 = R). Non-positive. */
 int32_t loudness_get_gain_dbfs_left();
 int32_t loudness_get_gain_dbfs_right();
@@ -105,10 +105,8 @@ int32_t loudness_get_db_spl_right_x10(void);
 #define LOUDNESS_FILTER_24BIT_STEREO_PACKET(L, R, N) \
     do { (void)(L); (void)(R); (void)(N); } while (0)
 
-#define LOUDNESS_FILTER_16BIT_STEREO_PACKET_2X_HZ(L, R, N) \
-    do { (void)(L); (void)(R); (void)(N); } while (0)
-#define LOUDNESS_FILTER_24BIT_STEREO_PACKET_2X_HZ(L, R, N) \
-    do { (void)(L); (void)(R); (void)(N); } while (0)
+#define LOUDNESS_PROCESS_UAC2_STEREO_PACKET(L, R, N, IS_16BIT) \
+    do { (void)(L); (void)(R); (void)(N); (void)(IS_16BIT); } while (0)
 #endif /* LOUDNESS_DISABLE */
 
 /* --- Helpers --- */

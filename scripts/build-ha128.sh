@@ -64,6 +64,7 @@ make audio-widget \
 echo "=== link ${PARTNAME} (Release/makefile still uses uc3a3256 on link line) ==="
 (
 	cd Release
+	# make -n prints "Nothing to be done" when widget.elf is fresh; only run avr32-gcc link lines.
 	make -n all 2>/dev/null \
 		| sed 's/-mpart=uc3a3256/-mpart=uc3a3128/' \
 		| grep -E '[[:space:]]*avr32-gcc' \

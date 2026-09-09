@@ -151,7 +151,7 @@ void stats_telemetry_test_reset(void)
     stats_telemetry_equalizer_step_left = 0;
     stats_telemetry_equalizer_step_right = 0;
     stats_telemetry_source_has_volume_control = 0;
-    stats_telemetry_bass_boost_enabled = 1;
+    stats_telemetry_bass_boost_enabled = 0;
     stats_telemetry_loudness_enabled = 0;
     stats_telemetry_sample_bits = 0;
     stats_telemetry_num_samples = 0;
