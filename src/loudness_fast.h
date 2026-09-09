@@ -22,10 +22,10 @@ typedef struct {
 
 void loudness_filter_16bit_stereo_packet(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
 void loudness_filter_24bit_stereo_packet(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
-void loudness_filter_16bit_stereo_packet_2x_hz(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
-void loudness_filter_24bit_stereo_packet_2x_hz(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
+void loudness_process_uac2_stereo_packet(
+    S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples,
+    Bool is_16bit_container);
 void loudness_change_frequency_fast(uint32_t frequency);
-const biquad_quotients_fast_t *loudness_fast_channel_quotients(int channel);
 const biquad_quotients_fast_t *loudness_lowshelf_active_quotients(void);
 
 #ifdef BUILD_TESTING

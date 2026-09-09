@@ -213,7 +213,7 @@ void test_statistics_idle_wire_packet_fields() {
     stats_telemetry_set_frequency_hz(96000);
 
     volatile usb_stats_t idle = {
-        0, 0, 0, 0, 0, 0xFFFF, 0, 0, USB_STATS_TAG_NONE, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, USB_STATS_TAG_NONE, 0, 0, 0
     };
     U8 wire[USB_STATS_PACKET_WIRE_SIZE];
 
@@ -231,8 +231,8 @@ void test_statistics_idle_wire_packet_fields() {
     assert(wire[13] == 0);
     assert(wire[14] == 0);
     assert(wire[15] == 0);
-    assert(wire[16] == 0xFF);
-    assert(wire[17] == 0xFF);
+    assert(wire[16] == 0);
+    assert(wire[17] == 0);
     assert(wire[18] == 0);
     assert(wire[19] == 0);
     assert(wire[20] == 0);
@@ -240,7 +240,7 @@ void test_statistics_idle_wire_packet_fields() {
     assert(wire[22] == 0xC0);
     assert(wire[23] == 0x03);
     assert(wire[32] == USB_STATS_TAG_NONE);
-    assert(wire[USB_STATS_WIRE_OFFSET_BASS_BOOST_ENABLED] == 1);
+    assert(wire[USB_STATS_WIRE_OFFSET_BASS_BOOST_ENABLED] == 0);
     assert(wire[3] == statistics_test_build_wire_checksum(wire));
     printf("test_statistics_idle_wire_packet_fields passed\n");
 }

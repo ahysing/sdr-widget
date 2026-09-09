@@ -24,8 +24,8 @@
 #include "stats_telemetry.h"
 
 static volatile usb_stats_t usb_stats[2] = {
-    {0, 0, 0, 0, 0, 0xFFFF, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0xFFFF, 0, 0, 0, 0, 0, 0}
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 static volatile int collect_index = 0;
 static U8 statistics_report_seq = 0;
@@ -34,20 +34,38 @@ static volatile Bool statistics_runtime_active = TRUE;
 static Bool statistics_initialized = FALSE;
 #endif
 
-static void statistics_reset_period_counters(volatile usb_stats_t *s)
+static void statistics_reset_buffer(volatile usb_stats_t *s)
 {
     s->generation = 0;
     s->underruns = 0;
     s->overruns = 0;
     s->fifo_level = 0;
     s->max_fifo = 0;
-    s->min_fifo = 0xFFFF;
+    s->min_fifo = 0;
     s->deadline_misses = 0;
     s->event_count = 0;
     s->last_tag = USB_STATS_TAG_NONE;
     s->last_arg0 = 0;
     s->last_arg1 = 0;
     s->last_arg2 = 0;
+}
+
+static void statistics_reset_period_counters(volatile usb_stats_t *s)
+{
+    statistics_reset_buffer(s);
+    s->min_fifo = 0xFFFF;
+}
+
+static void statistics_reset_all_buffers(void)
+{
+    int i;
+
+    collect_index = 0;
+    statistics_report_seq = 0;
+    statistics_runtime_active = TRUE;
+    for (i = 0; i < 2; i++) {
+        statistics_reset_buffer(&usb_stats[i]);
+    }
 }
 
 Bool statistics_runtime_is_active(void)
@@ -183,6 +201,7 @@ void statistics_init()
     statistics_initialized = TRUE;
 #endif
     stats_telemetry_init();
+    statistics_reset_all_buffers();
 #ifdef FREERTOS_USED
     xTaskCreate(statistics_task,
         configTSK_USB_DAUDIOSTATS_NAME,
@@ -290,25 +309,8 @@ volatile usb_stats_t* get_usb_stats()
 
 #ifdef UNIT_TEST
 void statistics_test_reset(void) {
-    int i;
-    collect_index = 0;
-    statistics_report_seq = 0;
-    statistics_runtime_active = TRUE;
     stats_telemetry_test_reset();
-    for (i = 0; i < 2; i++) {
-        usb_stats[i].generation = 0;
-        usb_stats[i].overruns = 0;
-        usb_stats[i].underruns = 0;
-        usb_stats[i].fifo_level = 0;
-        usb_stats[i].max_fifo = 0;
-        usb_stats[i].min_fifo = 0xFFFF;
-        usb_stats[i].deadline_misses = 0;
-        usb_stats[i].event_count = 0;
-        usb_stats[i].last_tag = USB_STATS_TAG_NONE;
-        usb_stats[i].last_arg0 = 0;
-        usb_stats[i].last_arg1 = 0;
-        usb_stats[i].last_arg2 = 0;
-    }
+    statistics_reset_all_buffers();
 }
 
 void statistics_test_set_collect_index(int index) {

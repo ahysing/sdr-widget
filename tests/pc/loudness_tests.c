@@ -479,6 +479,7 @@ void test_loudness_default_enabled(void) {
     loudness_init();
     assert(loudness_loudness_is_enabled() == TRUE);
     assert(loudness_bass_boost_is_enabled() == FALSE);
+    assert(loudness_active_filter() == LOUDNESS_MODE);
     printf("test_loudness_default_enabled passed\n\n");
 }
 
@@ -527,12 +528,15 @@ void test_loudness_bass_boost_mirror_and_gate(void) {
     loudness_usb_volume_changed_left(-20 * 256);
     loudness_usb_volume_changed_right(-20 * 256);
     loudness_update_active_equalizer_step();
-    assert(loudness_test_volume_in_biquad() == FALSE);
+    assert(loudness_test_volume_in_biquad() == TRUE);
     {
         const biquad_quotients_fast_t *no_vol =
             loudness_fast_no_volume_quotient_table_48000hz();
         const biquad_quotients_fast_t *low_q = loudness_lowshelf_active_quotients();
-        assert(low_q[0].b0 == no_vol[BASS_PHON_55_IDX].b0);
+        int32_t expected_b0 = (int32_t)(
+            ((int64_t)no_vol[BASS_PHON_55_IDX].b0 * (int64_t)spk_vol_mult_L)
+            >> VOL_MULT_SHIFT);
+        assert(low_q[0].b0 == expected_b0);
         assert(low_q[0].a1 == no_vol[BASS_PHON_55_IDX].a1);
     }
 
@@ -585,7 +589,7 @@ void test_loudness_bass_boost_reenable_resets_states(void) {
 
     loudness_test_get_fast_channel(0, &state, NULL);
     assert(state.w1 == 0);
-    assert(loudness_test_volume_in_biquad() == FALSE);
+    assert(loudness_test_volume_in_biquad() == TRUE);
 
     printf("test_loudness_bass_boost_reenable_resets_states passed\n\n");
 }
@@ -653,6 +657,7 @@ void test_bass_boost_mode_selects_index_40_with_12db_boost(void) {
 
     loudness_bass_boost_set(TRUE);
     loudness_usb_volume_changed_left(0); /* 0 dBFS */
+    loudness_usb_volume_changed_right(0);
     loudness_update_active_equalizer_step();
 
     const biquad_quotients_fast_t *low_q = loudness_lowshelf_active_quotients();
@@ -660,13 +665,16 @@ void test_bass_boost_mode_selects_index_40_with_12db_boost(void) {
 
     const biquad_quotients_fast_t *table_low =
         loudness_fast_no_volume_quotient_table_48000hz();
+    int32_t expected_b0 = (int32_t)(
+        ((int64_t)table_low[BASS_PHON_55_IDX].b0 * (int64_t)spk_vol_mult_L)
+        >> VOL_MULT_SHIFT);
 
-    assert(low_q[0].b0 == table_low[BASS_PHON_55_IDX].b0);
+    assert(low_q[0].b0 == expected_b0);
     assert(low_q[0].a1 == table_low[BASS_PHON_55_IDX].a1);
     assert(high_q[0].b0 == LOUDNESS_Q28_ONE);
     assert(high_q[0].a1 == 0);
     assert(high_q[0].b1 == 0);
-    assert(loudness_test_volume_in_biquad() == FALSE);
+    assert(loudness_test_volume_in_biquad() == TRUE);
 
     printf("test_bass_boost_mode_selects_index_40_with_12db_boost passed\n\n");
 }
@@ -674,27 +682,73 @@ void test_bass_boost_mode_selects_index_40_with_12db_boost(void) {
 void test_bass_boost_external_volume_scales_output(void) {
     printf("Running test_bass_boost_external_volume_scales_output...\n");
     const int32_t test_sample = 1000000 << 8;
-    int32_t filtered;
-    S32 sample_L;
-    S32 sample_R;
+    int32_t filtered_full;
+    int32_t filtered_half;
 
     loudness_init();
     loudness_set_source_has_volume_control();
     current_freq.frequency = 48000;
     loudness_change_frequency_fast(48000);
     loudness_bass_boost_set(TRUE);
+    loudness_usb_volume_changed_left(0);
+    loudness_usb_volume_changed_right(0);
     loudness_update_active_equalizer_step();
-    assert(loudness_test_volume_in_biquad() == FALSE);
+    assert(loudness_test_volume_in_biquad() == TRUE);
 
-    filtered = loudness_test_filter_24bit_left( test_sample);
-    spk_vol_mult_L = VOL_MULT_UNITY / 2;
-    spk_vol_mult_R = VOL_MULT_UNITY / 2;
-    sample_L = filtered;
-    sample_R = filtered;
-    adjust_volume(&sample_L, &sample_R);
-    assert(labs(sample_L) < labs(filtered));
+    filtered_full = loudness_test_filter_24bit_left(test_sample);
+
+    loudness_usb_volume_changed_left(-6 * 256);
+    loudness_usb_volume_changed_right(-6 * 256);
+    loudness_update_active_equalizer_step();
+    filtered_half = loudness_test_filter_24bit_left(test_sample);
+    assert(labs(filtered_half) < labs(filtered_full));
 
     printf("test_bass_boost_external_volume_scales_output passed\n\n");
+}
+
+void test_bass_boost_no_clip_at_reference_level(void) {
+    printf("Running test_bass_boost_no_clip_at_reference_level...\n");
+    const int32_t test_sample = (INT24_MAX - 1024) << 8;
+    int32_t filtered;
+    int32_t passthrough;
+    int32_t boosted;
+    int differs = 0;
+    int i;
+
+    loudness_init();
+    loudness_set_source_has_volume_control();
+    current_freq.frequency = 48000;
+    loudness_change_frequency_fast(48000);
+
+    loudness_bass_boost_set(TRUE);
+    loudness_usb_volume_changed_left(-6 * 256);
+    loudness_usb_volume_changed_right(-6 * 256);
+    loudness_update_active_equalizer_step();
+
+    filtered = loudness_test_filter_24bit_left(test_sample);
+    assert(labs(filtered >> 8) < INT24_MAX);
+
+    loudness_bass_boost_set(FALSE);
+    loudness_loudness_set(FALSE);
+    loudness_update_active_equalizer_step();
+    loudness_fast_reset_states();
+    passthrough = loudness_test_filter_24bit_left(test_sample);
+    assert(passthrough != 0);
+
+    loudness_bass_boost_set(TRUE);
+    loudness_update_active_equalizer_step();
+    for (i = 0; i < 200; i++) {
+        int32_t sample = ((i & 1) ? 1 : -1) * (700000 << 8);
+        passthrough = sample;
+        boosted = loudness_test_filter_24bit_left(sample);
+        if (boosted != passthrough) {
+            differs = 1;
+        }
+        assert(labs(boosted >> 8) < INT24_MAX);
+    }
+    assert(differs);
+
+    printf("test_bass_boost_no_clip_at_reference_level passed\n\n");
 }
 
 void test_active_filter_mode_fallback_to_bass_boost(void) {
@@ -758,20 +812,17 @@ void test_device_audio_set_volume_in_biquad_hard_clip_switching(void) {
     assert(loudness_active_filter() != FILTER_OFF_MODE);
     assert(device_audio_volume_apply_fn == hard_clip);
 
-    /* 5. Set source volume control while bass boost is active -> adjust_volume_hard_clip */
+    /* 5. Set source volume control while bass boost is active -> keep_volume */
     loudness_set_source_has_volume_control();
     assert(loudness_inferred_gain_has_source_volume_control() == TRUE);
     assert(loudness_active_filter() != FILTER_OFF_MODE);
-    assert(device_audio_volume_apply_fn == adjust_volume_hard_clip);
+    assert(device_audio_volume_apply_fn == keep_volume);
 
-    /* Verify adjust_volume_hard_clip with unity gain */
-    spk_vol_mult_L = VOL_MULT_UNITY;
-    spk_vol_mult_R = VOL_MULT_UNITY;
     sL = INT24_MAX + 500;
     sR = INT24_MIN - 500;
     device_audio_volume_apply_fn(&sL, &sR);
-    assert(sL == INT24_MAX);
-    assert(sR == INT24_MIN);
+    assert(sL == INT24_MAX + 500);
+    assert(sR == INT24_MIN - 500);
 
     /* 6. Switch to LOUDNESS_MODE with source volume control -> keep_volume only */
     loudness_loudness_set(TRUE);
@@ -806,10 +857,15 @@ void test_uac2_loudness_filter_enabled_filter_off(void) {
     loudness_loudness_set(TRUE);
     assert(loudness_uac2_packet_filter_enabled(TRUE, 44100) == TRUE);
     assert(loudness_uac2_packet_filter_enabled(TRUE, 48000) == TRUE);
+    assert(loudness_uac2_packet_filter_enabled(TRUE, 88200) == FALSE);
+    assert(loudness_uac2_packet_filter_enabled(TRUE, 96000) == FALSE);
 
     loudness_loudness_set(FALSE);
     loudness_bass_boost_set(TRUE);
     assert(loudness_uac2_packet_filter_enabled(TRUE, 48000) == TRUE);
+    assert(loudness_uac2_packet_filter_enabled(TRUE, 88200) == FALSE);
+    assert(loudness_uac2_packet_filter_enabled(TRUE, 96000) == FALSE);
+    assert(loudness_uac2_packet_filter_enabled(TRUE, 192000) == FALSE);
 
     printf("test_uac2_loudness_filter_enabled_filter_off passed\n\n");
 }
@@ -1129,6 +1185,7 @@ void test_loudness_fast_biquad_exact_samples(void)
     printf("Running test_loudness_fast_biquad_exact_samples...\n");
 
     loudness_init();
+    loudness_loudness_set(TRUE);
     loudness_set_source_has_volume_control();
     loudness_change_frequency_fast(48000);
     loudness_fast_reset_states();
@@ -1544,6 +1601,7 @@ int main() {
     test_loudness_highshelf_and_lowshelf_share_runtime_slot_and_swap_simultaneously();
     test_bass_boost_mode_selects_index_40_with_12db_boost();
     test_bass_boost_external_volume_scales_output();
+    test_bass_boost_no_clip_at_reference_level();
     test_active_filter_mode_fallback_to_bass_boost();
     test_device_audio_set_volume_in_biquad_hard_clip_switching();
     test_uac2_loudness_filter_enabled_filter_off();

@@ -62,10 +62,8 @@ void loudness_change_frequency_fast(uint32_t frequency);
 #define LOUDNESS_FILTER_24BIT_STEREO_PACKET(L, R, N) \
     loudness_filter_24bit_stereo_packet((L), (R), (N))
 
-#define LOUDNESS_FILTER_16BIT_STEREO_PACKET_2X_HZ(L, R, N) \
-    loudness_filter_16bit_stereo_packet_2x_hz((L), (R), (N))
-#define LOUDNESS_FILTER_24BIT_STEREO_PACKET_2X_HZ(L, R, N) \
-    loudness_filter_24bit_stereo_packet_2x_hz((L), (R), (N))
+#define LOUDNESS_PROCESS_UAC2_STEREO_PACKET(L, R, N, IS_16BIT) \
+    loudness_process_uac2_stereo_packet((L), (R), (N), (IS_16BIT))
 
 /* Force the active loudness band from an external dBFS estimate (<= 0). */
 void loudness_set_level_dbfs(int32_t db_fs);
@@ -105,10 +103,8 @@ int32_t loudness_get_db_spl_right_x10(void);
 #define LOUDNESS_FILTER_24BIT_STEREO_PACKET(L, R, N) \
     do { (void)(L); (void)(R); (void)(N); } while (0)
 
-#define LOUDNESS_FILTER_16BIT_STEREO_PACKET_2X_HZ(L, R, N) \
-    do { (void)(L); (void)(R); (void)(N); } while (0)
-#define LOUDNESS_FILTER_24BIT_STEREO_PACKET_2X_HZ(L, R, N) \
-    do { (void)(L); (void)(R); (void)(N); } while (0)
+#define LOUDNESS_PROCESS_UAC2_STEREO_PACKET(L, R, N, IS_16BIT) \
+    do { (void)(L); (void)(R); (void)(N); (void)(IS_16BIT); } while (0)
 #endif /* LOUDNESS_DISABLE */
 
 /* --- Helpers --- */

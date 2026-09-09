@@ -61,9 +61,7 @@ static void loudness_print_build_config(void) {
 
 void loudness_usb_statistics_init(void) {
 #ifndef USBSTATISTICS_DISABLE
-#ifdef FREERTOS_USED
     statistics_init();
-#endif
 #endif
 }
 
@@ -108,6 +106,7 @@ volatile S16 target_gain_dbfs_right_q8 = 0;
 static volatile Bool loudness_bass_boost_enabled = FALSE;
 static volatile Bool loudness_loudness_enabled = TRUE;
 static volatile filter_mode_t last_filter_enabled = LOUDNESS_MODE;
+static filter_mode_t loudness_last_dsp_filter_mode = FILTER_OFF_MODE;
 static Bool loudness_external_volume_active = FALSE;
 
 static void loudness_select_equalizer_steps(void);
@@ -129,6 +128,11 @@ static void loudness_set_volume_in_biquad(Bool source_has_volume_control, Bool a
 #ifdef FEATURE_VOLUME_CTRL
 	if (active_filter_enabled && last_filter_enabled == LOUDNESS_MODE) {
 		/* Volume is baked into lowshelf rows; biquad saturates internally. */
+		device_audio_volume_apply_fn = keep_volume;
+		return;
+	}
+	if (active_filter_enabled && last_filter_enabled == BASS_BOOST_MODE
+		&& source_has_volume_control) {
 		device_audio_volume_apply_fn = keep_volume;
 		return;
 	}
@@ -188,13 +192,12 @@ static void loudness_update_filter_mode(void)
 		return;
 	}
 
-	/*
-	 * LOUDNESS_MODE <-> BASS_BOOST_MODE changes the high-shelf from an active
-	 * treble contour to identity (or the reverse). Residual delay-line energy
-	 * in highshelf_states[] may cause a short pop if coeffs flip without a
-	 * state reset. loudness_fast_reset_states() is intentionally not called
-	 * here until empirical HW listening confirms whether it is needed.
-	 */
+	if ((loudness_last_dsp_filter_mode == LOUDNESS_MODE
+			&& last_filter_enabled == BASS_BOOST_MODE)
+		|| (loudness_last_dsp_filter_mode == BASS_BOOST_MODE
+			&& last_filter_enabled == LOUDNESS_MODE)) {
+		loudness_fast_reset_states();
+	}
 
 	if (loudness_external_volume_active) {
 		loudness_fast_reset_states();
@@ -208,12 +211,23 @@ static void loudness_update_filter_mode(void)
 	loudness_fast_refresh_quotient_table_pointers();
 	loudness_publish_equalizer_telemetry();
 	loudness_select_equalizer_steps();
+
+	if (last_filter_enabled != FILTER_OFF_MODE) {
+		loudness_last_dsp_filter_mode = last_filter_enabled;
+	}
 }
 
 #if defined(BUILD_TESTING)
 Bool loudness_test_volume_in_biquad(void)
 {
-	return last_filter_enabled == LOUDNESS_MODE;
+	if (last_filter_enabled == LOUDNESS_MODE) {
+		return TRUE;
+	}
+	if (last_filter_enabled == BASS_BOOST_MODE
+		&& loudness_inferred_gain_has_source_volume_control()) {
+		return TRUE;
+	}
+	return FALSE;
 }
 #endif
 
@@ -570,9 +584,15 @@ static void loudness_usb_volume_changed_channel(int channel, S16 volume_q8)
     if (channel == 0) {
         spk_vol_usb_L = volume_q8;
         target_gain_dbfs_left_q8 = (int16_t)gain_q8;
+#ifdef FEATURE_VOLUME_CTRL
+        device_audio_volume_update_mult_left();
+#endif
     } else {
         spk_vol_usb_R = volume_q8;
         target_gain_dbfs_right_q8 = (int16_t)gain_q8;
+#ifdef FEATURE_VOLUME_CTRL
+        device_audio_volume_update_mult_right();
+#endif
     }
     loudness_set_source_has_volume_control();
 
@@ -670,9 +690,13 @@ void loudness_filter_init(void) {
 #ifndef LOUDNESS_DISABLE
 Bool loudness_uac2_packet_filter_enabled(Bool not_muted, uint32_t freq_hz)
 {
-    return not_muted
-        && (freq_hz == (uint32_t)FREQ_44 || freq_hz == (uint32_t)FREQ_48)
-        && loudness_active_filter() != FILTER_OFF_MODE;
+    filter_mode_t mode = loudness_active_filter();
+
+    if (!not_muted || mode == FILTER_OFF_MODE) {
+        return FALSE;
+    }
+
+    return freq_hz == (uint32_t)FREQ_44 || freq_hz == (uint32_t)FREQ_48;
 }
 #endif
 

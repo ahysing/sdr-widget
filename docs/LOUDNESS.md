@@ -86,15 +86,18 @@ scaling.
 
 | Mode | Low-shelf | High-shelf | Volume stage |
 |------|-----------|------------|--------------|
-| **Bass boost** | `lowshelf_no_volume_*`, fixed step 40 (55 phon) | Identity (bypass) | External `adjust_volume` |
+| **Bass boost** (host volume) | `lowshelf_no_volume_*` step 60 (55 phon), `b0`/`b1` scaled by `spk_vol_mult_*` at publish time | Identity (bypass) | `keep_volume` |
+| **Bass boost** (no host volume) | `lowshelf_no_volume_*`, fixed step 60 (55 phon) | Identity (bypass) | `hard_clip` only |
 | **Loudness** (host volume) | `lowshelf_and_volume_*`, step from USB volume → phon | `highshelf_no_volume_*`, same phon | Baked in low-shelf (`keep_volume`) |
 | **Inferred gain loudness** | `lowshelf_no_volume_*`, step from inferred gain | `highshelf_no_volume_*`, same phon | No multiply — level from PCM + step |
 | **Filter off** | Skipped (`uac2` packet gate) | Skipped | External `adjust_volume` |
 
 Baked-volume low-shelf numerators scale `b0`/`b1`/`b2` by `10^(volume_db/20)` at
-table generation time while poles stay fixed — see `second_order_baked_coefficients`
+table generation time (loudness rows) or at coefficient-publish time (bass boost
+with host volume) while poles stay fixed — see `second_order_baked_coefficients`
 in the generator script. External volume multiplies PCM after the biquad chain in
-[`src/device_audio_task.c`](../src/device_audio_task.c).
+[`src/device_audio_task.c`](../src/device_audio_task.c) only when gain is not
+already baked (`filter off`, bass boost without host volume).
 
 ## USB audio signal chain
 
@@ -108,8 +111,9 @@ in the generator script. External volume multiplies PCM after the biquad chain i
 5. Apply explicit mute if requested.
 6. Write samples to the DAC buffer.
 
-With `LOUDNESS_MODE`, playback gain is baked into the low-shelf row and
-`keep_volume` is a no-op. Bass boost and filter-off use `adjust_volume`.
+With `LOUDNESS_MODE` or bass boost with host volume, playback gain is baked into
+the low-shelf row and `keep_volume` is a no-op. Filter-off and bass boost without
+host volume use `adjust_volume` or `hard_clip` after the chain.
 
 ## LOUDNESS_DISABLE USB facade
 

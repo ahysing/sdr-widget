@@ -42,6 +42,7 @@ static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
 
     current_freq.frequency = 44100;
     loudness_init();
+    loudness_loudness_set(TRUE);
     loudness_set_source_has_volume_control();
     loudness_usb_volume_changed_stereo(0);
     reset_usb_stats_buffers();
@@ -124,6 +125,7 @@ static void test_equalizer_step_switch_rapid_sweep_no_deadline_misses(void) {
 
     current_freq.frequency = 48000;
     loudness_init();
+    loudness_loudness_set(TRUE);
     loudness_set_source_has_volume_control();
 
     const int volumes[] = {
@@ -153,6 +155,7 @@ static void test_usb_volume_change_updates_telemetry_immediately(void) {
     reset_usb_stats_buffers();
     current_freq.frequency = 48000;
     loudness_init();
+    loudness_loudness_set(TRUE);
 
     loudness_usb_volume_changed_left((S16)((84 - LOUDNESS_DB_SPL_MAX) * 256));
     telemetry = stats_telemetry_read_best_effort();
@@ -211,6 +214,7 @@ static void test_stereo_telemetry_policies(void)
     reset_usb_stats_buffers();
     current_freq.frequency = 48000;
     loudness_init();
+    loudness_loudness_set(TRUE);
 
     loudness_usb_volume_changed_left((S16)(-6 * 256));
     loudness_usb_volume_changed_right((S16)(-20 * 256));

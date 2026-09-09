@@ -708,21 +708,9 @@ void uac2_device_audio_task(void *pvParameters)
 
 #ifndef LOUDNESS_DISABLE
 					if (loudness_enabled_packet) {
-						for (i = 0; i < num_samples; i++) {
-							loudness_envelope_follower_update_stereo(usb_out_L[i],
-								usb_out_R[i]);
-						}
-						if (audio_out_alt == ALT2_AS_INTERFACE_INDEX) {
-							if (current_freq.frequency <= FREQ_48)
-								LOUDNESS_FILTER_16BIT_STEREO_PACKET(usb_out_L, usb_out_R, num_samples);
-							else
-								LOUDNESS_FILTER_16BIT_STEREO_PACKET_2X_HZ(usb_out_L, usb_out_R, num_samples);
-						} else if (audio_out_alt == ALT1_AS_INTERFACE_INDEX) {
-							if (current_freq.frequency <= FREQ_48)
-								LOUDNESS_FILTER_24BIT_STEREO_PACKET(usb_out_L, usb_out_R, num_samples);
-							else
-								LOUDNESS_FILTER_24BIT_STEREO_PACKET_2X_HZ(usb_out_L, usb_out_R, num_samples);
-						}
+						LOUDNESS_PROCESS_UAC2_STEREO_PACKET(
+							usb_out_L, usb_out_R, num_samples,
+							(audio_out_alt == ALT2_AS_INTERFACE_INDEX));
 					}
 #endif
 

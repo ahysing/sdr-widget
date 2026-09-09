@@ -322,8 +322,8 @@ endif
 $(TEST_BUILD_DIR):
 	$(TEST_MKDIR)
 
-$(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT): tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c src/usb_statistics.c src/stats_telemetry.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) $(CFLAGS_TEST_BUILD) $(CFLAGS_TEST) -DUNIT_TEST $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c src/usb_statistics.c src/stats_telemetry.c
+$(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT): tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c src/usb_statistics.c src/stats_telemetry.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests $(CFLAGS_TEST_BUILD) $(CFLAGS_TEST) -DUNIT_TEST -DFEATURE_VOLUME_CTRL $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c src/usb_statistics.c src/stats_telemetry.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c
 
 $(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c | $(TEST_BUILD_DIR)
 	$(CC) $(TEST_PREAMBLE) -I tests $(CFLAGS_TEST_BUILD) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE -DFEATURE_VOLUME_CTRL $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c
