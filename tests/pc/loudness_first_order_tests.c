@@ -49,10 +49,10 @@ static const lower_tremble_test_case_t lower_tremble_test_case[] = {
 };
 
 /* External table declarations from src/loudness_first_order.c */
-extern const biquad_first_order_quotients_t highshelf_no_volume_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS];
-extern const biquad_first_order_quotients_t highshelf_no_volume_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS];
+extern const biquad_first_order_coefficients_t highshelf_no_volume_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS];
+extern const biquad_first_order_coefficients_t highshelf_no_volume_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS];
 
-static const biquad_first_order_quotients_t *get_highshelf_quotients(
+static const biquad_first_order_coefficients_t *get_highshelf_coefficients(
     uint32_t sample_rate_hz, int equalizer_step)
 {
     assert(equalizer_step >= 0 && equalizer_step < LOUDNESS_NUM_EQUALIZER_STEPS);
@@ -72,15 +72,15 @@ static double measure_highshelf_gain_db(
     double output_rms;
     int i;
     biquad_first_order_state_t state = { 0 };
-    const biquad_first_order_quotients_t *quotients =
-        get_highshelf_quotients(sample_rate_hz, equalizer_step);
+    const biquad_first_order_coefficients_t *coefficients =
+        get_highshelf_coefficients(sample_rate_hz, equalizer_step);
 
     for (i = 0; i < SINE_TEST_SAMPLE_COUNT; i++) {
         double phase = 2.0 * SINE_TEST_PI * test_freq_hz *
             (double)i / (double)sample_rate_hz;
         int32_t input_24 = (int32_t)lrint(
             (double)SINE_TEST_AMPLITUDE * sin(phase));
-        int32_t output_24 = loudness_highshelf(input_24, &state, quotients);
+        int32_t output_24 = loudness_highshelf(input_24, &state, coefficients);
 
         if (i >= SINE_TEST_SETTLE_SAMPLES) {
             input_sum_squares += (double)input_24 * (double)input_24;

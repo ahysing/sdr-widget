@@ -298,10 +298,10 @@ def optimization_cost(params: ndarray, frequencies_hz: ndarray, sample_rate_hz: 
 def iso226_contour(phon: float) -> tuple[ndarray, ndarray]:
     """Return ISO-226 contour, extrapolating pydsm's 90-phon ceiling."""
     if phon <= 90.0:
-        return iso226_spl_contour(phon, hfe=True)
+        return iso226_spl_contour(phon, hfe=False)
 
-    frequencies, spl_90 = iso226_spl_contour(90.0, hfe=True)
-    frequencies_895, spl_895 = iso226_spl_contour(89.5, hfe=True)
+    frequencies, spl_90 = iso226_spl_contour(90.0, hfe=False)
+    frequencies_895, spl_895 = iso226_spl_contour(89.5, hfe=False)
     if not np.array_equal(frequencies, frequencies_895):
         raise RuntimeError("ISO-226 contour frequency grids do not match")
     slope_per_phon = (spl_90 - spl_895) / 0.5
@@ -542,8 +542,8 @@ def plot_results(
     ax.grid(True, which="major", axis="y", ls="-", alpha=0.5)
     for f in spotify_freqs:
         ax.axvline(x=f, color="#A8C3D4", linestyle="-.", linewidth=0.8, alpha=0.6, zorder=1)
-    ax.set_xlabel("Frekvens [Hz]\n(Spotify EQ-bands)")
-    ax.set_ylabel("magnitude [dB] / loudness [phon]")
+    ax.set_xlabel("Frekvens [Hz]\n(Spotify EQ)")
+    ax.set_ylabel("Volum [dB] / loudness [phon]")
     ax.legend(loc="lower left", fontsize="small", framealpha=0.95)
     fig.tight_layout(pad=1.0)
  
@@ -555,7 +555,7 @@ def plot_results(
         borderaxespad=0.0,
     )
 
-    plt.title(f"Graph type: {args.graph_type} (fs={sample_rate_hz:.0f} Hz)")
+    plt.title(f"Type: {args.graph_type} (fs={sample_rate_hz:.0f} Hz)")
     plt.tight_layout(rect=[0, 0, 0.97, 1])
     plt.show()
 

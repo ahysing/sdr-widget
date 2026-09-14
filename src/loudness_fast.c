@@ -69,7 +69,7 @@ enum {
 };
 loudness_idle_mask_t filter_idle_cached = LOUDNESS_FILTER_ALL;
 
-static const biquad_quotients_fast_t
+static const biquad_coefficients_t
 lowshelf_and_volume_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {  -267671632,      279028,     -257079 },  /* phon=25.0 volume=-60.0 dB fs=44100 Hz biquad * volume */
     {  -267671632,      295428,     -272445 },  /* phon=25.5 volume=-59.5 dB fs=44100 Hz biquad * volume */
@@ -194,7 +194,7 @@ lowshelf_and_volume_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {  -261595220,   267609870,  -262420806 },  /* phon=85.0 volume=0.0 dB fs=44100 Hz biquad * volume */
 };
 
-static const biquad_quotients_fast_t
+static const biquad_coefficients_t
 lowshelf_no_volume_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {  -267671632,   279027685,  -257079403 },  /* phon=25.0 volume=-60.0 dB fs=44100 Hz biquad */
     {  -267671632,   278902190,  -257204899 },  /* phon=25.5 volume=-59.5 dB fs=44100 Hz biquad */
@@ -319,7 +319,7 @@ lowshelf_no_volume_44100hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {  -261595220,   267609870,  -262420806 },  /* phon=85.0 volume=0.0 dB fs=44100 Hz biquad */
 };
 
-static const biquad_quotients_fast_t
+static const biquad_coefficients_t
 lowshelf_and_volume_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {  -267733612,      278168,     -258001 },  /* phon=25.0 volume=-60.0 dB fs=48000 Hz biquad * volume */
     {  -267733612,      294528,     -273411 },  /* phon=25.5 volume=-59.5 dB fs=48000 Hz biquad * volume */
@@ -444,7 +444,7 @@ lowshelf_and_volume_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {  -262145672,   267676276,  -262904852 },  /* phon=85.0 volume=0.0 dB fs=48000 Hz biquad * volume */
 };
 
-static const biquad_quotients_fast_t
+static const biquad_coefficients_t
 lowshelf_no_volume_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
     {  -267733612,   278168040,  -258001028 },  /* phon=25.0 volume=-60.0 dB fs=48000 Hz biquad */
     {  -267733612,   278052728,  -258116340 },  /* phon=25.5 volume=-59.5 dB fs=48000 Hz biquad */
@@ -570,42 +570,42 @@ lowshelf_no_volume_48000hz[LOUDNESS_NUM_EQUALIZER_STEPS] = {
 };
 
 
-static const biquad_first_order_quotients_t
+static const biquad_first_order_coefficients_t
 highshelf_identity[LOUDNESS_CHANNELS] = {
     { 0, LOUDNESS_Q28_ONE, 0 },
     { 0, LOUDNESS_Q28_ONE, 0 }
 };
 
-static biquad_quotients_fast_t lowshelf_runtime_slot[2][LOUDNESS_CHANNELS];
-static biquad_first_order_quotients_t highshelf_runtime_slot[2][LOUDNESS_CHANNELS];
+static biquad_coefficients_t lowshelf_runtime_slot[2][LOUDNESS_CHANNELS];
+static biquad_first_order_coefficients_t highshelf_runtime_slot[2][LOUDNESS_CHANNELS];
 static volatile uint8_t active_quotient_slot;
-static biquad_state_fast_t     lowshelf_states[LOUDNESS_CHANNELS];
-static const biquad_quotients_fast_t *active_lowshelf_table =
+static biquad_state_t     lowshelf_states[LOUDNESS_CHANNELS];
+static const biquad_coefficients_t *active_lowshelf_table =
     lowshelf_and_volume_44100hz;
-static const biquad_first_order_quotients_t *active_highshelf_table =
+static const biquad_first_order_coefficients_t *active_highshelf_table =
     highshelf_no_volume_44100hz;
 
 static void loudness_filter_refresh_idle_cache(void);
 static void swap_quotient_buffers(void);
 
 
-static const biquad_quotients_fast_t *active_lowshelf_LUT_44100hz(void)
+static const biquad_coefficients_t *active_lowshelf_LUT_44100hz(void)
 {
     return loudness_inferred_gain_has_source_volume_control() ? lowshelf_and_volume_44100hz : lowshelf_no_volume_44100hz;
 }
 
-static const biquad_quotients_fast_t *active_lowshelf_LUT_48000hz(void)
+static const biquad_coefficients_t *active_lowshelf_LUT_48000hz(void)
 {
     return loudness_inferred_gain_has_source_volume_control() ? lowshelf_and_volume_48000hz : lowshelf_no_volume_48000hz;
 }
 
-static const biquad_quotients_fast_t *active_lowshelf_LUT(
+static const biquad_coefficients_t *active_lowshelf_LUT(
     uint32_t frequency)
 {
     return (frequency == (uint32_t)FREQ_48) ? active_lowshelf_LUT_48000hz() : active_lowshelf_LUT_44100hz();
 }
 
-static const biquad_quotients_fast_t *active_lowshelf_LUT_for_frequency(
+static const biquad_coefficients_t *active_lowshelf_LUT_for_frequency(
     uint32_t frequency)
 {
     if (loudness_active_filter() == BASS_BOOST_MODE) {
@@ -617,33 +617,33 @@ static const biquad_quotients_fast_t *active_lowshelf_LUT_for_frequency(
 }
 
 typedef struct {
-    const biquad_quotients_fast_t *lowshelf;
-    const biquad_first_order_quotients_t *highshelf;
-} loudness_active_quotients_pair_t;
+    const biquad_coefficients_t *lowshelf;
+    const biquad_first_order_coefficients_t *highshelf;
+} loudness_active_coefficients_pair_t;
 
-static loudness_active_quotients_pair_t loudness_snapshot_active_quotients(void)
+static loudness_active_coefficients_pair_t loudness_snapshot_active_coefficients(void)
 {
     uint8_t slot = active_quotient_slot & 1u;
-    loudness_active_quotients_pair_t q;
+    loudness_active_coefficients_pair_t q;
     q.lowshelf = lowshelf_runtime_slot[slot];
     q.highshelf = highshelf_runtime_slot[slot];
     return q;
 }
 
-const biquad_quotients_fast_t *loudness_lowshelf_active_quotients(void)
+const biquad_coefficients_t *loudness_lowshelf_active_coefficients(void)
 {
     return lowshelf_runtime_slot[active_quotient_slot & 1u];
 }
 
-const biquad_first_order_quotients_t *loudness_highshelf_active_quotients(void)
+const biquad_first_order_coefficients_t *loudness_highshelf_active_coefficients(void)
 {
     return highshelf_runtime_slot[active_quotient_slot & 1u];
 }
 
 LOUDNESS_STATIC_INLINE int32_t loudness_lowshelf_inline(
     const int32_t x_n,
-    biquad_state_fast_t *const restrict st,
-    const biquad_quotients_fast_t *const restrict q)
+    biquad_state_t *const restrict st,
+    const biquad_coefficients_t *const restrict q)
 {
     const int64_t fb1 = -((int64_t)q->a1 * (int64_t)st->w1);
 
@@ -661,7 +661,7 @@ LOUDNESS_STATIC_INLINE int32_t loudness_lowshelf_inline(
 }
 
 #ifdef BUILD_TESTING
-int32_t loudness_lowshelf(int32_t x_n, biquad_state_fast_t *st, const biquad_quotients_fast_t *q)
+int32_t loudness_lowshelf(int32_t x_n, biquad_state_t *st, const biquad_coefficients_t *q)
 {
     return loudness_lowshelf_inline(x_n, st, q);
 }
@@ -670,7 +670,7 @@ int32_t loudness_lowshelf(int32_t x_n, biquad_state_fast_t *st, const biquad_quo
 LOUDNESS_STATIC_INLINE int32_t loudness_highshelf_inline(
     const int32_t x_n,
     biquad_first_order_state_t *const restrict st,
-    const biquad_first_order_quotients_t *const restrict rt)
+    const biquad_first_order_coefficients_t *const restrict rt)
 {
     const int64_t fb1 = -((int64_t)rt->a1 * (int64_t)st->w1);
     
@@ -688,7 +688,7 @@ LOUDNESS_STATIC_INLINE int32_t loudness_highshelf_inline(
 }
 
 #ifdef BUILD_TESTING
-int32_t loudness_highshelf(int32_t x_n, biquad_first_order_state_t *st, const biquad_first_order_quotients_t *rt)
+int32_t loudness_highshelf(int32_t x_n, biquad_first_order_state_t *st, const biquad_first_order_coefficients_t *rt)
 {
     return loudness_highshelf_inline(x_n, st, rt);
 }
@@ -702,10 +702,10 @@ LOUDNESS_STATIC_INLINE int32_t loudness_downsample_filter_to_16bit_container(con
 
 LOUDNESS_STATIC_INLINE int32_t loudness_cascade_biquad_step(
     const int32_t x_n,
-    biquad_state_fast_t *const restrict st_low,
-    const biquad_quotients_fast_t *const restrict q_low,
+    biquad_state_t *const restrict st_low,
+    const biquad_coefficients_t *const restrict q_low,
     biquad_first_order_state_t *const restrict st_high,
-    const biquad_first_order_quotients_t *const restrict q_high)
+    const biquad_first_order_coefficients_t *const restrict q_high)
 {
     const int32_t y_low = loudness_lowshelf_inline(x_n, st_low, q_low);
     return loudness_highshelf_inline(y_low, st_high, q_high);
@@ -713,10 +713,10 @@ LOUDNESS_STATIC_INLINE int32_t loudness_cascade_biquad_step(
 
 LOUDNESS_STATIC_INLINE int32_t loudness_cascade_16bit_container_step(
     const int32_t x_container,
-    biquad_state_fast_t *const restrict st_low,
-    const biquad_quotients_fast_t *const restrict q_low,
+    biquad_state_t *const restrict st_low,
+    const biquad_coefficients_t *const restrict q_low,
     biquad_first_order_state_t *const restrict st_high,
-    const biquad_first_order_quotients_t *const restrict q_high)
+    const biquad_first_order_coefficients_t *const restrict q_high)
 {
     const int32_t x_24 = (int32_t)(int16_t)(x_container >> 16) << 8;
     const int32_t y_24 = loudness_cascade_biquad_step(x_24, st_low, q_low, st_high, q_high);
@@ -725,10 +725,10 @@ LOUDNESS_STATIC_INLINE int32_t loudness_cascade_16bit_container_step(
 
 LOUDNESS_STATIC_INLINE int32_t loudness_cascade_24bit_container_step(
     const int32_t x_container,
-    biquad_state_fast_t *const restrict st_low,
-    const biquad_quotients_fast_t *const restrict q_low,
+    biquad_state_t *const restrict st_low,
+    const biquad_coefficients_t *const restrict q_low,
     biquad_first_order_state_t *const restrict st_high,
-    const biquad_first_order_quotients_t *const restrict q_high)
+    const biquad_first_order_coefficients_t *const restrict q_high)
 {
     const int32_t x_24 = x_container >> 8;
     const int32_t y_24 = loudness_cascade_biquad_step(x_24, st_low, q_low, st_high, q_high);
@@ -737,8 +737,8 @@ LOUDNESS_STATIC_INLINE int32_t loudness_cascade_24bit_container_step(
 
 LOUDNESS_STATIC_INLINE int32_t loudness_lowshelf_16bit_container(
     const int32_t x_container,
-    biquad_state_fast_t *const restrict st_low,
-    const biquad_quotients_fast_t *const restrict q_low)
+    biquad_state_t *const restrict st_low,
+    const biquad_coefficients_t *const restrict q_low)
 {
     const int32_t x_24 = (int32_t)(int16_t)(x_container >> 16) << 8;
     const int32_t y_24 = loudness_lowshelf_inline(x_24, st_low, q_low);
@@ -747,8 +747,8 @@ LOUDNESS_STATIC_INLINE int32_t loudness_lowshelf_16bit_container(
 
 LOUDNESS_STATIC_INLINE int32_t loudness_lowshelf_24bit_container(
     const int32_t x_container,
-    biquad_state_fast_t *const restrict st_low,
-    const biquad_quotients_fast_t *const restrict q_low)
+    biquad_state_t *const restrict st_low,
+    const biquad_coefficients_t *const restrict q_low)
 {
     const int32_t x_24 = x_container >> 8;
     const int32_t y_24 = loudness_lowshelf_inline(x_24, st_low, q_low);
@@ -785,9 +785,9 @@ static Bool loudness_fast_bass_boost_bakes_host_volume(void)
 static void loudness_fast_republish_bass_boost_volume_bake(
     int equalizer_step_left, int equalizer_step_right)
 {
-    loudness_fast_prepare_inactive_quotients(
+    loudness_fast_prepare_inactive_coefficients(
         active_lowshelf_table, equalizer_step_left, equalizer_step_right);
-    loudness_publish_quotients();
+    loudness_publish_coefficients();
 }
 
 static Bool loudness_fast_advance_toward_steps(int desired_left, int desired_right)
@@ -805,7 +805,7 @@ static Bool loudness_fast_advance_toward_steps(int desired_left, int desired_rig
     int next_right = loudness_advance_toward_equilizer_step(
         committed_equalizer_step[1], desired_right);
 
-    loudness_fast_prepare_inactive_quotients(
+    loudness_fast_prepare_inactive_coefficients(
         active_lowshelf_table, next_left, next_right);
     swap_quotient_buffers();
     committed_equalizer_step[0] = (uint8_t)next_left;
@@ -877,17 +877,17 @@ static void swap_quotient_buffers(void)
     active_quotient_slot ^= 1u;
 }
 
-const biquad_quotients_fast_t *loudness_fast_baked_quotient_table_48000hz(void)
+const biquad_coefficients_t *loudness_fast_baked_quotient_table_48000hz(void)
 {
     return active_lowshelf_LUT_48000hz();
 }
 
-const biquad_quotients_fast_t *loudness_fast_baked_quotient_table_44100hz(void)
+const biquad_coefficients_t *loudness_fast_baked_quotient_table_44100hz(void)
 {
     return active_lowshelf_LUT_44100hz();
 }
 
-const biquad_quotients_fast_t *loudness_fast_no_volume_quotient_table_48000hz(void)
+const biquad_coefficients_t *loudness_fast_no_volume_quotient_table_48000hz(void)
 {
     return lowshelf_no_volume_48000hz;
 }
@@ -917,9 +917,9 @@ void loudness_fast_refresh_quotient_table_pointers(void)
     }
 }
 
-static void loudness_scale_lowshelf_quotients(
-    biquad_quotients_fast_t *dst,
-    const biquad_quotients_fast_t *src,
+static void loudness_scale_lowshelf_coefficients(
+    biquad_coefficients_t *dst,
+    const biquad_coefficients_t *src,
     S32 vol_mult)
 {
     dst->a1 = src->a1;
@@ -927,7 +927,7 @@ static void loudness_scale_lowshelf_quotients(
     dst->b1 = (int32_t)(((int64_t)src->b1 * (int64_t)vol_mult) >> VOL_MULT_SHIFT);
 }
 
-void loudness_fast_prepare_inactive_quotients(const biquad_quotients_fast_t *table, int equalizer_step_left, int equalizer_step_right)
+void loudness_fast_prepare_inactive_coefficients(const biquad_coefficients_t *table, int equalizer_step_left, int equalizer_step_right)
 {
     uint8_t inactive = (uint8_t)(active_quotient_slot ^ 1u);
     int equalizer_steps[] = { equalizer_step_left, equalizer_step_right };
@@ -937,7 +937,7 @@ void loudness_fast_prepare_inactive_quotients(const biquad_quotients_fast_t *tab
     int channel;
     for (channel = 0; channel < LOUDNESS_CHANNELS; channel++) {
         int step = equalizer_steps[channel];
-        const biquad_quotients_fast_t *row = &table[step];
+        const biquad_coefficients_t *row = &table[step];
 
         if (bass_boost_bake_volume) {
 #ifdef FEATURE_VOLUME_CTRL
@@ -945,7 +945,7 @@ void loudness_fast_prepare_inactive_quotients(const biquad_quotients_fast_t *tab
 #else
             S32 vol_mult = VOL_MULT_UNITY;
 #endif
-            loudness_scale_lowshelf_quotients(
+            loudness_scale_lowshelf_coefficients(
                 &lowshelf_runtime_slot[inactive][channel],
                 row,
                 vol_mult);
@@ -961,7 +961,7 @@ void loudness_fast_prepare_inactive_quotients(const biquad_quotients_fast_t *tab
 }
 
 
-void loudness_publish_quotients(void)
+void loudness_publish_coefficients(void)
 {
     swap_quotient_buffers();
 }
@@ -990,12 +990,12 @@ void loudness_refresh_quotient_table_selection(void)
 }
 
 #ifdef BUILD_TESTING
-void loudness_test_load_active_quotients_fast(int equalizer_step)
+void loudness_test_load_active_coefficients(int equalizer_step)
 {
-    loudness_fast_prepare_inactive_quotients(
+    loudness_fast_prepare_inactive_coefficients(
         active_lowshelf_table, equalizer_step, equalizer_step);
     taskENTER_CRITICAL();
-    loudness_publish_quotients();
+    loudness_publish_coefficients();
     taskEXIT_CRITICAL();
     committed_equalizer_step[0] = (uint8_t)equalizer_step;
     committed_equalizer_step[1] = (uint8_t)equalizer_step;
@@ -1003,12 +1003,12 @@ void loudness_test_load_active_quotients_fast(int equalizer_step)
 }
 
 void loudness_test_load_quotient_table_fast(
-    const biquad_quotients_fast_t *table, int equalizer_step)
+    const biquad_coefficients_t *table, int equalizer_step)
 {
-    loudness_fast_prepare_inactive_quotients(
+    loudness_fast_prepare_inactive_coefficients(
         table, equalizer_step, equalizer_step);
     taskENTER_CRITICAL();
-    loudness_publish_quotients();
+    loudness_publish_coefficients();
     taskEXIT_CRITICAL();
     committed_equalizer_step[0] = (uint8_t)equalizer_step;
     committed_equalizer_step[1] = (uint8_t)equalizer_step;
@@ -1016,21 +1016,21 @@ void loudness_test_load_quotient_table_fast(
 }
 
 void loudness_test_get_fast_channel(int channel,
-    biquad_state_fast_t *state, biquad_quotients_fast_t *quotients)
+    biquad_state_t *state, biquad_coefficients_t *coefficients)
 {
     if (channel < 0 || channel >= LOUDNESS_CHANNELS) {
         return;
     }
     taskENTER_CRITICAL();
     *state = lowshelf_states[channel];
-    if (quotients != NULL) {
-        *quotients = loudness_lowshelf_active_quotients()[channel];
+    if (coefficients != NULL) {
+        *coefficients = loudness_lowshelf_active_coefficients()[channel];
     }
     taskEXIT_CRITICAL();
 }
 
 void loudness_test_set_fast_channel(int channel,
-    const biquad_state_fast_t *state)
+    const biquad_state_t *state)
 {
     if (channel < 0 || channel >= LOUDNESS_CHANNELS) {
         return;
@@ -1070,8 +1070,8 @@ void loudness_fast_select_equalizer_steps(int32_t db_spl_left_x10, int32_t db_sp
 
 void loudness_fast_select_unity_passthrough(void)
 {
-    biquad_quotients_fast_t unity;
-    biquad_first_order_quotients_t unity_highshelf;
+    biquad_coefficients_t unity;
+    biquad_first_order_coefficients_t unity_highshelf;
     uint8_t channel;
     uint8_t inactive = (uint8_t)(active_quotient_slot ^ 1u);
 
@@ -1143,15 +1143,15 @@ static void loudness_filter_stereo_packet_impl(
     Bool track_envelope)
 {
     U16 i;
-    biquad_state_fast_t* const restrict lowshelf_state_L = &lowshelf_states[0];
-    biquad_state_fast_t* const restrict lowshelf_state_R = &lowshelf_states[1];
-    const loudness_active_quotients_pair_t q = loudness_snapshot_active_quotients();
-    const biquad_quotients_fast_t* const restrict q_L = &q.lowshelf[0];
-    const biquad_quotients_fast_t* const restrict q_R = &q.lowshelf[1];
+    biquad_state_t* const restrict lowshelf_state_L = &lowshelf_states[0];
+    biquad_state_t* const restrict lowshelf_state_R = &lowshelf_states[1];
+    const loudness_active_coefficients_pair_t q = loudness_snapshot_active_coefficients();
+    const biquad_coefficients_t* const restrict q_L = &q.lowshelf[0];
+    const biquad_coefficients_t* const restrict q_R = &q.lowshelf[1];
     biquad_first_order_state_t* const restrict highshelf_state_L = &highshelf_states[0];
     biquad_first_order_state_t* const restrict highshelf_state_R = &highshelf_states[1];
-    const biquad_first_order_quotients_t* const restrict q_high_L = &q.highshelf[0];
-    const biquad_first_order_quotients_t* const restrict q_high_R = &q.highshelf[1];
+    const biquad_first_order_coefficients_t* const restrict q_high_L = &q.highshelf[0];
+    const biquad_first_order_coefficients_t* const restrict q_high_R = &q.highshelf[1];
 
     if (filter_idle_cached == LOUDNESS_FILTER_ALL
         && loudness_stereo_packet_all_zero(sample_L, sample_R, num_samples)) {
@@ -1224,7 +1224,7 @@ void loudness_change_frequency_fast(uint32_t frequency) {
         loudness_get_db_spl_right_x10(),
         &equalizer_step_left, &equalizer_step_right);
 
-    loudness_fast_prepare_inactive_quotients(
+    loudness_fast_prepare_inactive_coefficients(
         active_lowshelf_table, equalizer_step_left, equalizer_step_right);
     swap_quotient_buffers();
     committed_equalizer_step[0] = (uint8_t)equalizer_step_left;

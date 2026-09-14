@@ -48,12 +48,12 @@ void loudness_fast_select_equalizer_steps(int32_t db_spl_left_x10, int32_t db_sp
 void loudness_fast_select_unity_passthrough(void);
 void loudness_fast_reset_states(void);
 
-const biquad_quotients_fast_t *loudness_fast_baked_quotient_table_48000hz(void);
-const biquad_quotients_fast_t *loudness_fast_baked_quotient_table_44100hz(void);
+const biquad_coefficients_t *loudness_fast_baked_quotient_table_48000hz(void);
+const biquad_coefficients_t *loudness_fast_baked_quotient_table_44100hz(void);
 void loudness_fast_refresh_quotient_table_pointers(void);
-const biquad_quotients_fast_t *loudness_fast_no_volume_quotient_table_48000hz(void);
-void loudness_fast_prepare_inactive_quotients(const biquad_quotients_fast_t *table, int equalizer_step_left, int equalizer_step_right);
-void loudness_publish_quotients(void);
+const biquad_coefficients_t *loudness_fast_no_volume_quotient_table_48000hz(void);
+void loudness_fast_prepare_inactive_coefficients(const biquad_coefficients_t *table, int equalizer_step_left, int equalizer_step_right);
+void loudness_publish_coefficients(void);
 void loudness_refresh_quotient_table_selection(void);
 void loudness_set_source_has_volume_control(void);
 

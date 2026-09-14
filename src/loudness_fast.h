@@ -12,13 +12,13 @@
 #define LOUDNESS_CHANNELS     2
 typedef struct {
     int32_t w1;  /* canonical DF-II delay state 1, stored with M-bit headroom */
-} biquad_state_fast_t;
+} biquad_state_t;
 
 typedef struct {
     int32_t a1;
     int32_t b0;
     int32_t b1;
-} biquad_quotients_fast_t;
+} biquad_coefficients_t;
 
 void loudness_filter_16bit_stereo_packet(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
 void loudness_filter_24bit_stereo_packet(S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples);
@@ -26,10 +26,10 @@ void loudness_process_uac2_stereo_packet(
     S32 *restrict sample_L, S32 *restrict sample_R, U16 num_samples,
     Bool is_16bit_container);
 void loudness_change_frequency_fast(uint32_t frequency);
-const biquad_quotients_fast_t *loudness_lowshelf_active_quotients(void);
+const biquad_coefficients_t *loudness_lowshelf_active_coefficients(void);
 
 #ifdef BUILD_TESTING
-int32_t loudness_lowshelf(int32_t x_n, biquad_state_fast_t *st, const biquad_quotients_fast_t *q);
+int32_t loudness_lowshelf(int32_t x_n, biquad_state_t *st, const biquad_coefficients_t *q);
 
 #define LOUDNESS_TEST_IDLE_LOWSHELF_LEFT   (1u << 0)
 #define LOUDNESS_TEST_IDLE_LOWSHELF_RIGHT  (1u << 1)
@@ -79,11 +79,11 @@ static inline Bool loudness_test_lowshelf_is_active(void)
         (LOUDNESS_TEST_IDLE_LOWSHELF_LEFT | LOUDNESS_TEST_IDLE_LOWSHELF_RIGHT);
 }
 
-void loudness_test_load_active_quotients_fast(int equalizer_step);
+void loudness_test_load_active_coefficients(int equalizer_step);
 void loudness_test_load_quotient_table_fast(
-    const biquad_quotients_fast_t *table, int equalizer_step);
-void loudness_test_get_fast_channel(int channel, biquad_state_fast_t *state, biquad_quotients_fast_t *quotients);
-void loudness_test_set_fast_channel(int channel, const biquad_state_fast_t *state);
+    const biquad_coefficients_t *table, int equalizer_step);
+void loudness_test_get_fast_channel(int channel, biquad_state_t *state, biquad_coefficients_t *coefficients);
+void loudness_test_set_fast_channel(int channel, const biquad_state_t *state);
 #endif
 
 #define FMA_24BIT(A, B, C) ((S64)(A) + ((S64)(S32)(B) * (S64)(S32)(C)))
