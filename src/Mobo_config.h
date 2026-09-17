@@ -43,7 +43,7 @@ Z Zero pad	1 bit, right indicator
 M Muted		1 bit				// Too expensive?
 V Version	2 bits
 C Clock		2 bits
-T Toggle	1 bit				// NB: not implemented. Expand to toggle once every packet, approx 250µs. Considered too expensive for now
+T Toggle	1 bit				// NB: not implemented. Expand to toggle once every packet, approx 250Âµs. Considered too expensive for now
 x Unused	3 bits
    
    7 6 5 4 3 2 1 0
@@ -201,7 +201,7 @@ void mobo_SPRX_input(uint8_t input_sel);
 
 // Sample rate detection on ADC interface
 uint32_t mobo_srd(void);
-uint32_t mobo_srd_asm2(void);
+uint32_t mobo_srd_asm2(bool raw);
 uint32_t mobo_wait_LRCK_RX_asm(void);
 uint32_t mobo_wait_LRCK_TX_asm(void);
 

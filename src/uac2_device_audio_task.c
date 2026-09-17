@@ -163,7 +163,7 @@ void uac2_device_audio_task(void *pvParameters)
 		U8 counter_44k = 0;
 		U8 limit_44k = 11;	// Default setting for 44.1 rounding off into average packet length
 		uint32_t sample_left = 0; 					// Must be unsigned for zeros to be right-shifted into MSBs ??
-		uint32_t sample_right = 0;					// ææææ convert to signed to merge with sample_R and spdif code
+		uint32_t sample_right = 0;					// Ã¦Ã¦Ã¦Ã¦ convert to signed to merge with sample_R and spdif code
 		const U8 EP_AUDIO_IN = ep_audio_in;
 	#endif
 	
@@ -202,7 +202,7 @@ void uac2_device_audio_task(void *pvParameters)
 	uint16_t cache_silence_counter = 0;
 
 	// New code for adaptive USB fallback using skip / insert s/i
-	#define SI_PKG_RESOLUTION	1000 // 2000			// Apply 1/2 IIR filter. Resolution: once every 1000 packets at 250µs packet rate
+	#define SI_PKG_RESOLUTION	1000 // 2000			// Apply 1/2 IIR filter. Resolution: once every 1000 packets at 250Âµs packet rate
 	#define SI_PKG_RESOLUTION_H	1100 // 2200			// Apply 1/1 IIR filter
 	#define SI_PKG_RESOLUTION_F	1200 // 2400			// Force override
 	int8_t si_action = SI_NORMAL;
@@ -447,9 +447,9 @@ void uac2_device_audio_task(void *pvParameters)
 				}
 				else {
 					// HS mode
-					// HS mode, FB rate is 4 bytes in 16.16 format per 125µs.
-					// Internal format is 18.14 samples per 1µs = 16.16 per 250µs
-					// i.e. must right-shift once for 16.16 per 125µs.
+					// HS mode, FB rate is 4 bytes in 16.16 format per 125Âµs.
+					// Internal format is 18.14 samples per 1Âµs = 16.16 per 250Âµs
+					// i.e. must right-shift once for 16.16 per 125Âµs.
 					// So for 250us microframes it is same amount of shifting as 10.14 for 1ms frames
 
 
@@ -546,7 +546,7 @@ void uac2_device_audio_task(void *pvParameters)
 					spk_usb_sample_counter += temp_num_samples; 	// track the num of samples received
 					xSemaphoreGive(mutexSpkUSB);
 					
-					// æææ how much of this must be done each time this loop detect input_select == idle?
+					// Ã¦Ã¦Ã¦ how much of this must be done each time this loop detect input_select == idle?
 
 					if (!playerStarted) {	
 						time_to_calculate_gap = 0;			// BSB 20131031 moved gap calculation for DAC use
@@ -1028,7 +1028,7 @@ void uac2_device_audio_task(void *pvParameters)
 		if (num_samples > 0) {									// Only start copying when there is something to legally copy
 
 			// Consider long periods of silence to cause buffer reset
-			#define CACHE_SILENCE_LIMIT	200						// 50ms of silence at 250µs packet rate
+			#define CACHE_SILENCE_LIMIT	200						// 50ms of silence at 250Âµs packet rate
 			if (cache_holds_silence) {
 				#ifdef I2S_METADATA // NOT REPORTED to terminal - tested OK - was 'u' - Too expensive?
 					mobo_set_i2s_metadata(0, I2S_META_VERSION_0, I2S_META_MUTED, I2S_META_MUTE_ON);

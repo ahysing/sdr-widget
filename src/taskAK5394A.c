@@ -171,7 +171,7 @@ __attribute__((__interrupt__)) static void spk_pdca_int_handler(void) {
 
 
 #ifdef HW_GEN_SPRX
-	// Set up spdif receive timer to fire approximately once every 250µs (UAC2) or 1ms (UAC1) during SPDIF packet processing
+	// Set up spdif receive timer to fire approximately once every 250Âµs (UAC2) or 1ms (UAC1) during SPDIF packet processing
 	// MCU has "Two Three-Channel 16-bit Timer/Counter (TC)" Each timer has three channels
 	#define TC1_CLK0_PIN		AVR32_TC1_CLK0_0_PIN
 	#define	TC1_CLK0_FUNCTION	AVR32_TC1_CLK0_0_FUNCTION

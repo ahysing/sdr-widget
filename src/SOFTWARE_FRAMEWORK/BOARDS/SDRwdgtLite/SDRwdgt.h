@@ -54,12 +54,29 @@
  */
 //! @{
 #define FMCK_HZ                       FOSC0
-#define FCPU_HZ                       66000000
+
+// 20260914: FEATURE_84MHz (-D in Makefile) switches the core clock for UAC2 384kHz
+// bring-up: 12MHz OSC0 x7 = 84MHz, a clean PLL mul (datasheet: 126 DMIPS @ 84MHz, 1 wait-state).
+// UNVERIFIED ON HARDWARE YET - see Mobo_config.c mobo_srd_asm2/mobo_wait_LRCK_*_asm for the
+// cycle-counted timing constants that scale with this and must be reverified on the scope.
+// Default (flag undefined) stays at the known-good 66MHz.
+#ifdef FEATURE_84MHz
+	#define FCPU_HZ                       84000000
+	// Must be an exact power-of-2 divisor of FCPU_HZ that pm_configure_clocks() can hit exactly
+	// (bounded by AVR32_PM_PBA_MAX_FREQ = 66MHz) - this feeds configPBA_CLOCK_HZ, which sizes the
+	// FreeRTOS tick timer reload value (port.c). Getting this wrong silently mis-times every OS
+	// tick/vTaskDelay, not just the audio path. 84MHz/2 = 42MHz is an exact match; leaving this at
+	// 66000000 (correct only for a 66MHz CPU clock) would make pm_configure_clocks() actually land
+	// the bus at 21MHz at runtime while this macro still claimed 66MHz.
+	#define FPBA_HZ                       42000000
+#else
+	#define FCPU_HZ                       66000000
+	#define FPBA_HZ                       66000000
+#endif
 #define FCPU_HZ_SLOW                  12000000
 #define FHSB_HZ                       33000000
 #define FPBB_HZ                       33000000
 //#define FPBA_HZ                       33000000
-#define FPBA_HZ                       66000000
 #define FPBA_HZ_SLOW                  12000000
 //! @}
 

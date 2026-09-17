@@ -642,7 +642,7 @@ uint32_t mobo_srd(void) {
 	#define SRD_SAFE_DETECTS	4		// How many attempts to declare a safe detection?
 
 	while (attempts++ < SRD_MAX_ATTEMPTS) {
-		temp = mobo_srd_asm2();
+		temp = mobo_srd_asm2(FALSE);
 
 /*
 		#ifdef FEATURE_SPDIF_CMD
@@ -737,9 +737,12 @@ int foo(void) {
 	return timeout;
 }
 */
-uint32_t mobo_srd_asm2(void) {
+// 20260917: raw=TRUE skips the SLIM_* lookup entirely and returns the bare cycle-count timeout,
+// for bench calibration with a signal generator patched into PA05 (see UART CLI 'F'). raw=FALSE
+// is the normal, existing lookup-based behavior (returns a FREQ_* constant).
+uint32_t mobo_srd_asm2(bool raw) {
 	uint32_t timeout;
-	
+
 	// Update 20260217: return a valid frequency or the value of the counter for downstream debug
 	// Frequency report is always larger than counter value
 
@@ -757,7 +760,12 @@ uint32_t mobo_srd_asm2(void) {
 	asm volatile(
 	
 		//		"ssrf	16				\n\t"	// Disable global interrupt
+		// 20260914: FEATURE_84MHz scales this from 2000 (x14/11 for 66MHz->84MHz). UNVERIFIED - reverify with scope.
+#ifdef FEATURE_84MHz
+		"mov	%0, 	2545	\n\t"	// Load timeout
+#else
 		"mov	%0, 	2000	\n\t"	// Load timeout
+#endif
 		"mov	r9,		-61440	\n\t"	// Immediate load, set up pointer to PA05, (0xFFFF1000) recompile C for other IO pin, do once
 
 		// If bit is 0, branch to loop while 0. If bit was 1, continue to loop while 1
@@ -856,6 +864,24 @@ uint32_t mobo_srd_asm2(void) {
 	// 176.4  369- 396 ( 374.2)
 	// 192.0  339- 363 ( 343.8)
 
+	// 20260914: FEATURE_84MHz linearly scales these x14/11 for FCPU_HZ 66MHz->84MHz bring-up.
+	// The scaled set is a first-pass ESTIMATE, not bench-verified - re-measure on the scope per
+	// the original method (comment above) once the CPU is actually running at 84MHz, then replace
+	// with real numbers. Default (flag undefined) keeps the original 66MHz-measured values.
+#ifdef FEATURE_84MHz
+	#define SLIM_44_LOW		1881
+	#define SLIM_44_HIGH	2011 		// Gives timeout of 2545
+	#define SLIM_48_LOW		1728
+	#define SLIM_48_HIGH	1848
+	#define SLIM_88_LOW		941
+	#define SLIM_88_HIGH	1005
+	#define SLIM_96_LOW		864
+	#define SLIM_96_HIGH	924
+	#define SLIM_176_LOW	470			// Add margin??
+	#define SLIM_176_HIGH	504
+	#define SLIM_192_LOW	431
+	#define SLIM_192_HIGH	467			// Analysis saw up to 366 (pre-scale)
+#else
 	#define SLIM_44_LOW		1478
 	#define SLIM_44_HIGH	1580 		// Gives timeout of 2000
 	#define SLIM_48_LOW		1358
@@ -868,9 +894,14 @@ uint32_t mobo_srd_asm2(void) {
 	#define SLIM_176_HIGH	396
 	#define SLIM_192_LOW	339
 	#define SLIM_192_HIGH	367			// Analysis saw up to 366
+#endif
 	
 	// Limits range from 0x0153 to 0x062C. If timeout & 0x0000F000 isn't 0 then something went wrong and result should be ignored
-	
+
+	if (raw) {
+		return timeout;		// Bench calibration mode: bypass classification, report the bare count
+	}
+
 	if ( (timeout >= SLIM_44_LOW) && (timeout <= SLIM_44_HIGH) ) {
 		return FREQ_44;
 	}
@@ -918,7 +949,12 @@ uint32_t mobo_wait_LRCK_RX_asm(void) {
 	
 	asm volatile(
 	//		"ssrf	16				\n\t"	// Disable global interrupt
+	// 20260914: FEATURE_84MHz scales this from 500 (x14/11). UNVERIFIED - reverify with scope.
+#ifdef FEATURE_84MHz
+	"mov	%0, 	636		\n\t"	// Load timeout
+#else
 	"mov	%0, 	500		\n\t"	// Load timeout
+#endif
 	"mov	r9,		-61440	\n\t"	// Immediate load, set up pointer to PA05, recompile C for other IO pin, do once
 
 /*
@@ -985,7 +1021,12 @@ uint32_t mobo_wait_LRCK_TX_asm(void) {
 
 	asm volatile(
 	//		"ssrf	16				\n\t"	// Disable global interrupt
+	// 20260914: FEATURE_84MHz scales this from 500 (x14/11). UNVERIFIED - reverify with scope.
+#ifdef FEATURE_84MHz
+	"mov	%0, 	636		\n\t"	// Load timeout
+#else
 	"mov	%0, 	500		\n\t"	// Load timeout
+#endif
 	"mov	r9,		-60928	\n\t"	// Immediate load, set up pointer to PX27, recompile C for other IO pin, do once
 
 /*
@@ -1087,14 +1128,14 @@ void mobo_handle_spdif(U32 *si_index_low, S32 *si_score_high, U32 *si_index_high
 
 	// Begin new code for timer/counter indicated packet processing
 
-	// Does spdif timer interrupt indicate that we should process 250-ish µs of incoming SPDIF data?
+	// Does spdif timer interrupt indicate that we should process 250-ish Âµs of incoming SPDIF data?
 	
 	// First try to establish a local, synchronously-sampled local cache
 	local_captured_num_remaining = timer_captured_num_remaining;
 	if (prev_captured_num_remaining != local_captured_num_remaining) {
 //		gpio_set_gpio_pin(AVR32_PIN_PA22); // Indicate start of processing spdif data, ideally once per 250us
 
-		// Start processing a 250µs chunk of the ADC pdca buffer
+		// Start processing a 250Âµs chunk of the ADC pdca buffer
 
 		// Convert from pdca report to buffer address. _pos always points to left sample in LR stereo pair!
 		mobo_ADC_position_uni(&last_written_ADC_pos, local_captured_num_remaining);
@@ -1218,7 +1259,7 @@ void mobo_handle_spdif(U32 *si_index_low, S32 *si_score_high, U32 *si_index_high
 
 		// Establish history - What to do at player start? Should it be continuously updated at idle? What about spdif source toggle?
 
-		// Puting untested init code here....  æææ
+		// Puting untested init code here....  Ã¦Ã¦Ã¦
 		// Can we 
 		if ( ( (input_select == MOBO_SRC_TOSLINK0) || (input_select == MOBO_SRC_TOSLINK1) || (input_select == MOBO_SRC_SPDIF0) ) ) {
 			if (ADC_buf_I2S_IN == INIT_ADC_I2S_st2) {
@@ -1253,7 +1294,7 @@ void mobo_handle_spdif(U32 *si_index_low, S32 *si_score_high, U32 *si_index_high
 		prev_captured_num_remaining = local_captured_num_remaining;
 		prev_last_written_ADC_pos = last_written_ADC_pos;
 		
-		// Forward state machine - needed? ææææ
+		// Forward state machine - needed? Ã¦Ã¦Ã¦Ã¦
 		ADC_buf_I2S_IN = INIT_ADC_I2S_st2;	// Move on to init stage 2
 	} // end INIT_ADC_I2S
 
@@ -1268,25 +1309,25 @@ void mobo_start_spdif_tc(U32 frequency) {
 
 	switch (frequency) {
 		case FREQ_44:
-			temp = 11;	// UAC2: 11.025 samples per 250µs
+			temp = 11;	// UAC2: 11.025 samples per 250Âµs
 		break;
 		case FREQ_48:
-			temp = 12;	// UAC2: 12 samples per 250µs
+			temp = 12;	// UAC2: 12 samples per 250Âµs
 		break;
 		case FREQ_88:
-			temp = 22;	// UAC2: 22.05 samples per 250µs
+			temp = 22;	// UAC2: 22.05 samples per 250Âµs
 		break;
 		case FREQ_96:
-			temp = 24;	// UAC2: 24 samples per 250µs
+			temp = 24;	// UAC2: 24 samples per 250Âµs
 		break;
 		case FREQ_176:
-			temp = 44;	// UAC2: 44.1 samples per 250µs
+			temp = 44;	// UAC2: 44.1 samples per 250Âµs
 		break;
 		case FREQ_192:
-			temp = 48;	// UAC2: 48 samples per 250µs
+			temp = 48;	// UAC2: 48 samples per 250Âµs
 		break;
 		default:
-			temp = 12;	// UAC2: 11 samples per 250µs
+			temp = 12;	// UAC2: 11 samples per 250Âµs
 		break;
 	}			
 	

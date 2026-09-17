@@ -221,6 +221,26 @@ xSemaphoreHandle mutexEP_IN;
 
 
 
+#ifdef FEATURE_TICK_BLINK
+// 20260917: toggles PA22 purely off vTaskDelay()/the RTOS tick, for scope verification that the
+// scheduler itself is timed correctly - independent of UART baud rate, which depends on the same
+// clock config this is meant to verify (so it must not be trusted as the measurement tool here).
+// vTaskDelay(configTICK_RATE_HZ) is exactly 1 second BY DEFINITION of the tick rate, so a correct
+// build should measure exactly 2.000s period on the scope; anything else means the tick timer
+// itself is mistimed, before UART/audio/anything else built on top of it is worth trusting.
+// Enable with -DFEATURE_TICK_BLINK; not part of any active Makefile target by default - add it to
+// either audio-widget or audio-widget-84mhz's CFLAGS to compare before/after the clock change.
+static void task_tick_blink(void *pvParameters) {
+	gpio_enable_gpio_pin(AVR32_PIN_PA22);
+
+	while (TRUE) {
+		gpio_tgl_gpio_pin(AVR32_PIN_PA22);
+		vTaskDelay(configTICK_RATE_HZ);	// Exactly 1 second, by definition of the tick rate
+	}
+}
+#endif
+
+
 /*! \brief Main function. Execution starts here.
  *
  * \retval 42 Fatal error.
@@ -459,6 +479,15 @@ wm8804_reset(WM8804_RESET_START);							// Early hardware reset of WM8805 becaus
 
 	// Start the image tasks
 	image_task_init();
+
+#ifdef FEATURE_TICK_BLINK
+	xTaskCreate(task_tick_blink,
+				configTSK_TICKBLINK_NAME,
+				configTSK_TICKBLINK_STACK_SIZE,
+				NULL,
+				configTSK_TICKBLINK_PRIORITY,
+				NULL);
+#endif
 
 	// Start OS scheduler
 	vTaskStartScheduler();

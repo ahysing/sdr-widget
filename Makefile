@@ -19,6 +19,7 @@
 # -DFEATURE_VOLUME_CTRL			Software volume control in DAC
 # -DFEATURE_CLOCK_SELECTOR		Clock selector, don't enable unless you wish to experiment with different clocks for ADC and DAC
 # -DFEATURE_ALT2_16BIT			UAC2 has both ALT1 (24 bit) and ALT2 (16 bit). Applies to both ADC and DAC code in UAC2. Does NOT! apply to UAC1
+# -DFEATURE_TICK_BLINK			A 2s period ticker on PA22 for FreeRTOS timer debug
 #
 # -DFEATURE_ADC_EXPERIMENTAL	Experimental ADC support
 # -DFEATURE_SPDIF_CMD			Experimental disable state machine in SPDIF receiver code - only makes sense in SPRX context
@@ -57,6 +58,7 @@ AUDIO_WIDGET_DEFAULTS=$(PARTNAME)\
 	-DVDD_SENSE \
 	-DUSB_STATE_MACHINE_GPIO \
 	-DFEATURE_HID \
+	-DFEATURE_TICK_BLINK \
 	\
 	-DFEATURE_PRODUCT_HA256 \
 	-DFEATURE_ALT2_16BIT \
@@ -104,6 +106,12 @@ AUDIO_WIDGET_DEFAULTS=$(PARTNAME)\
 audio-widget::
 	rm -f Release/widget.elf Release/src/features.o
 	CFLAGS="$(AUDIO_WIDGET_DEFAULTS)" ASFLAGS="$(PARTNAME)" ./make-widget
+
+# 20260915: 84MHz CPU clock bring-up for 384kHz UAC2 work. Same defaults as audio-widget,
+# plus FEATURE_84MHz. Source-verified, NOT yet bench-verified - see checklist.
+audio-widget-84mhz::
+	rm -f Release/widget.elf Release/src/features.o
+	CFLAGS="$(AUDIO_WIDGET_DEFAULTS) -DFEATURE_84MHz" ASFLAGS="$(PARTNAME)" ./make-widget
 
 clean::
 	rm -f widget-control widget-control.exe

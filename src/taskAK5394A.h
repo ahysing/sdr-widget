@@ -42,11 +42,11 @@ Short buffers give less system latency and poorer synch state machine performanc
 #define ADC_BUFFER_SIZE 1024	// Must be divisible by 4
 #define DAC_BUFFER_UNI 1536*2 		// Was: 1536*2 // (32*2*24) * 1 // = 1536
 
-#define SPK_CACHE_MAX_SAMPLES 120	// Maximum number of stereo samples in two package of 250µs (nominally 48 at 192ksps). That way we can miss one. As global 120 is OK. As local it refused to run above 60
+#define SPK_CACHE_MAX_SAMPLES 120	// Maximum number of stereo samples in two package of 250ï¿½s (nominally 48 at 192ksps). That way we can miss one. As global 120 is OK. As local it refused to run above 60
 // #define IS_SILENT		0x00010000 // Is: 1LSBs at 16-bit level. Was: 0x00040000 Approximately: compare (si_score_high + abs(sample_L >> 8) + abs(sample_R) >> 8) to 4 LSBs at 16-bit audio, 1024 LSBs at 24-bit audio
 
 #if (defined HW_GEN_SPRX) || (defined HW_GEN_FMADC) // ADC must be at least 4 times as fast as DAC in order to monitor SPDIF buffering
-	// Set up spdif receive timer to fire approximately once every 250µs (UAC2) or 1ms (UAC1) during SPDIF packet processing
+	// Set up spdif receive timer to fire approximately once every 250ï¿½s (UAC2) or 1ms (UAC1) during SPDIF packet processing
 	// MCU has "Two Three-Channel 16-bit Timer/Counter (TC)" Each timer has three channels
 	#define SPDIF_TC_DEVICE		AVR32_TC1	// Using TC1 where we have CLK0 available on PA05
 	#define SPDIF_TC_CHANNEL	0			// Timer counter -channel-
@@ -57,7 +57,7 @@ Short buffers give less system latency and poorer synch state machine performanc
 #define USB_BUFFER_TOGGLE_LIM 4		// Changed from 2 to 4 after hassle with Sue's phone. DMA towards DAC I2S has toogled buffers too many times. 0 is ideal number
 #define USB_BUFFER_TOGGLE_PARK 10	// The error is detected in sequential code
 
-// Available digital audio sources, 4 and 5 only available in HW_GEN_DIN10 and ..20. Source 6 only available in HW_GEN_DIN20n and HW_GEN_SPRX
+// Available digital audio sources
 #define MOBO_SRC_NONE		0
 #define MOBO_SRC_UAC1		1		// Obsolete, rear UAC1 plug
 #define MOBO_SRC_UAC1_B		1		// Duplicate, obsolete UAC1 USB B rear, metadata only
@@ -89,7 +89,6 @@ Short buffers give less system latency and poorer synch state machine performanc
 // USB channels
 #define USB_CH_NONE			0		// No USB port has been detected
 #define USB_CH_DEACTIVATE	1		// Actively disconnecting USB mux for debug purposes
-#define USB_CH_A			2		// Name used in HW_GEN_DIN20 for front USB-C plug
 #define USB_CH_B			3
 #define USB_CH_C			4		// Name used in HW_GEN_SPRX for front USB-C plug
 #define USB_CH_NOSWAP		0		// NO USB channel swapping happening
@@ -152,7 +151,7 @@ extern volatile S32 samples_per_package_max;
 extern volatile S32 cache_unified[2*SPK_CACHE_MAX_SAMPLES];
 extern volatile avr32_ssc_t *ssc;
 
-// ææææ old buffer ids ripe for renaming or removal
+// ï¿½ï¿½ï¿½ï¿½ old buffer ids ripe for renaming or removal
 extern volatile int ADC_buf_I2S_IN; 	// Written by sequential code, handles only data coming in from I2S interface (ADC or SPDIF rx)
 extern volatile int ADC_buf_USB_IN;		// Written by sequential code, handles only data IN-to USB host
 extern volatile int DAC_buf_OUT;		// Written by sequential code

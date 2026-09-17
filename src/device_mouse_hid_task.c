@@ -364,6 +364,16 @@ void device_mouse_hid_task(void)
 	
 			// Detect sample rate of I2S in
             else if (a == 's') {							// Lowercase s
+				// 20260917: report the raw mobo_srd_asm2() count first - bench calibration with a
+				// signal generator patched into PA05 (traces cut), no SLIM_* lookup applied - then
+				// the existing majority-vote mobo_srd() result below.
+				temp32 = mobo_srd_asm2(TRUE);
+				print_dbg_char_hex(temp32 >> 24);			// MSB
+				print_dbg_char_hex(temp32 >> 16);
+				print_dbg_char_hex(temp32 >> 8);
+				print_dbg_char_hex(temp32);					// LSB
+				print_dbg_char_hex(' ');
+
 				temp32 = mobo_srd();
 				print_dbg_char_hex(temp32);
 				print_dbg_char_hex(temp32 >> 8);
@@ -381,6 +391,16 @@ void device_mouse_hid_task(void)
 			
 			// Detect sample rate of I2S in
 			else if (a == MCU_CHAR_SPRATE) {				// Lowercase 's'
+				// 20260917: report the raw mobo_srd_asm2() count first - bench calibration with a
+				// signal generator patched into PA05 (traces cut), no SLIM_* lookup applied - then
+				// the existing majority-vote mobo_srd() result below.
+				temp32 = mobo_srd_asm2(TRUE);
+				print_cpu_char_hex(temp32 >> 24);			// MSB
+				print_cpu_char_hex(temp32 >> 16);
+				print_cpu_char_hex(temp32 >> 8);
+				print_cpu_char_hex(temp32);					// LSB
+				print_cpu_char(' ');
+
 				temp32 = mobo_srd();
 				print_cpu_char_hex(temp32 >> 24);			// MSB in 32-bit fixed-point number
 				print_cpu_char_hex(temp32 >> 16);
@@ -588,8 +608,8 @@ Arash
 
 				print_dbg_char('\n');
 			}
-			
-		
+
+
 #endif // HW_GEN_SPRX
 
             // Check source and rate, output to terminal

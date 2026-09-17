@@ -177,7 +177,7 @@ void pdca_reload_channel(unsigned int pdca_ch_number, volatile void *addr, unsig
   // get the correct channel pointer
   volatile avr32_pdca_channel_t *pdca_channel = pdca_get_handler(pdca_ch_number);
 
-  Bool global_interrupt_enabled = Is_global_interrupt_enabled(); // Test adds 0.3-ish µs to execution time
+  Bool global_interrupt_enabled = Is_global_interrupt_enabled(); // Test adds 0.3-ish Âµs to execution time
 
   if (global_interrupt_enabled) Disable_global_interrupt();
   // set up next memory address

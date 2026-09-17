@@ -22,9 +22,8 @@
 ##                           debugging on GPIO and UART
 ##
 ## Hardware generation must be defined for Audio Widget, must define exactly one
-## -DHW_GEN_AB1X uses the feature set for 
+## -DHW_GEN_AB1X uses the feature set for
 ##   QNKTC AB-1.0, AB-1.1, AB-1.2, Henry Audio USB DAC 128 and USB DAC 128 mkII
-## -DHW_GEN_DIN10 uses version 1.0 of the features for digital inputs and WM8805
 ##
 ## -DVDD_SENSE to enable bus-powered/self-powered configuration:
 ## - When AVR32_PIN_PA19 is 0, configure as bus-powered with 500mA max power
@@ -67,8 +66,6 @@ AUDIO_WIDGET_DEFAULTS=-DFEATURE_BOARD_DEFAULT=feature_board_usbi2s \
 # Choose wisely:
 #	-DFEATURE_VOLUME_CTRL \
 #	-DHW_GEN_AB1X \
-# 	-DHW_GEN_DIN10 \
-# 	-DHW_GEN_DIN20 \
 #	-DUSB_STATE_MACHINE_DEBUG
 #	-DFEATURE_LCD_DEFAULT=feature_lcd_hd44780 \
 

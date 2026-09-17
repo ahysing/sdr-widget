@@ -490,10 +490,10 @@ static Bool uac2_user_get_interface_descriptor() {
 	/*
 	Claude analysis not implemented:
 		
-	**A2 — `uac2_usb_specific_request.c:490-492` ?verified [LIVE][Confirmed] High**
+	**A2 Â— `uac2_usb_specific_request.c:490-492` ?verified [LIVE][Confirmed] High**
 	In the HID GET_DESCRIPTOR handler, the SETUP fields left in EP0 after the standard layer
 	are `wValue(2) + wIndex(2) + wLength(2)`. The code reads `wValue` (`string_type` +
-	`descriptor_type`) and `wIndex` (`wInterface`) — then reads **two** more 16-bit words:
+	`descriptor_type`) and `wIndex` (`wInterface`) Â— then reads **two** more 16-bit words:
 	```c
 	wIndex  = usb_format_usb_to_mcu_data(16, Usb_read_endpoint_data(EP_CONTROL,16)); // = real wLength
 	wLength = usb_format_usb_to_mcu_data(16, Usb_read_endpoint_data(EP_CONTROL,16)); // reads PAST the packet

@@ -165,7 +165,7 @@
 /*                           
 #define  HID_# ~              50  
 #define  HID_; :              51  
-#define  HID_‘ "              52  
+#define  HID_Â‘ "              52  
 */                           
 #define  HID_TILDE            53  
 #define  HID_COMMA            54  

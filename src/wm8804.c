@@ -689,7 +689,7 @@ void wm8804_sleep(void) {
 // All hardware must support strap from U1:13 to U6:CP via R117 on rev. B and onwards. Default on Rev. E and onwards
 // This used to be code switch HW_GEN_SPRX_PATCH_01
 uint8_t wm8804_live_detect(void) {
-	#define WM8804_SPDIF_LIVE_COUNT	0x20				// Detection takes about 50µs - ESD test: increase this number?
+	#define WM8804_SPDIF_LIVE_COUNT	0x20				// Detection takes about 50Âµs - ESD test: increase this number?
 	uint8_t counter = WM8804_SPDIF_LIVE_COUNT;
 	uint8_t chx = 0;
 
@@ -845,7 +845,7 @@ uint32_t wm8804_inputnew(uint8_t input_sel) {
 		while (link_attempts++ < wm8804_LINK_MAX_ATTEMPTS) {		// Repeat until timeout
 
 			// Check UNLOCK bit if everything is OK and we can leave this function
-			//		if ( (wm8804_read_byte(0x0C) & 0x40) == 0 ) {	// UNLOCK bit. Does much the same job but takes a few µs longer than GPIO read. Not fully verified in 192ksps
+			//		if ( (wm8804_read_byte(0x0C) & 0x40) == 0 ) {	// UNLOCK bit. Does much the same job but takes a few Âµs longer than GPIO read. Not fully verified in 192ksps
 			if (gpio_get_pin_value(WM8804_CSB_PIN) == 0) {	// Got link!
 			
 				// Make a log of how many poll cycles were needed to establish link

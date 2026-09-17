@@ -3,14 +3,14 @@ Buffer debugging 20260131
 Ring buffer holds 1536 stereo samples
 #define DAC_BUFFER_UNI 1536*2 
 
-Stereos samples pr 250µs packets
+Stereos samples pr 250Âµs packets
 11 to 48
 
 One packet is 1/32 to 1/139 full buffer.
 
 
 Is the response much too slow? 1 correction in 2000*11 to 2000*48 samples
-#define SI_PKG_RESOLUTION	2000 // 1000			// Apply 1/2 IIR filter. Resolution: once every 2000 packets at 250µs packet rate
+#define SI_PKG_RESOLUTION	2000 // 1000			// Apply 1/2 IIR filter. Resolution: once every 2000 packets at 250Âµs packet rate
 
 
 Max' device is
