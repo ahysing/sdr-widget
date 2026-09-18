@@ -44,6 +44,20 @@ PARTNAME=-mpart=uc3a3128
 # NB: the use of "prog256.bat" or "prog.bat" will positively brick a '128 processor!!
 
 
+# 20260918: build date/time and git commit, injected as bare (unquoted-safe) tokens - see
+# BUILD_STR()/BUILD_INFO_STRING in device_mouse_hid_task.c for how these become a boot-time
+# string. Deliberately NOT passed as a quoted string here: $(CFLAGS) is spliced unquoted into
+# the compile recipe (Release/src/subdir.mk), so an embedded "..." would get stripped by that
+# second shell pass rather than reaching the compiler - bare alphanumeric tokens have no such
+# problem and the C preprocessor's stringification operator builds the quoted literal instead.
+BUILD_DATE := $(shell date '+%Y%m%d')
+BUILD_TIME := $(shell date '+%H%M')
+BUILD_TZ := $(shell date '+%Z')
+BUILD_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_DIRTY := $(shell git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null && echo clean || echo dirty)
+
+BUILD_INFO_DEFS = -DBUILD_DATE=$(BUILD_DATE) -DBUILD_TIME=$(BUILD_TIME) -DBUILD_TZ=$(BUILD_TZ) -DBUILD_COMMIT=$(BUILD_COMMIT) -DBUILD_DIRTY=$(BUILD_DIRTY)
+
 AUDIO_WIDGET_DEFAULTS=$(PARTNAME)\
 	-DFEATURE_BOARD_DEFAULT=feature_board_usbi2s \
 	-DFEATURE_IMAGE_DEFAULT=feature_image_uac2_audio \
@@ -59,6 +73,7 @@ AUDIO_WIDGET_DEFAULTS=$(PARTNAME)\
 	-DUSB_STATE_MACHINE_GPIO \
 	-DFEATURE_HID \
 	-DFEATURE_TICK_BLINK \
+	$(BUILD_INFO_DEFS) \
 	\
 	-DFEATURE_PRODUCT_HA256 \
 	-DFEATURE_ALT2_16BIT \

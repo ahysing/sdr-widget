@@ -1,0 +1,78 @@
+GAS LISTING C:\cygwin64\tmp\ccFIm7e5.s 			page 1
+
+
+   1              		.file	"usb_access.c"
+   9              	.Ltext0:
+  10              		.section	.text.test,"ax",@progbits
+  11              		.align	1
+  12              		.global	test
+  14              	test:
+  15              	.LFB11:
+  16              		.file 1 "usb_access.c"
+   1:usb_access.c  **** #include "gpio.h"
+   2:usb_access.c  **** #include <avr32/io.h>
+   3:usb_access.c  **** #include "compiler.h"
+   4:usb_access.c  **** #include <stdint.h>
+   5:usb_access.c  **** #include "usb_drv.h"
+   6:usb_access.c  **** 
+   7:usb_access.c  **** 
+   8:usb_access.c  **** //! GPIO module instance.
+   9:usb_access.c  **** #define GPIO  AVR32_GPIO
+  10:usb_access.c  **** 
+  11:usb_access.c  **** 
+  12:usb_access.c  **** uint16_t test(void) {
+  17              		.loc 1 12 0
+  18              		# args = 0, frame = 40, pretend = 0
+  19              		# frame_needed = 0, leaf_function = 1
+  20              		# uses_anonymous_args = 0
+  21 0000 20AD     		sub     sp, 40
+  22              	.LCFI0:
+  23              		.loc 1 12 0
+  24 0002 480C     		lda.w	r12, pep_fifo
+  25 0004 3008     		mov	r8, 0
+  26 0006 782A     		ld.w	r10, r12[8]
+  27 0008 1A9B     		mov	r11, sp
+  28              	.L2:
+  29 000a F4080009 		add     r9, r10, r8
+  13:usb_access.c  ****     uint8_t a = 0;
+  14:usb_access.c  **** 	uint16_t b[20];
+  15:usb_access.c  **** 	
+  16:usb_access.c  **** 	for (a = 0; a<20; a++) {
+  17:usb_access.c  **** 		b[a] = Usb_read_endpoint_data(2, 16);
+  30              		.loc 1 17 0
+  31 000e 9209     		ld.sh	r9, r9[0]
+  32 0010 F6080A09 		st.h	r11[r8], r9
+  33 0014 2FE8     		sub     r8, -2
+  16:usb_access.c  **** 	for (a = 0; a<20; a++) {
+  34              		.loc 1 16 0
+  35 0016 E0480028 		cp.w	r8, 40
+  36 001a C001     		brne .L2
+  37 001c 2D8A     		sub     r10, -40
+  38 001e 992A     		st.w	r12[8], r10
+  18:usb_access.c  **** 	}
+  19:usb_access.c  **** 	
+  20:usb_access.c  **** 	
+  21:usb_access.c  **** 	return b[4];
+  22:usb_access.c  **** }
+  39              		.loc 1 22 0
+  40 0020 9A4C     		ld.sh	r12, sp[8]
+  41 0022 2F6D     		sub	sp, -40 # Reset Frame Pointer
+  42 0024 5EFC     		retal	r12
+GAS LISTING C:\cygwin64\tmp\ccFIm7e5.s 			page 2
+
+
+  43 0026 00000000 		.cpool
+  43      0000
+  44              		.align	2
+  45              	.L6:
+  46              	.LFE11:
+  76              	.Letext0:
+GAS LISTING C:\cygwin64\tmp\ccFIm7e5.s 			page 3
+
+
+DEFINED SYMBOLS
+                            *ABS*:00000000 usb_access.c
+C:\cygwin64\tmp\ccFIm7e5.s:14     .text.test:00000000 test
+
+UNDEFINED SYMBOLS
+pep_fifo

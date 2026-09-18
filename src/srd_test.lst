@@ -1,0 +1,204 @@
+GAS LISTING C:\cygwin64\tmp\ccb45QEg.s 			page 1
+
+
+   1              		.file	"srd_test.c"
+   9              	.Ltext0:
+  10              		.section	.text.BSBmult,"ax",@progbits
+  11              		.align	1
+  12              		.global	BSBmult
+  14              	BSBmult:
+  15              	.LFB12:
+  16              		.file 1 "srd_test.c"
+   1:srd_test.c    **** #include "gpio.h"
+   2:srd_test.c    **** #include <avr32/io.h>
+   3:srd_test.c    **** #include "compiler.h"
+   4:srd_test.c    **** #include <stdint.h>
+   5:srd_test.c    **** 
+   6:srd_test.c    **** //! GPIO module instance.
+   7:srd_test.c    **** #define GPIO  AVR32_GPIO
+   8:srd_test.c    **** 
+   9:srd_test.c    **** 
+  10:srd_test.c    **** int32_t getcounter(void) {
+  11:srd_test.c    **** 	return Get_system_register(AVR32_COUNT);
+  12:srd_test.c    **** }
+  13:srd_test.c    **** 
+  14:srd_test.c    **** 
+  15:srd_test.c    **** int32_t BSBmult(int32_t A, int32_t V) {
+  17              		.loc 1 15 0
+  18              		# args = 0, frame = 0, pretend = 0
+  19              		# frame_needed = 0, leaf_function = 1
+  20              		# uses_anonymous_args = 0
+  21              	.LVL0:
+  16:srd_test.c    **** 	int32_t X;
+  17:srd_test.c    **** 
+  18:srd_test.c    **** 	asm volatile(
+  19:srd_test.c    **** 		"muls.d		r10, %2, %1		\n\t"	// Double multiply, r9 holds 63:31, r8 holds 32:0
+  20:srd_test.c    **** 		"lsr     	r10, 28			\n\t"	// r9:r8 right-shifted arithmetically by 28 so that V=0x10000000 is uni
+  21:srd_test.c    **** 		"or			%0, r10, r11 << 4	\n\t"	// Merging stuff back together into X. (Try compiling "return A >> 
+  22:srd_test.c    **** 		
+  23:srd_test.c    **** 		:	"=r"(X)							// One output register X=%0
+  24:srd_test.c    **** 		:	"r"(A), "r"(V)					// No input registers  A=%1, V=%2
+  25:srd_test.c    **** 		:	"r10"							// Clobber registers, r10 is the the return of the muls.d, r11 follows. Declare it 
+  26:srd_test.c    **** 	);
+  27:srd_test.c    **** 
+  28:srd_test.c    **** 
+  29:srd_test.c    **** 	return X;
+  30:srd_test.c    **** }
+  22              		.loc 1 30 0
+  23              	#APP
+  24              	#  18 "srd_test.c" 1
+  25              		muls.d		r10, r11, r12		
+  26              		lsr     	r10, 28			
+  27              		or			r12, r10, r11 << 4	
+  28              		
+  29              	#  0 "" 2
+  30              	.LVL1:
+  31              	#NO_APP
+  32 000a 5EFC     		retal	r12
+  33              	.LFE12:
+  35              		.section	.text.Cmult,"ax",@progbits
+  36              		.align	1
+GAS LISTING C:\cygwin64\tmp\ccb45QEg.s 			page 2
+
+
+  37              		.global	Cmult
+  39              	Cmult:
+  40              	.LFB13:
+  31:srd_test.c    **** /* builds
+  32:srd_test.c    **** 	muls.d		r10, r11, r12
+  33:srd_test.c    **** 	lsr     	r10, 28
+  34:srd_test.c    **** 	or			r12, r10, r11 << 4
+  35:srd_test.c    **** */
+  36:srd_test.c    **** 
+  37:srd_test.c    **** 
+  38:srd_test.c    **** S32 Cmult(int32_t A, int32_t V) {
+  41              		.loc 1 38 0
+  42              		# args = 0, frame = 0, pretend = 0
+  43              		# frame_needed = 0, leaf_function = 1
+  44              		# uses_anonymous_args = 0
+  45              	.LVL2:
+  46              		.loc 1 38 0
+  47 0000 F60C044A 		muls.d  r10, r11, r12
+  48              	.LVL3:
+  49 0004 F40C161C 		lsr     r12, r10, 28
+  50              	.LVL4:
+  39:srd_test.c    **** //	int64_t X = (int64_t)( (int64_t)A * (int64_t)V ) >> 28;
+  40:srd_test.c    **** //	return ( (int32_t)(X >> 0) );
+  41:srd_test.c    **** 
+  42:srd_test.c    **** 	return (S32)( (int64_t)( (int64_t)A * (int64_t)V ) >> 28) ;
+  43:srd_test.c    **** 
+  44:srd_test.c    **** }
+  51              		.loc 1 44 0
+  52 0008 F9EB104C 		or	r12, r12, r11 << 4
+  53 000c 5EFC     		retal	r12
+  54              	.LFE13:
+  56              		.section	.text.foo,"ax",@progbits
+  57              		.align	1
+  58              		.global	foo
+  60              	foo:
+  61              	.LFB14:
+  45:srd_test.c    **** /* builds
+  46:srd_test.c    **** 	muls.d  	r10, r11, r12
+  47:srd_test.c    **** 	lsr     	r12, r10, 28
+  48:srd_test.c    **** 	or			r12, r12, r11 << 4
+  49:srd_test.c    **** */
+  50:srd_test.c    **** 
+  51:srd_test.c    **** 
+  52:srd_test.c    **** 
+  53:srd_test.c    **** 
+  54:srd_test.c    **** 
+  55:srd_test.c    **** /*
+  56:srd_test.c    **** S64 sshhiifftt(S64 A) {
+  57:srd_test.c    **** 
+  58:srd_test.c    **** return A >> 28;
+  59:srd_test.c    **** //	lsr     r10, 28
+  60:srd_test.c    **** //	or		r10, r10, r11 << 4
+  61:srd_test.c    **** //	asr     r11, 28
+  62:srd_test.c    **** 
+  63:srd_test.c    **** }
+  64:srd_test.c    **** */
+  65:srd_test.c    **** 
+GAS LISTING C:\cygwin64\tmp\ccb45QEg.s 			page 3
+
+
+  66:srd_test.c    **** 
+  67:srd_test.c    **** 
+  68:srd_test.c    **** 
+  69:srd_test.c    **** 
+  70:srd_test.c    **** 
+  71:srd_test.c    **** int foo(void) {
+  62              		.loc 1 71 0
+  63              		# args = 0, frame = 0, pretend = 0
+  64              		# frame_needed = 0, leaf_function = 1
+  65              		# uses_anonymous_args = 0
+  66              		.loc 1 71 0
+  67 0000 E06C1F40 		mov	r12, 8000
+  68              	.LVL5:
+  72:srd_test.c    **** 	#define TIMEOUT_LIM 8000;
+  73:srd_test.c    **** 	int timeout;
+  74:srd_test.c    **** 
+  75:srd_test.c    **** // Use hardwired PX36 = AK5394_LRCK
+  76:srd_test.c    **** 	timeout = 8000;
+  77:srd_test.c    **** 	volatile avr32_gpio_port_t 	*gpio_port2 = &GPIO.port[AVR32_PIN_PX36 >> 5];
+  78:srd_test.c    **** 	while ( (timeout != 0) && ( ((gpio_port2->pvr >> (AVR32_PIN_PX36 & 0x1F)) & 1) == 0) ) {
+  69              		.loc 1 78 0
+  70 0004 FE791200 		mov	r9, -60928
+  71 0008 C008     		rjmp    .L6
+  72              	.L8:
+  79:srd_test.c    **** 		timeout --;
+  73              		.loc 1 79 0
+  74 000a 201C     		sub     r12, 1
+  78:srd_test.c    **** 	while ( (timeout != 0) && ( ((gpio_port2->pvr >> (AVR32_PIN_PX36 & 0x1F)) & 1) == 0) ) {
+  75              		.loc 1 78 0
+  76 000c 5E0C     		reteq	r12
+  77              	.L6:
+  78 000e 7388     		ld.w	r8, r9[96]
+  79 0010 EDB80017 		bld	r8, 23
+  80 0014 C001     		brne .L8
+  81              	.LVL6:
+  80:srd_test.c    **** 	}
+  81:srd_test.c    **** 
+  82:srd_test.c    **** 
+  83:srd_test.c    **** // Use hardwired PX27 = I2S out LRCK
+  84:srd_test.c    **** //	timeout = 8000;
+  85:srd_test.c    **** //	volatile avr32_gpio_port_t 	*gpio_port3 = &GPIO.port[AVR32_PIN_PX27 >> 5];
+  86:srd_test.c    **** //	while ( (timeout != 0) && ( ((gpio_port3->pvr >> (AVR32_PIN_PX27 & 0x1F)) & 1) == 0) ) {
+  87:srd_test.c    **** //		timeout --;
+  88:srd_test.c    **** //	}
+  89:srd_test.c    **** 
+  90:srd_test.c    **** 
+  91:srd_test.c    **** 	return timeout;
+  92:srd_test.c    **** }
+  82              		.loc 1 92 0
+  83 0016 5EFC     		retal	r12
+  84              	.LFE14:
+  86              		.section	.text.getcounter,"ax",@progbits
+  87              		.align	1
+  88              		.global	getcounter
+  90              	getcounter:
+  91              	.LFB11:
+  10:srd_test.c    **** int32_t getcounter(void) {
+GAS LISTING C:\cygwin64\tmp\ccb45QEg.s 			page 4
+
+
+  92              		.loc 1 10 0
+  93              		# args = 0, frame = 0, pretend = 0
+  94              		# frame_needed = 0, leaf_function = 1
+  95              		# uses_anonymous_args = 0
+  12:srd_test.c    **** }
+  96              		.loc 1 12 0
+  97 0000 E1BC0042 		mfsr	r12, 264
+  98 0004 5EFC     		retal	r12
+  99              	.LFE11:
+ 149              	.Letext0:
+GAS LISTING C:\cygwin64\tmp\ccb45QEg.s 			page 5
+
+
+DEFINED SYMBOLS
+                            *ABS*:00000000 srd_test.c
+C:\cygwin64\tmp\ccb45QEg.s:14     .text.BSBmult:00000000 BSBmult
+C:\cygwin64\tmp\ccb45QEg.s:39     .text.Cmult:00000000 Cmult
+C:\cygwin64\tmp\ccb45QEg.s:60     .text.foo:00000000 foo
+C:\cygwin64\tmp\ccb45QEg.s:90     .text.getcounter:00000000 getcounter
+
+NO UNDEFINED SYMBOLS

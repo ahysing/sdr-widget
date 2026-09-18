@@ -108,6 +108,16 @@
 
 //_____ M A C R O S ________________________________________________________
 
+// 20260918: BUILD_DATE/TIME/TZ/COMMIT/DIRTY arrive as bare -D tokens from the Makefile (see
+// BUILD_INFO_DEFS there) - unquoted on purpose, since a quoted string can't survive being
+// spliced unquoted into the compile recipe. BUILD_STR() turns each bare token into a proper
+// C string literal via the standard two-level stringification trick (the extra indirection
+// is required so macro-valued arguments are expanded before being stringified).
+#define BUILD_STR2(x) #x
+#define BUILD_STR(x) BUILD_STR2(x)
+#define BUILD_INFO_STRING \
+	BUILD_STR(BUILD_DATE) " " BUILD_STR(BUILD_TIME) BUILD_STR(BUILD_TZ) " " BUILD_STR(BUILD_COMMIT) " " BUILD_STR(BUILD_DIRTY)
+
 
 //_____ D E F I N I T I O N S ______________________________________________
 
@@ -151,6 +161,7 @@ void device_mouse_hid_task_init(U8 ep_tx) {
 
 	// Added BSB 20120718
 	print_dbg("\nHID ready\n"); // usart is ready to receive HID commands!
+	print_dbg("\n" BUILD_INFO_STRING "\n");
 	print_cpu_char(CPU_CHAR_BOOT);		// Tell CPU (when present) that CPU is booting up
 }
 

@@ -1,0 +1,105 @@
+GAS LISTING C:\cygwin64\tmp\cc37EgjO.s 			page 1
+
+
+   1              		.file	"sample.c"
+   9              	.Ltext0:
+  10              		.section	.text.uballe,"ax",@progbits
+  11              		.align	1
+  12              		.global	uballe
+  14              	uballe:
+  15              	.LFB0:
+  16              		.file 1 "sample.c"
+   1:sample.c      **** #include "stdint.h"
+   2:sample.c      **** 
+   3:sample.c      **** 
+   4:sample.c      **** void uballe (uint32_t sample_left, uint32_t sample_right, uint16_t *a16, uint16_t *b16, uint16_t *c
+  17              		.loc 1 4 0
+  18              		# args = 0, frame = 0, pretend = 0
+  19              		# frame_needed = 0, leaf_function = 1
+  20              		# uses_anonymous_args = 0
+  21              	.LVL0:
+  22 0000 EBCD4080 		stm	--sp, r7, lr
+  23              	.LCFI0:
+   5:sample.c      **** 	*a16 = (uint16_t) ( ( ((sample_left       ) & 0xFF00) ) | ((sample_left  >> 16) & 0x00FF) );
+  24              		.loc 1 5 0
+  25 0004 189E     		mov	lr, r12
+  26 0006 B14C     		asr     r12, 16
+  27              	.LVL1:
+  28 0008 E01EFF00 		andl	lr, lo(-256)
+  29 000c EFDCC008 		bfextu	r7, r12, 0, 8
+  30 0010 EFEE100E 		or	lr, r7, lr
+  31 0014 B40E     		st.h	r10[0], lr
+   6:sample.c      **** 	*b16 = (uint16_t) ( ( ((sample_left  >> 16) & 0xFF00) ) | ((sample_right >>  8) & 0x00FF) );
+  32              		.loc 1 6 0
+  33 0016 E01CFF00 		andl	r12, lo(-256)
+  34 001a F5DBB110 		bfexts	r10, r11, 8, 16
+  35              	.LVL2:
+  36 001e FDDAC008 		bfextu	lr, r10, 0, 8
+  37 0022 FDEC100C 		or	r12, lr, r12
+  38 0026 B20C     		st.h	r9[0], r12
+   7:sample.c      **** 	*c16 = (uint16_t) ( ( ((sample_right >>  8) & 0xFF00) ) | ((sample_right >> 24) & 0x00FF) );
+  39              		.loc 1 7 0
+  40 0028 E01AFF00 		andl	r10, lo(-256)
+  41 002c F5EB138B 		or	r11, r10, r11 >> 24
+  42              	.LVL3:
+  43 0030 B00B     		st.h	r8[0], r11
+   8:sample.c      **** }
+  44              		.loc 1 8 0
+  45 0032 E3CD8080 		ldm	sp++, r7, pc
+  46              	.LFE0:
+  48              		.section	.text.sballe,"ax",@progbits
+  49              		.align	1
+  50              		.global	sballe
+  52              	sballe:
+  53              	.LFB1:
+   9:sample.c      **** 
+  10:sample.c      **** 
+  11:sample.c      **** 
+  12:sample.c      **** void sballe (int32_t sample_left, int32_t sample_right, uint16_t *a16, uint16_t *b16, uint16_t *c16
+  54              		.loc 1 12 0
+  55              		# args = 0, frame = 0, pretend = 0
+GAS LISTING C:\cygwin64\tmp\cc37EgjO.s 			page 2
+
+
+  56              		# frame_needed = 0, leaf_function = 1
+  57              		# uses_anonymous_args = 0
+  58              	.LVL4:
+  59 0000 EBCD4080 		stm	--sp, r7, lr
+  60              	.LCFI1:
+  13:sample.c      **** 	*a16 = (uint16_t) ( ( ((sample_left       ) & 0xFF00) ) | ((sample_left  >> 16) & 0x00FF) );
+  61              		.loc 1 13 0
+  62 0004 189E     		mov	lr, r12
+  63 0006 B14C     		asr     r12, 16
+  64              	.LVL5:
+  65 0008 E01EFF00 		andl	lr, lo(-256)
+  66 000c EFDCC008 		bfextu	r7, r12, 0, 8
+  67 0010 EFEE100E 		or	lr, r7, lr
+  68 0014 B40E     		st.h	r10[0], lr
+  14:sample.c      **** 	*b16 = (uint16_t) ( ( ((sample_left  >> 16) & 0xFF00) ) | ((sample_right >>  8) & 0x00FF) );
+  69              		.loc 1 14 0
+  70 0016 E01CFF00 		andl	r12, lo(-256)
+  71 001a F5DBB110 		bfexts	r10, r11, 8, 16
+  72              	.LVL6:
+  73 001e FDDAC008 		bfextu	lr, r10, 0, 8
+  74 0022 FDEC100C 		or	r12, lr, r12
+  75 0026 B20C     		st.h	r9[0], r12
+  15:sample.c      **** 	*c16 = (uint16_t) ( ( ((sample_right >>  8) & 0xFF00) ) | ((sample_right >> 24) & 0x00FF) );
+  76              		.loc 1 15 0
+  77 0028 E01AFF00 		andl	r10, lo(-256)
+  78 002c F5EB138B 		or	r11, r10, r11 >> 24
+  79              	.LVL7:
+  80 0030 B00B     		st.h	r8[0], r11
+  16:sample.c      **** }
+  81              		.loc 1 16 0
+  82 0032 E3CD8080 		ldm	sp++, r7, pc
+  83              	.LFE1:
+ 137              	.Letext0:
+GAS LISTING C:\cygwin64\tmp\cc37EgjO.s 			page 3
+
+
+DEFINED SYMBOLS
+                            *ABS*:00000000 sample.c
+C:\cygwin64\tmp\cc37EgjO.s:14     .text.uballe:00000000 uballe
+C:\cygwin64\tmp\cc37EgjO.s:52     .text.sballe:00000000 sballe
+
+NO UNDEFINED SYMBOLS
