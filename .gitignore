@@ -8,3 +8,5 @@
 *.d
 *.elf
 widget-control
+*.lst
+*.s
