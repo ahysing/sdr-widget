@@ -104,6 +104,9 @@ void mobo_clear_dac_channel(void);
 #define CPU_CHAR_96					'4' // MCU reports oscillator for 96ksps
 #define CPU_CHAR_176				'5' // MCU reports oscillator for 176.4ksps
 #define CPU_CHAR_192				'6' // MCU reports oscillator for 192ksps
+#define CPU_CHAR_352				'7' // MCU reports oscillator for 352ksps - only used when enabled
+#define CPU_CHAR_384				'8' // MCU reports oscillator for 384ksps - only used when enabled
+
 #define CPU_CHAR_REGEN              '9' // MCU reports using regenerated clock from SPDIF/TOSLINK receiver
 #define CPU_CHAR_RATE_DEF			'z' // MCU reports unknown sample rate
 #define CPU_CHAR_INC_FREQ			'+' // MCU reports increased sample rate from Host
