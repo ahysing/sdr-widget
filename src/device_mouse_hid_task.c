@@ -161,7 +161,15 @@ void device_mouse_hid_task_init(U8 ep_tx) {
 
 	// Added BSB 20120718
 	print_dbg("\nHID ready\n"); // usart is ready to receive HID commands!
-	print_dbg("\n" BUILD_INFO_STRING "\n");
+	print_dbg("\n" BUILD_INFO_STRING " ");
+	// 20260920: CPU frequency, locally calculated (not a build-time -D) - reads FCPU_HZ, the same
+	// compile-time constant FEATURE_84MHz switches between 66/84MHz, and prints it in hex so a
+	// glance at the boot banner confirms which clock variant is actually running on this unit.
+	print_dbg_char_hex((uint32_t)FCPU_HZ >> 24);
+	print_dbg_char_hex((uint32_t)FCPU_HZ >> 16);
+	print_dbg_char_hex((uint32_t)FCPU_HZ >> 8);
+	print_dbg_char_hex((uint32_t)FCPU_HZ);
+	print_dbg_char('\n');
 	print_cpu_char(CPU_CHAR_BOOT);		// Tell CPU (when present) that CPU is booting up
 }
 
