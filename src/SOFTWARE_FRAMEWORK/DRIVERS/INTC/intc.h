@@ -1,5 +1,4 @@
 /* This header file is part of the ATMEL AVR-UC3-SoftwareFramework-1.7.0 Release */
-
 /*This file is prepared for Doxygen automatic documentation generation.*/
 /*! \file *********************************************************************
  *
@@ -93,10 +92,6 @@ extern void INTC_init_interrupts(void);
  * \note Taken and adapted from Newlib.
  */
 extern void INTC_register_interrupt(__int_handler handler, unsigned int irq, unsigned int int_level);
-
-extern __int_handler INTC_get_interrupt(unsigned int irq);
-
-extern void INTC_restore_interrupt(unsigned int irq, __int_handler handler, unsigned int ipr);
 
 #endif  // __AVR32_ABI_COMPILER__
 
