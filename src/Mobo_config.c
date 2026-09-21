@@ -37,7 +37,8 @@
 // I2C functions
 #include "I2C.h"
 
-
+// INTC_register_interrupt
+#include "intc.h"
 
 // Low-power sleep for a number of milliseconds by means of RTC
 // Use only during init, before any MCU hardware (including application use of RTC) is enabled.
@@ -628,85 +629,78 @@ void mobo_SPRX_input(uint8_t input_sel) {
 
 #endif // RXmod hardware controls
 
-static volatile uint32_t sample_oscillator_ticks = 0;
-
 #ifndef MOBO_SRD_OSCILLATOR_HZ
 #define MOBO_SRD_OSCILLATOR_HZ FREQ_48
 #endif
 
 #if defined(HW_GEN_SPRX)
 
-#define MOBO_SRD_MEASURE_TIMEOUT  2000
-
-static uint32_t mobo_measure_gpio_period_cycles(unsigned int pin)
+static volatile uint32_t sample_oscillator_ra[] = {0, 0};
+static volatile uint32_t sample_oscillator_idx = 0;
+static volatile uint32_t sample_oscillator_ticks = 0;
+__attribute__((__interrupt__))
+static void mobo_measure_oscillator_ticks_isr(void)
 {
-	volatile avr32_gpio_port_t *gpio_port = &AVR32_GPIO.port[pin >> 5];
-	const unsigned int bit_mask = 1U << (pin & 0x1F);
-	uint32_t timeout;
-	uint32_t t0;
-	uint32_t t1;
-	int prev_high;
+    uint32_t t_now;
+	// Read CPU timestamp from register 264
+    asm volatile("mfsr %0, 264" : "=r"(t_now));
+	
+	const uint32_t gpio_pin = MOBO_SRD_OSCILLATOR_MEASURE_PIN;
+    volatile avr32_gpio_port_t *gpio_port = &AVR32_GPIO.port[gpio_pin >> 5];
+    const uint32_t bit_mask = 1U << (gpio_pin & 0x1F);
+    gpio_port->ifrc = bit_mask; 
 
-	timeout = MOBO_SRD_MEASURE_TIMEOUT;
-	prev_high = (gpio_port->pvr & bit_mask) ? 1 : 0;
+	sample_oscillator_ra[sample_oscillator_idx] = t_now;
+	sample_oscillator_idx = ((sample_oscillator_idx + 1) & 0x01);
+}
 
-	while (timeout > 0) {
-		int high = (gpio_port->pvr & bit_mask) ? 1 : 0;
+static uint32_t mobo_measure_oscillator_ticks(void)
+{
+	int32_t timeout_counter = 100;
+	uint32_t period_ticks = 0;
 
-		if (!prev_high && high) {
-			break;
-		}
-		prev_high = high;
-		timeout--;
+	sample_oscillator_ra[0] = 0;
+	sample_oscillator_ra[1] = 0;
+	sample_oscillator_idx = 0;
+	sample_oscillator_ticks = 0;
+
+	const uint32_t gpio_pin = MOBO_SRD_OSCILLATOR_MEASURE_PIN;
+	const uint32_t gpio_irq = AVR32_GPIO_IRQ_0 + (gpio_pin >> 5);
+	const unsigned int gpio_int_grp = gpio_irq / AVR32_INTC_MAX_NUM_IRQS_PER_GRP;
+	const __int_handler prev_handler = INTC_get_interrupt(gpio_irq);
+	const unsigned int prev_ipr = AVR32_INTC.ipr[gpio_int_grp];
+
+	INTC_register_interrupt((__int_handler)&mobo_measure_oscillator_ticks_isr, gpio_irq, AVR32_INTC_INT2);
+	gpio_enable_pin_interrupt(gpio_pin, GPIO_RISING_EDGE);
+	while ((sample_oscillator_ra[0] == 0 || sample_oscillator_ra[1] == 0) && timeout_counter >= 0) {
+		cpu_delay_ms(5, FCPU_HZ);
+		timeout_counter --;
 	}
-	if (timeout == 0) {
+
+	gpio_disable_pin_interrupt(gpio_pin);
+	INTC_restore_interrupt(gpio_irq, prev_handler, prev_ipr);
+
+	if (timeout_counter < 0)
 		return 0;
-	}
 
-	asm volatile("mfsr %0, 264" : "=r"(t0));
-
-	timeout = MOBO_SRD_MEASURE_TIMEOUT;
-	while (timeout > 0 && (gpio_port->pvr & bit_mask)) {
-		timeout--;
-	}
-	if (timeout == 0) {
-		return 0;
-	}
-
-	timeout = MOBO_SRD_MEASURE_TIMEOUT;
-	prev_high = 0;
-	while (timeout > 0) {
-		int high = (gpio_port->pvr & bit_mask) ? 1 : 0;
-
-		if (!prev_high && high) {
-			break;
-		}
-		prev_high = high;
-		timeout--;
-	}
-	if (timeout == 0) {
-		return 0;
-	}
-
-	asm volatile("mfsr %0, 264" : "=r"(t1));
-
-	return t1 - t0;
+	if (sample_oscillator_idx == 0)
+		return sample_oscillator_ra[1] - sample_oscillator_ra[0];
+	return sample_oscillator_ra[0] - sample_oscillator_ra[1];
 }
 
 // Measure one 48 kHz reference period in CPU cycles via PX45 (MCLK_48_EN).
 // Used to calibrate mobo_srd_asm2() for different CPU frequencies.
 void mobo_srd_init(void) {
-	if (sample_oscillator_ticks != 0) {
+	if (sample_oscillator_ticks != 0)
 		return;
-	}
 
-	Bool pa21_was_high = gpio_get_gpio_pin_output_value(MOBO_SRD_OSCILLATOR_ENABLE_PIN);
+	Bool pa21_high = gpio_get_gpio_pin_output_value(MOBO_SRD_OSCILLATOR_ENABLE_PIN);
 	gpio_set_gpio_pin(MOBO_SRD_OSCILLATOR_ENABLE_PIN);
 	cpu_delay_ms(5, FCPU_HZ);
 	gpio_enable_gpio_pin(MOBO_SRD_OSCILLATOR_MEASURE_PIN);
-	sample_oscillator_ticks = mobo_measure_gpio_period_cycles(MOBO_SRD_OSCILLATOR_MEASURE_PIN);
-
-	if (pa21_was_high) {
+	sample_oscillator_ticks = mobo_measure_oscillator_ticks();
+	gpio_disable_pin_interrupt(MOBO_SRD_OSCILLATOR_MEASURE_PIN);
+	if (pa21_high) {
 		gpio_set_gpio_pin(MOBO_SRD_OSCILLATOR_ENABLE_PIN);
 	} else {
 		gpio_clr_gpio_pin(MOBO_SRD_OSCILLATOR_ENABLE_PIN);
