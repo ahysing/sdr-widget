@@ -1,6 +1,6 @@
 #
 # Application compile overrides (included from Release/makefile after subdir.mk).
-# -mpart=uc3a3256 is set here; optimization flags come from the root Makefile.
+# is set here; optimization flags come from the root Makefile.
 #
 CFLAGS+= -I/opt/atmel-headers
 ASFLAGS+= -I/opt/atmel-headers

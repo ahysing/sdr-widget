@@ -301,3 +301,10 @@ extern void feature_find_first_and_last_value(uint8_t index, uint8_t *first, uin
 #define FEATURE_DG8SAQ_GET_DEFAULT		9
 
 #endif /* FEATURES_H_ */
+
+#define FEATURE_ADC_NONE				(features[feature_adc_index] == (uint8_t)feature_adc_none)
+#define FEATURE_ADC_AK5394A				(features[feature_adc_index] == (uint8_t)feature_adc_ak5394a)
+#define FEATURE_HSTUPID_ON				(features[feature_quirk_index] == (uint8_t)feature_quirk_fb_Hstupid)
+#define FEATURE_HSTUPID_OFF				(features[feature_quirk_index] != (uint8_t)feature_quirk_fb_Hstupid)
+#define FEATURE_HDEAD_ON				(features[feature_quirk_index] == (uint8_t)feature_quirk_fb_Hdead)
+#define FEATURE_HDEAD_OFF				(features[feature_quirk_index] != (uint8_t)feature_quirk_fb_Hdead)
