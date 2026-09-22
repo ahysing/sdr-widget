@@ -4,7 +4,7 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
-../src/I2C.c \
+../src/usb_stats_hid_report_descriptor.c \n../src/usb_statistics_descriptors.c \n../src/usb_statistics.c \n../src/loudness_inferred_gain.c \n../src/loudness_fast.c \n../src/loudness.c \n../src/I2C.c \
 ../src/Mobo_config.c \
 ../src/composite_widget.c \
 ../src/device_audio_task.c \
@@ -25,7 +25,7 @@ C_SRCS += \
 
 
 OBJS += \
-./src/I2C.o \
+./src/usb_stats_hid_report_descriptor.o \n./src/usb_statistics_descriptors.o \n./src/usb_statistics.o \n./src/loudness_inferred_gain.o \n./src/loudness_fast.o \n./src/loudness.o \n./src/I2C.o \
 ./src/Mobo_config.o \
 ./src/composite_widget.o \
 ./src/device_audio_task.o \
@@ -47,7 +47,7 @@ OBJS += \
 
 
 C_DEPS += \
-./src/I2C.d \
+./src/usb_stats_hid_report_descriptor.d \n./src/usb_statistics_descriptors.d \n./src/usb_statistics.d \n./src/loudness_inferred_gain.d \n./src/loudness_fast.d \n./src/loudness.d \n./src/I2C.d \
 ./src/Mobo_config.d \
 ./src/composite_widget.d \
 ./src/device_audio_task.d \

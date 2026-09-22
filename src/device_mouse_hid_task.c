@@ -593,8 +593,8 @@ Arash
             // Check source and rate, output to LED and terminal
             else if (a == 'm') {
 	            print_dbg_char_hex(input_select);			// Is source known?
-	            print_dbg_char_hex( (uint8_t)(spk_current_freq.frequency/1000) );			// Is rate known? 
-	            mobo_led_select(spk_current_freq.frequency, input_select);
+	            print_dbg_char_hex( (uint8_t)(current_freq.frequency/1000) );			// Is rate known? 
+	            mobo_led_select(current_freq.frequency, input_select);
             }
 			
 			
@@ -634,7 +634,7 @@ Arash
             // Check source and rate, output to terminal
             else if (a == 'M') {
 	            print_dbg_char_hex(input_select);			// Is source known?
-	            print_dbg_char_hex( (uint8_t)(spk_current_freq.frequency/1000) );			// Is rate known?
+	            print_dbg_char_hex( (uint8_t)(current_freq.frequency/1000) );			// Is rate known?
             }
 
             else if (a == 'v') {
@@ -676,7 +676,7 @@ Arash
 					temp32 = FREQ_INVALID;
 				}
 				else if ( (input_select == MOBO_SRC_UAC2) || (input_select == MOBO_SRC_UAC1) ) {
-					temp32 = spk_current_freq.frequency;
+					temp32 = current_freq.frequency;
 				}
 				else {
 					temp32 = spdif_rx_status.frequency;

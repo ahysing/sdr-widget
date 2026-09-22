@@ -395,7 +395,7 @@ wm8804_reset(WM8804_RESET_START);							// Early hardware reset of WM8805 becaus
 //	input_select = MOBO_SRC_NONE;							// No input selected, allows state machines to grab it
 
 	mobo_xo_select(FREQ_48, MOBO_SRC_UAC2);					// Initial GPIO XO control and frequency indication, enable XOs
-	must_init_spk_index = TRUE;								// New frequency setting means resync DAC DMA
+	// must_init_spk_index = TRUE;								// New frequency setting means resync DAC DMA
 	print_dbg_char('p');
 
 #if (defined HW_GEN_SPRX)
