@@ -111,7 +111,7 @@
 
 // S_line_coding   line_coding;
 
-// S_freq current_freq;
+// S_freq spk_current_freq;
 // Bool freq_changed = FALSE;
 
 static U8    usb_type;
@@ -658,7 +658,7 @@ void audio_set_cur(void)
 			print_dbg_char('1'); // BSB debug 20121212
 #endif
 
-			current_freq.frequency = FREQ_44;
+			spk_current_freq.frequency = FREQ_44;
 			// BSB 20130602: code section moved here from uac1_device_audio_task.c
 			FB_rate = (44 << 14) + (1 << 14)/10;
 			FB_rate_initial = FB_rate;							// BSB 20131031 Record FB_rate as it was set by control system
@@ -670,7 +670,7 @@ void audio_set_cur(void)
 			print_dbg_char('2'); // BSB debug 20121212
 #endif
 
-	   		current_freq.frequency = FREQ_48;
+	   		spk_current_freq.frequency = FREQ_48;
 			// BSB 20130602: code section moved here from uac1_device_audio_task.c
 			FB_rate = 48 << 14;
 			FB_rate_initial = FB_rate;							// BSB 20131031 Record FB_rate as it was set by control system
@@ -683,8 +683,8 @@ void audio_set_cur(void)
 			mobo_clear_dac_channel();
 		}
 		if ( (input_select == MOBO_SRC_UAC1) || (input_select == MOBO_SRC_NONE) ) {	// Only change I2S settings if appropriate
-			mobo_xo_select(current_freq.frequency, MOBO_SRC_UAC1);	// Give USB the I2S control with proper MCLK
-			mobo_clock_division(current_freq.frequency);	// Re-configure correct USB sample rate
+			mobo_xo_select(spk_current_freq.frequency, MOBO_SRC_UAC1);	// Give USB the I2S control with proper MCLK
+			mobo_clock_division(spk_current_freq.frequency);	// Re-configure correct USB sample rate
 
 			// Will this work if we go from SPDIF to USB already playing at different sample rate?
 
@@ -696,8 +696,8 @@ void audio_set_cur(void)
 		#endif
 		mobo_clear_dac_channel();
 
-		mobo_xo_select(current_freq.frequency, MOBO_SRC_UAC1); // GPIO XO control and frequency indication
-		mobo_clock_division(current_freq.frequency);	// This is redundant in UAC1, but we attempt restart for good measure!
+		mobo_xo_select(spk_current_freq.frequency, MOBO_SRC_UAC1); // GPIO XO control and frequency indication
+		mobo_clock_division(spk_current_freq.frequency);	// This is redundant in UAC1, but we attempt restart for good measure!
 #endif
 
 

@@ -4,7 +4,15 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
-../src/usb_stats_hid_report_descriptor.c \n../src/usb_statistics_descriptors.c \n../src/usb_statistics.c \n../src/loudness_inferred_gain.c \n../src/loudness_fast.c \n../src/loudness.c \n../src/I2C.c \
+../src/usb_stats_hid_report_descriptor.c \
+../src/stats_telemetry.c \
+../src/usb_fifo_hw_lock.c \
+../src/usb_statistics_descriptors.c \
+../src/usb_statistics.c \
+../src/loudness_inferred_gain.c \
+../src/loudness_fast.c \
+../src/loudness.c \
+../src/I2C.c \
 ../src/Mobo_config.c \
 ../src/composite_widget.c \
 ../src/device_audio_task.c \
@@ -25,7 +33,15 @@ C_SRCS += \
 
 
 OBJS += \
-./src/usb_stats_hid_report_descriptor.o \n./src/usb_statistics_descriptors.o \n./src/usb_statistics.o \n./src/loudness_inferred_gain.o \n./src/loudness_fast.o \n./src/loudness.o \n./src/I2C.o \
+./src/usb_stats_hid_report_descriptor.o \
+./src/stats_telemetry.o \
+./src/usb_fifo_hw_lock.o \
+./src/usb_statistics_descriptors.o \
+./src/usb_statistics.o \
+./src/loudness_inferred_gain.o \
+./src/loudness_fast.o \
+./src/loudness.o \
+./src/I2C.o \
 ./src/Mobo_config.o \
 ./src/composite_widget.o \
 ./src/device_audio_task.o \
@@ -47,7 +63,15 @@ OBJS += \
 
 
 C_DEPS += \
-./src/usb_stats_hid_report_descriptor.d \n./src/usb_statistics_descriptors.d \n./src/usb_statistics.d \n./src/loudness_inferred_gain.d \n./src/loudness_fast.d \n./src/loudness.d \n./src/I2C.d \
+./src/usb_stats_hid_report_descriptor.d \
+./src/stats_telemetry.d \
+./src/usb_fifo_hw_lock.d \
+./src/usb_statistics_descriptors.d \
+./src/usb_statistics.d \
+./src/loudness_inferred_gain.d \
+./src/loudness_fast.d \
+./src/loudness.d \
+./src/I2C.d \
 ./src/Mobo_config.d \
 ./src/composite_widget.d \
 ./src/device_audio_task.d \

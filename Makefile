@@ -9,7 +9,7 @@
 # After changing AUDIO_WIDGET_DEFAULTS or product flags, rebuild features.o (targets rm it) or use mk3 clean.
 #
 # Variables (override on command line):
-#   PARTNAME                  AVR32 -mpart=ΓÇª (default uc3a3128).
+#   PARTNAME                  AVR32 -mpart=... (default uc3a3128).
 #   AUDIO_WIDGET_FEATURE_FLAGS  Board/image/feature defaults + product macros (see features.h).
 #   AUDIO_WIDGET_DEFAULTS     PARTNAME + feature flags + BUILD_INFO_DEFS; full CFLAGS prefix for firmware.
 #   AUDIO_WIDGET_MK3_DEFAULTS Mk3 profile: undef DA256/SPRX/HID, add AB1x + volume + ALT2 + cfg + VDD_SENSE.

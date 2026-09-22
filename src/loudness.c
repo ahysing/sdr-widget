@@ -335,8 +335,8 @@ static void loudness_update_filter_by_volume_or_frequency(void *pvParameters)
             continue;
         }
 
-        if (current_freq.frequency == FREQ_44 || current_freq.frequency == FREQ_48
-            || loudness_highres_applies(current_freq.frequency)) {
+        if (spk_current_freq.frequency == FREQ_44 || spk_current_freq.frequency == FREQ_48
+            || loudness_highres_applies(spk_current_freq.frequency)) {
             if (xQueueReceive(xLoudnessFreqQueue, &request, xDelay20ms) == pdPASS) {
                 if (request.type == LOUDNESS_REQUEST_FREQUENCY) {
                     if (request.value != 0) {
@@ -571,8 +571,8 @@ void loudness_filter_init(void) {
     loudness_fast_reset_states();
 
     loudness_select_equalizer_step(LOUDNESS_DB_SPL_MAX);
-    if (current_freq.frequency != 0) {
-        loudness_change_frequency(current_freq.frequency);
+    if (spk_current_freq.frequency != 0) {
+        loudness_change_frequency(spk_current_freq.frequency);
     }
 
 #ifdef FREERTOS_USED
