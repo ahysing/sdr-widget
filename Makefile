@@ -63,9 +63,15 @@ PARTNAME=-mpart=uc3a3128
 # second shell pass rather than reaching the compiler - bare alphanumeric tokens have no such
 # problem and the C preprocessor's stringification operator builds the quoted literal instead.
 ifeq ($(OS),Windows_NT)
+  ifdef MSYSTEM
+BUILD_DATE := $(shell date '+%Y%m%d')
+BUILD_TIME := $(shell date '+%H%M')
+BUILD_TZ := UTC
+  else
 BUILD_DATE := $(shell powershell -NoProfile -Command "Get-Date -Format yyyyMMdd")
 BUILD_TIME := $(shell powershell -NoProfile -Command "Get-Date -Format HHmm")
 BUILD_TZ := UTC
+  endif
 BUILD_COMMIT := $(shell git rev-parse --short HEAD 2>NUL || echo unknown)
 BUILD_DIRTY := $(shell git diff --quiet 2>NUL && git diff --cached --quiet 2>NUL && echo clean || echo dirty)
 else
@@ -373,17 +379,14 @@ endif
 $(TEST_BUILD_DIR):
 	$(TEST_MKDIR)
 
-$(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT): tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c src/usb_statistics.c src/stats_telemetry.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests $(CFLAGS_TEST_BUILD) $(CFLAGS_TEST) -DUNIT_TEST -DFEATURE_VOLUME_CTRL $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c src/usb_statistics.c src/stats_telemetry.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c
+$(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT): tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests $(CFLAGS_TEST_BUILD) $(CFLAGS_TEST) -DUNIT_TEST -DFEATURE_VOLUME_CTRL $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_equalizer_step_switch_stats_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c src/usb_statistics.c src/stats_telemetry.c tests/pc/usb_volume_stub.c
 
-$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests $(CFLAGS_TEST_BUILD) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE -DFEATURE_VOLUME_CTRL $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c
+$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT): tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests $(CFLAGS_TEST_BUILD) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE -DFEATURE_VOLUME_CTRL $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
 
-$(TEST_BUILD_DIR)/loudness_first_order_tests$(EXE_EXT): tests/pc/loudness_first_order_tests.c src/loudness_first_order.c src/loudness.c src/loudness_fast.c src/loudness_inferred_gain.c src/loudness_internal.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests $(CFLAGS_TEST_BUILD) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE -DFEATURE_VOLUME_CTRL $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_first_order_tests.c src/loudness_first_order.c src/loudness.c src/loudness_fast.c src/loudness_inferred_gain.c src/loudness_internal.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c
-
-$(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT): tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c | $(TEST_BUILD_DIR)
-	$(CC) $(TEST_PREAMBLE) -I tests $(CFLAGS_TEST_BUILD) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE -DFEATURE_VOLUME_CTRL $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_fast.c src/loudness_first_order.c src/loudness_inferred_gain.c src/loudness_internal.c tests/pc/usb_volume_stub.c tests/pc/device_audio_volume_stub.c
+$(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT): tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c | $(TEST_BUILD_DIR)
+	$(CC) $(TEST_PREAMBLE) -I tests $(CFLAGS_TEST_BUILD) $(CFLAGS_TEST) -DUSBSTATISTICS_DISABLE -DFEATURE_VOLUME_CTRL $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/loudness_inferred_gain_tests.c src/loudness.c src/loudness_fast.c src/loudness_highres.c src/loudness_inferred_gain.c tests/pc/usb_volume_stub.c
 
 $(TEST_BUILD_DIR)/usb_statistics_tests$(EXE_EXT): tests/pc/usb_statistics_tests.c src/usb_statistics.c src/stats_telemetry.c | $(TEST_BUILD_DIR)
 	$(CC) $(TEST_PREAMBLE) $(CFLAGS_TEST_BUILD) $(CFLAGS_TEST) -DUNIT_TEST $(OBJ_DIR_FLAG) $(OUT_FLAG)$@ tests/pc/usb_statistics_tests.c src/usb_statistics.c src/stats_telemetry.c
@@ -395,7 +398,7 @@ RUN_TEST_EXES = $(TEST_BUILD_DIR)/audio_stats_logic_tests$(EXE_EXT) \
 	$(TEST_BUILD_DIR)/usb_statistics_tests$(EXE_EXT)
 ifneq ($(LOUDNESS_DISABLE),1)
 RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT)
-RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_first_order_tests$(EXE_EXT)
+
 RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT)
 ifneq ($(USBSTATISTICS_DISABLE),1)
 RUN_TEST_EXES += $(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT)
@@ -420,7 +423,7 @@ ifneq ($(USBSTATISTICS_DISABLE),1)
 	$(TEST_BUILD_DIR)/loudness_equalizer_step_switch_stats_tests$(EXE_EXT)
 endif
 	$(TEST_BUILD_DIR)/loudness_tests$(EXE_EXT)
-	$(TEST_BUILD_DIR)/loudness_first_order_tests$(EXE_EXT)
+
 	$(TEST_BUILD_DIR)/loudness_inferred_gain_tests$(EXE_EXT)
 endif
 	$(TEST_BUILD_DIR)/usb_statistics_tests$(EXE_EXT)

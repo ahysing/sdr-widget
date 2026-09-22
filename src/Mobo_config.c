@@ -12,7 +12,6 @@
 // To compile sample rate detector we need low-level hardware access
 #include "gpio.h"
 #include <avr32/io.h>
-#include <string.h>
 
 #include "compiler.h"
 
@@ -1725,8 +1724,15 @@ void mobo_clock_division(U32 frequency) {
 
 // Empty the contents of the incoming pdca buffers
 void mobo_clear_adc_channel(void) {
-	memset((void *)audio_buffer_0, 0, sizeof(audio_buffer_0));
-	memset((void *)audio_buffer_1, 0, sizeof(audio_buffer_1));
+	int i;
+
+//	gpio_set_gpio_pin(AVR32_PIN_PX18); // ch2
+
+	for (i = 0; i < ADC_BUFFER_SIZE; i++) {
+		audio_buffer[i] = 0;
+	}
+
+//	gpio_clr_gpio_pin(AVR32_PIN_PX18); // ch2
 }
 
 
@@ -1773,8 +1779,58 @@ void mobo_clear_adc_channel(void) {
 
 // Empty the contents of the outgoing pdca buffers
 void mobo_clear_dac_channel(void) {
-	memset((void *)spk_buffer_0, 0, sizeof(spk_buffer_0));
-	memset((void *)spk_buffer_1, 0, sizeof(spk_buffer_1));
+	int i;
+
+//	print_dbg_char('C');
+//	gpio_set_gpio_pin(AVR32_PIN_PX17); // ch3
+
+
+#ifdef I2S_POLARITY_CHECK // overrides I2S_METADATA
+	for (i = 0; i < DAC_BUFFER_UNI; i=i+2) {
+		spk_buffer[i] = 1; 
+		spk_buffer[i+1] = -2;		// Delayed SDATA should be in-phase with LRCK
+	}
+	
+	for (i = 0; i < SPK_CACHE_MAX_SAMPLES; i++) {
+//		cache_L[i] = 1;
+//		cache_R[i] = -2;		// Delayed SDATA should be in-phase with LRCK
+		cache_unified[2*i] = 1;
+		cache_unified[2*i+1] = -2;
+	}
+#else
+//	for (i = 0; i < DAC_BUFFER_UNI; i++) {
+//		spk_buffer[i] = 0;
+//	}
+
+	// Assuming DAC_BUFFER_UNI is an even number
+	for (i = 0; i < ( DAC_BUFFER_UNI / 2); i++) {
+		#ifdef I2S_METADATA
+			spk_buffer[2*i] = i2s_meta_L;	// Left
+			spk_buffer[2*i+1] = i2s_meta_R;	// Right
+		#else
+			spk_buffer[2*i] = 0;	// Left
+			spk_buffer[2*i+1] = 0;	// Right
+		#endif
+	}
+
+	
+	for (i = 0; i < SPK_CACHE_MAX_SAMPLES; i++) {
+//		cache_L[i] = 0;
+//		cache_R[i] = 0;
+
+		#ifdef I2S_METADATA
+			cache_unified[2*i] = i2s_meta_L;
+			cache_unified[2*i+1] = i2s_meta_R;
+		#else
+			cache_unified[2*i] = 0;
+			cache_unified[2*i+1] = 0;
+		#endif
+	}
+#endif	
+	
+	
+
+//	gpio_clr_gpio_pin(AVR32_PIN_PX17); // ch3
 }
 
 
