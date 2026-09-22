@@ -710,7 +710,7 @@ Arash
 					temp32 = FREQ_INVALID;
 				}
 				else if ( (input_select == MOBO_SRC_UAC2) || (input_select == MOBO_SRC_UAC1) ) {
-					temp32 = current_freq.frequency;
+					temp32 = spk_current_freq.frequency;
 				}
 				else {
 					temp32 = spdif_rx_status.frequency;

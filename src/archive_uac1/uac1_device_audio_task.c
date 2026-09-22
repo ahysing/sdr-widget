@@ -182,7 +182,7 @@ void uac1_device_audio_task(void *pvParameters)
 	#endif
 
 	// BSB 20130602: code section moved to uac1_usb_specific_request.c
-	// if (current_freq.frequency == FREQ_48) FB_rate = 48 << 14;
+	// if (spk_current_freq.frequency == FREQ_48) FB_rate = 48 << 14;
 	// else FB_rate = (44 << 14) + (1 << 14)/10;
 
 	portTickType xLastWakeTime;
@@ -214,8 +214,8 @@ void uac1_device_audio_task(void *pvParameters)
 						 (prev_input_select == MOBO_SRC_TOSLINK0) ||
 						 (prev_input_select == MOBO_SRC_TOSLINK1) ) {
 
-						mobo_xo_select(current_freq.frequency, input_select);	// Give USB the I2S control with proper MCLK
-						mobo_clock_division(current_freq.frequency);	// Re-configure correct USB sample rate
+						mobo_xo_select(spk_current_freq.frequency, input_select);	// Give USB the I2S control with proper MCLK
+						mobo_clock_division(spk_current_freq.frequency);	// Re-configure correct USB sample rate
 					}
 				}
 				prev_input_select = input_select;
@@ -565,7 +565,7 @@ void uac1_device_audio_task(void *pvParameters)
 												print_cpu_char(CPU_CHAR_UAC1_C);	// USB audio Class 1 on front USB-C plug 
 											}
 
-											mobo_led_select(current_freq.frequency, input_select);
+											mobo_led_select(spk_current_freq.frequency, input_select);
 											#ifdef HW_GEN_SPRX
 												mobo_i2s_enable(MOBO_I2S_ENABLE);		// Hard-unmute of I2S pin
 											#endif
@@ -576,7 +576,7 @@ void uac1_device_audio_task(void *pvParameters)
 									#else // not debug
 										if (xSemaphoreTake(input_select_semphr, 0) == pdTRUE)
 											input_select = MOBO_SRC_UAC1;
-											mobo_led_select(current_freq.frequency, input_select);
+											mobo_led_select(spk_current_freq.frequency, input_select);
 											#ifdef HW_GEN_SPRX
 												mobo_i2s_enable(MOBO_I2S_ENABLE);		// Hard-unmute of I2S pin
 											#endif
