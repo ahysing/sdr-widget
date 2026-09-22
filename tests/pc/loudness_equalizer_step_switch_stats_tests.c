@@ -12,7 +12,7 @@
 
 DEFINE_FFF_GLOBALS;
 
-S_freq current_freq = { .frequency = 44100 };
+S_freq spk_current_freq = { .frequency = 44100 };
 volatile Bool freq_changed = FALSE;
 volatile U8 usb_alternate_setting_out = 1;
 
@@ -33,7 +33,7 @@ static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
     reset_usb_stats_buffers();
     volatile usb_stats_t *stats = get_usb_stats();
 
-    current_freq.frequency = 44100;
+    spk_current_freq.frequency = 44100;
     loudness_init();
     loudness_set_source_has_volume_control();
 
@@ -107,7 +107,7 @@ static void test_equalizer_step_switch_rapid_sweep_no_deadline_misses(void) {
     reset_usb_stats_buffers();
     volatile usb_stats_t *stats = get_usb_stats();
 
-    current_freq.frequency = 48000;
+    spk_current_freq.frequency = 48000;
     loudness_init();
     loudness_set_source_has_volume_control();
 
@@ -136,7 +136,7 @@ static void test_usb_volume_change_updates_telemetry_immediately(void) {
 
     printf("Running test_usb_volume_change_updates_telemetry_immediately...\n");
     reset_usb_stats_buffers();
-    current_freq.frequency = 48000;
+    spk_current_freq.frequency = 48000;
     loudness_init();
 
     loudness_usb_volume_changed((S16)((84 - LOUDNESS_DB_SPL_MAX) * 256));

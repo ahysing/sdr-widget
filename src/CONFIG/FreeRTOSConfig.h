@@ -184,6 +184,12 @@ to exclude the API function. */
 #define UAC2_configTSK_USB_DAUDIO_PERIOD		1
 #define HPSDR_configTSK_USB_DAUDIO_PERIOD		2
 
+/* USB device Audio Statistics task definitions. */
+#define configTSK_USB_DAUDIOSTATS_NAME				((const signed portCHAR *)"USB Device Audio Statistics")
+#define configTSK_USB_DAUDIOSTATS_STACK_SIZE		128
+#define configTSK_USB_DAUDIOSTATS_PRIORITY		(tskIDLE_PRIORITY + 2)
+#define configTSK_USB_DAUDIOSTATS_PERIOD_MS	   1000
+
 /* AK5394A task definitions. */
 #define configTSK_AK5394A_NAME					((const signed portCHAR *)"AK5394A") 
 #define configTSK_AK5394A_STACK_SIZE			256

@@ -8,7 +8,7 @@
 
 DEFINE_FFF_GLOBALS;
 
-S_freq current_freq = { .frequency = 48000 };
+S_freq spk_current_freq = { .frequency = 48000 };
 volatile Bool freq_changed = FALSE;
 volatile U8 usb_alternate_setting_out = 1;
 

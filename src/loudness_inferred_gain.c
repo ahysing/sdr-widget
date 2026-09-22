@@ -128,7 +128,7 @@ void loudness_inferred_gain_reset(void)
 {
     gain_short_memory = 0;
     gain_long_memory = 0;
-    loudness_inferred_gain_set_rate(current_freq.frequency);
+    loudness_inferred_gain_set_rate(spk_current_freq.frequency);
 }
 
 /*

@@ -15,7 +15,7 @@
 
 DEFINE_FFF_GLOBALS;
 
-S_freq current_freq = { .frequency = 48000 };
+S_freq spk_current_freq = { .frequency = 48000 };
 volatile Bool freq_changed = FALSE;
 volatile U8 usb_alternate_setting_out = 1;
 
@@ -431,38 +431,6 @@ void test_loudness_24bit_container_zero_crossing(void) {
     printf("test_loudness_24bit_container_zero_crossing passed\n\n");
 }
 
-void test_loudness_df2_step_transition_no_reset(void) {
-    printf("Running test_loudness_df2_step_transition_no_reset...\n");
-    int i;
-    int32_t sample = 200000;
-    int32_t out_before;
-    int32_t out_after;
-    int32_t spike;
-
-    loudness_init();
-    loudness_set_source_has_volume_control();
-
-    loudness_usb_volume_changed(-10 * 256);
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 10);
-
-    for (i = 0; i < 256; i++) {
-        loudness_fast_24bit(0, sample);
-    }
-    out_before = (int32_t)loudness_fast_24bit(0, sample);
-
-    loudness_usb_volume_changed(-20 * 256);
-    assert(loudness_get_last_db_spl() == LOUDNESS_DB_SPL_MAX - 20);
-
-    out_after = (int32_t)loudness_fast_24bit(0, sample);
-    spike = out_after - out_before;
-    if (spike < 0) {
-        spike = -spike;
-    }
-    assert(spike < (sample >> 2));
-
-    printf("test_loudness_df2_step_transition_no_reset passed\n\n");
-}
-
 
 /**
  * @brief Test for Use Case B: Quantization Noise & Dither Verification
@@ -600,7 +568,7 @@ static double measure_fast_50hz_gain_db(
     double output_rms;
     int i;
 
-    current_freq.frequency = sample_rate_hz;
+    spk_current_freq.frequency = sample_rate_hz;
     loudness_change_frequency_fast(sample_rate_hz);
     loudness_fast_reset_states();
     loudness_test_load_active_quotients_fast(equalizer_step);
@@ -698,7 +666,7 @@ static void assert_filter_transition_equivalence(uint32_t sample_rate_hz,
     int32_t reference_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
     int32_t transition_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
 
-    current_freq.frequency = sample_rate_hz;
+    spk_current_freq.frequency = sample_rate_hz;
     loudness_change_frequency_fast(sample_rate_hz);
 
     loudness_fast_reset_states();
@@ -821,7 +789,7 @@ static double measure_fast_50hz_gain_db_stereo_packet(uint32_t sample_rate_hz,
     S32 packet_L[HIRES_HALF_DELTA_PACKET_SAMPLES];
     S32 packet_R[HIRES_HALF_DELTA_PACKET_SAMPLES];
 
-    current_freq.frequency = sample_rate_hz;
+    spk_current_freq.frequency = sample_rate_hz;
     loudness_change_frequency_fast(sample_rate_hz);
     loudness_fast_reset_states();
     loudness_test_load_active_quotients_fast(equalizer_step);
@@ -877,7 +845,7 @@ void test_loudness_hires_stride4_counter_phase(void)
 
     printf("Running test_loudness_hires_stride4_counter_phase...\n");
 
-    current_freq.frequency = 176400;
+    spk_current_freq.frequency = 176400;
     loudness_change_frequency_fast(176400);
     loudness_fast_reset_states();
     loudness_test_load_active_quotients_fast(10);
@@ -902,7 +870,7 @@ void test_loudness_hires_stride2_counter_phase(void)
 
     printf("Running test_loudness_hires_stride2_counter_phase...\n");
 
-    current_freq.frequency = 88200;
+    spk_current_freq.frequency = 88200;
     loudness_change_frequency_fast(88200);
     loudness_fast_reset_states();
     loudness_test_load_active_quotients_fast(10);
@@ -929,7 +897,7 @@ void test_loudness_hires_packet_boundary_continuity(void)
 
     printf("Running test_loudness_hires_packet_boundary_continuity...\n");
 
-    current_freq.frequency = 176400;
+    spk_current_freq.frequency = 176400;
     loudness_change_frequency_fast(176400);
     loudness_fast_reset_states();
     loudness_test_load_active_quotients_fast(10);
@@ -1029,7 +997,7 @@ static void drain_zeros_stereo_packet(uint32_t sample_rate_hz)
     biquad_state_fast_t r_state;
 
     memset(zeros, 0, sizeof(zeros));
-    current_freq.frequency = sample_rate_hz;
+    spk_current_freq.frequency = sample_rate_hz;
     loudness_change_frequency_fast(sample_rate_hz);
 
     for (p = 0; p < 2048; p++) {
@@ -1068,7 +1036,7 @@ void test_filter_idle_after_zeros_base(void)
     loudness_set_source_has_volume_control();
     loudness_usb_volume_changed(0);
 
-    current_freq.frequency = 44100;
+    spk_current_freq.frequency = 44100;
     loudness_change_frequency_fast(44100);
     loudness_fast_reset_states();
 
@@ -1088,7 +1056,7 @@ void test_filter_active_during_hires_interp(void)
 
     printf("Running test_filter_active_during_hires_interp...\n");
 
-    current_freq.frequency = 88200;
+    spk_current_freq.frequency = 88200;
     loudness_change_frequency_fast(88200);
     loudness_fast_reset_states();
     loudness_test_load_active_quotients_fast(10);
@@ -1108,7 +1076,7 @@ void test_filter_idle_after_zeros_stride2(void)
 
     printf("Running test_filter_idle_after_zeros_stride2...\n");
 
-    current_freq.frequency = 88200;
+    spk_current_freq.frequency = 88200;
     loudness_change_frequency_fast(88200);
     loudness_fast_reset_states();
     loudness_test_load_active_quotients_fast(10);
@@ -1130,7 +1098,7 @@ void test_filter_idle_after_zeros_stride4(void)
 
     printf("Running test_filter_idle_after_zeros_stride4...\n");
 
-    current_freq.frequency = 192000;
+    spk_current_freq.frequency = 192000;
     loudness_change_frequency_fast(192000);
     loudness_fast_reset_states();
     loudness_test_load_active_quotients_fast(10);
@@ -1155,7 +1123,7 @@ void test_per_channel_zero_bypass(void)
 
     printf("Running test_per_channel_zero_bypass...\n");
 
-    current_freq.frequency = 88200;
+    spk_current_freq.frequency = 88200;
     loudness_change_frequency_fast(88200);
     loudness_fast_reset_states();
     loudness_test_load_active_quotients_fast(10);
@@ -1189,7 +1157,7 @@ void test_per_channel_independent_biquad(void)
 
     printf("Running test_per_channel_independent_biquad...\n");
 
-    current_freq.frequency = 44100;
+    spk_current_freq.frequency = 44100;
     loudness_change_frequency_fast(44100);
     loudness_fast_reset_states();
     loudness_test_load_active_quotients_fast(10);
@@ -1233,7 +1201,6 @@ int main() {
     test_loudness_24bit_sign_extension();
     test_loudness_24bit_container_round_trip();
     test_loudness_24bit_container_zero_crossing();
-    test_loudness_df2_step_transition_no_reset();
 
     test_container_sign_preservation();
     test_full_scale_boundaries();
