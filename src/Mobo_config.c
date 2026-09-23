@@ -740,7 +740,7 @@ int foo(void) {
 // 20260917: raw=TRUE skips the SLIM_* lookup entirely and returns the bare cycle-count timeout,
 // for bench calibration with a signal generator patched into PA05 (see UART CLI 'F'). raw=FALSE
 // is the normal, existing lookup-based behavior (returns a FREQ_* constant).
-__attribute__((noinline)) uint32_t mobo_srd_asm2(bool raw) {
+uint32_t mobo_srd_asm2(bool raw) {
 	uint32_t timeout;
 
 	// Update 20260217: return a valid frequency or the value of the counter for downstream debug

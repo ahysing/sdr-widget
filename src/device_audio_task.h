@@ -95,12 +95,6 @@ extern volatile uint8_t usb_spk_mute; // This variable is written to by usb subs
 extern S16 spk_vol_usb_L, spk_vol_usb_R;			// BSB 20160320 added stereo volume control
 extern S32 spk_vol_mult_L, spk_vol_mult_R;
 
-#ifdef FEATURE_VOLUME_CTRL
-void device_audio_volume_update_mult_left(void);
-void device_audio_volume_update_mult_right(void);
-void device_audio_volume_refresh_mult(void);
-#endif
-
 extern volatile uint8_t input_select;				// BSB 20150501 global variable for input selector
 
 #ifdef FEATURE_SPDIF_CMD
@@ -136,5 +130,18 @@ extern volatile xSemaphoreHandle I2C_busy_semphr; 			// One semaphore covers ent
 
 //_____ D E C L A R A T I O N S ____________________________________________
 
+#ifdef FEATURE_VOLUME_CTRL
+typedef void (*device_audio_volume_apply_fn_t)(S32 *sample_L, S32 *sample_R);
+
+void adjust_volume(S32 *sample_L, S32 *sample_R);
+void keep_volume(S32 *sample_L, S32 *sample_R);
+void device_audio_set_volume_in_biquad(Bool volume_in_biquad);
+
+extern device_audio_volume_apply_fn_t device_audio_volume_apply_fn;
+
+void device_audio_volume_update_mult_left(void);
+void device_audio_volume_update_mult_right(void);
+void device_audio_volume_refresh_mult(void);
+#endif
 
 #endif  // _DEVICE_AUDIO_TASK_H_

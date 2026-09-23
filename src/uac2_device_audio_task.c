@@ -78,7 +78,9 @@
 #include "uac2_usb_specific_request.h"
 #include "device_audio_task.h"
 #include "uac2_device_audio_task.h"
-
+#ifndef LOUDNESS_DISABLE
+#include "loudness.h"
+#endif
 
 #include "composite_widget.h"
 #include "taskAK5394A.h"
@@ -107,6 +109,23 @@ static S16 old_gap = DAC_BUFFER_UNI / 2; // Assumed to be OK...
 
 static U8 ep_audio_in, ep_audio_out, ep_audio_out_fb;
 
+#ifndef LOUDNESS_DISABLE
+static Bool uac2_loudness_filter_enabled(void)
+{
+	return loudness_uac2_packet_filter_enabled(
+		usb_spk_mute == 0, spk_current_freq.frequency);
+}
+
+static void uac2_apply_loudness_and_volume(S32 *sample_L, S32 *sample_R, Bool is_16bit_container)
+{
+	if (uac2_loudness_filter_enabled()) {
+		LOUDNESS_PROCESS_UAC2_STEREO_PACKET(
+			sample_L, sample_R, 1, is_16bit_container);
+	}
+	device_audio_volume_apply_fn(sample_L, sample_R);
+}
+#endif /* LOUDNESS_DISABLE */
+
 //!
 //! @brief This function initializes the hardware/software resources
 //! required for device Audio task.
@@ -127,8 +146,10 @@ void uac2_device_audio_task_init(U8 ep_in, U8 ep_out, U8 ep_out_fb)
 	// spk_vol_usb_L = usb_volume_flash(CH_LEFT, 0, VOL_READ);		// Fetch stored or default volume setting
 	// spk_vol_usb_R = usb_volume_flash(CH_RIGHT, 0, VOL_READ);
 	// Without working volume flash, spk_vol_usb_? = VOL_DEFAULT is set in device_audio_task.c
-	spk_vol_mult_L = usb_volume_format(spk_vol_usb_L);
-	spk_vol_mult_R = usb_volume_format(spk_vol_usb_R);
+	device_audio_volume_refresh_mult();
+#ifndef LOUDNESS_DISABLE
+	loudness_init();
+#endif
 
 	xTaskCreate(uac2_device_audio_task,
 				configTSK_USB_DAUDIO_NAME,
@@ -638,6 +659,10 @@ void uac2_device_audio_task(void *pvParameters)
 									#endif
 									}
 								else {
+#ifndef LOUDNESS_DISABLE
+									uac2_apply_loudness_and_volume(
+										&prev_sample_L, &prev_sample_R, FALSE);
+#else
 									if (spk_vol_mult_L != VOL_MULT_UNITY) {	// Only touch gain-controlled samples
 										// 32-bit data words volume control
 										prev_sample_L = (S32)( (int64_t)( (int64_t)(prev_sample_L) * (int64_t)spk_vol_mult_L ) >> VOL_MULT_SHIFT) ;
@@ -651,6 +676,7 @@ void uac2_device_audio_task(void *pvParameters)
 										// rand8() too expensive at 192ksps
 										// sample_R += rand8(); // dither in bits 7:0
 									}
+#endif
 								}
 								#endif
 							
@@ -727,6 +753,10 @@ void uac2_device_audio_task(void *pvParameters)
 										#endif
 									}
 									else {
+#ifndef LOUDNESS_DISABLE
+										uac2_apply_loudness_and_volume(
+											&prev_sample_L, &prev_sample_R, TRUE);
+#else
 										if (spk_vol_mult_L != VOL_MULT_UNITY) {	// Only touch gain-controlled samples
 											// 32-bit data words volume control
 											prev_sample_L = (S32)( (int64_t)( (int64_t)(prev_sample_L) * (int64_t)spk_vol_mult_L ) >> VOL_MULT_SHIFT) ;
@@ -740,6 +770,7 @@ void uac2_device_audio_task(void *pvParameters)
 											// rand8() too expensive at 192ksps
 											// sample_R += rand8(); // dither in bits 7:0
 										}
+#endif
 									}
 									#endif
 								

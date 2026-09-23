@@ -24,9 +24,41 @@ S16 spk_vol_usb_R = VOL_DEFAULT;			// Forced to default value
 S32 spk_vol_mult_L = 0;						// Full mute for now, re-formated in uac?_device_audio_task_init
 S32 spk_vol_mult_R = 0;
 
+volatile uint8_t input_select;				// BSB 20150501 global variable for input selector
+
 #ifdef FEATURE_VOLUME_CTRL
 static S16 spk_vol_formatted_L = VOL_INVALID;
 static S16 spk_vol_formatted_R = VOL_INVALID;
+
+device_audio_volume_apply_fn_t device_audio_volume_apply_fn = adjust_volume;
+
+void adjust_volume(S32 *sample_L, S32 *sample_R)
+{
+	if (spk_vol_mult_L != VOL_MULT_UNITY) { // Only touch gain-controlled samples
+		*sample_L = (S32)((int64_t)(*sample_L) * (int64_t)spk_vol_mult_L
+			>> VOL_MULT_SHIFT);
+		// rand8() too expensive at 192ksps
+		// sample_L += rand8(); // dither in bits 7:0
+	}
+	if (spk_vol_mult_R != VOL_MULT_UNITY) { // Only touch gain-controlled samples
+		*sample_R = (S32)((int64_t)(*sample_R) * (int64_t)spk_vol_mult_R
+			>> VOL_MULT_SHIFT);
+		// rand8() too expensive at 192ksps
+		// sample_R += rand8(); // dither in bits 7:0
+	}
+}
+
+void keep_volume(S32 *sample_L, S32 *sample_R)
+{
+	(void)sample_L;
+	(void)sample_R;
+}
+
+void device_audio_set_volume_in_biquad(Bool volume_in_biquad)
+{
+	device_audio_volume_apply_fn = volume_in_biquad
+		? keep_volume : adjust_volume;
+}
 
 void device_audio_volume_update_mult_left(void)
 {
@@ -50,8 +82,6 @@ void device_audio_volume_refresh_mult(void)
 	device_audio_volume_update_mult_right();
 }
 #endif
-
-volatile uint8_t input_select;				// BSB 20150501 global variable for input selector
 
 #ifdef FEATURE_SPDIF_CMD
 	volatile uint8_t spdif_cmd;				// BSB 20241123 global variable for debugging SPDIF receiver
@@ -77,6 +107,5 @@ volatile xSemaphoreHandle input_select_semphr = NULL; // BSB 20150626 audio chan
 #endif
 
 #if (defined HW_GEN_SPRX) || (defined HW_GEN_FMADC)
-volatile xSemaphoreHandle I2C_busy_semphr = NULL; 
+volatile xSemaphoreHandle I2C_busy_semphr = NULL;
 #endif
-

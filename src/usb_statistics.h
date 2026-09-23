@@ -5,6 +5,11 @@
 #define SDR_WIDGET_USB_STATISTICS_H
 
 #include "compiler.h"
+#if defined(UNIT_TEST) || defined(BUILD_TESTING)
+#include "usb_statistics_descriptors_test.h"
+#else
+#include "usb_statistics_descriptors.h"
+#endif
 
 typedef struct {
     U8 generation;
@@ -20,11 +25,6 @@ typedef struct {
     U8 last_arg1;
     U8 last_arg2;
 } usb_stats_t;
-
-#define USB_STATS_PACKET_HID_ANCHOR  0x53u
-#define USB_STATS_PACKET_VERSION     1u
-#define USB_STATS_PACKET_WIRE_SIZE   36u
-#define USB_STATS_PACKET_CHECKSUM_OFFSET 3u
 
 #define USB_STATS_TAG_NONE         0u
 #define USB_STATS_TAG_EQUALIZER_STEP_SWITCH  1u
@@ -46,15 +46,22 @@ PACK(struct usb_stats_packet {
     U16 min_fifo;
     U32 deadline_misses;
     U16 frequency_100hz;
-    S8 gain_dbfs;
-    S8 db_spl;
+    S8 gain_dbfs_left;
+    S8 gain_dbfs_right;
+    S8 db_spl_left;
+    S8 db_spl_right;
     U32 event_count;
     U8 last_tag;
     U8 last_arg0;
     U8 last_arg1;
     U8 last_arg2;
-    U8 equalizer_step;
+    U8 equalizer_step_left;
+    U8 equalizer_step_right;
     U8 source_has_volume_control;
+    U8 bass_boost_enabled;
+    S8 gain_inferred_dbfs_left;
+    S8 gain_inferred_dbfs_right;
+    U8 loudness_enabled;
 });
 typedef struct usb_stats_packet usb_stats_packet_t;
 

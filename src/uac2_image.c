@@ -30,6 +30,9 @@
 #include "usb_task.h"
 #if USB_DEVICE_FEATURE == ENABLED
 #include "device_mouse_hid_task.h"
+#ifndef LOUDNESS_DISABLE
+#include "loudness.h"
+#endif
 #endif
 #if USB_HOST_FEATURE == ENABLED
 //#include "host_keyboard_hid_task.h"
@@ -108,6 +111,9 @@ static void x_image_task_init(void) {
 #endif
 
 	uac2_device_audio_task_init(UAC2_EP_AUDIO_IN, UAC2_EP_AUDIO_OUT, UAC2_EP_AUDIO_OUT_FB);
+#ifndef LOUDNESS_DISABLE
+	loudness_rtos_init();
+#endif
 #endif
 
 }
