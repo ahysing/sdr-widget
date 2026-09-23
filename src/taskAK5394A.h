@@ -176,10 +176,16 @@ extern xSemaphoreHandle mutexSpkUSB;
 
 // BSB 20131201 attempting improved playerstarted detection 
 extern volatile S32 usb_buffer_toggle;
+extern volatile U8 audio_OUT_must_sync;
+#define SPK_ESTABLISHMENT_GRACE_PACKETS 32u
+extern volatile U8 spk_establishment_grace;
+extern volatile U8 audio_playback_reset_pending;
+void audio_playback_request_reset(void);
 
 void AK5394A_task_init(Bool uac2);
 
 // New code polls DAC LRCK
+void AK5394A_pdca_enable(void);
 void AK5394A_pdca_tx_enable(U32 frequency);
 
 // New code polls ADC LRCK

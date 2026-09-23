@@ -4,6 +4,7 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
+../src/loudness_highres.c \
 ../src/usb_stats_hid_report_descriptor.c \
 ../src/stats_telemetry.c \
 ../src/usb_fifo_hw_lock.c \
@@ -33,6 +34,7 @@ C_SRCS += \
 
 
 OBJS += \
+./src/loudness_highres.o \
 ./src/usb_stats_hid_report_descriptor.o \
 ./src/stats_telemetry.o \
 ./src/usb_fifo_hw_lock.o \
@@ -63,6 +65,7 @@ OBJS += \
 
 
 C_DEPS += \
+./src/loudness_highres.d \
 ./src/usb_stats_hid_report_descriptor.d \
 ./src/stats_telemetry.d \
 ./src/usb_fifo_hw_lock.d \

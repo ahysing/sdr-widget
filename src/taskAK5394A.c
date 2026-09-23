@@ -129,6 +129,10 @@ volatile S32 usb_buffer_toggle;
 // BSB 20140917 attempting to help uacX_device_audio_task.c synchronize to DMA
 volatile U8 audio_OUT_alive;
 
+volatile U8 audio_OUT_must_sync;
+volatile U8 spk_establishment_grace;
+volatile U8 audio_playback_reset_pending;
+
 /*! \brief The PDCA interrupt handler for the ADC interface.
  *
  * The handler reload the PDCA settings with the correct address and size using the reload register.
@@ -276,6 +280,23 @@ static void pdca_set_irq(void) {
 	Enable_global_interrupt();
 }
 
+
+
+void audio_playback_request_reset(void)
+{
+	audio_playback_reset_pending = 1;
+	audio_OUT_must_sync = 1;
+	audio_OUT_alive = 0;
+	usb_buffer_toggle = 0;
+	spk_establishment_grace = SPK_ESTABLISHMENT_GRACE_PACKETS;
+	dac_must_clear = DAC_MUST_CLEAR;
+}
+
+
+void AK5394A_pdca_enable(void) {
+	pdca_init_channel(PDCA_CHANNEL_SSC_RX, &PDCA_OPTIONS);
+	pdca_enable_interrupt_reload_counter_zero(PDCA_CHANNEL_SSC_RX);
+}
 
 // Turn on the RX pdca, run after ssc_i2s_init() This is the new, speculative version to try to prevent L/R swap
 void AK5394A_pdca_rx_enable(U32 frequency) {

@@ -95,6 +95,12 @@ extern volatile uint8_t usb_spk_mute; // This variable is written to by usb subs
 extern S16 spk_vol_usb_L, spk_vol_usb_R;			// BSB 20160320 added stereo volume control
 extern S32 spk_vol_mult_L, spk_vol_mult_R;
 
+#ifdef FEATURE_VOLUME_CTRL
+void device_audio_volume_update_mult_left(void);
+void device_audio_volume_update_mult_right(void);
+void device_audio_volume_refresh_mult(void);
+#endif
+
 extern volatile uint8_t input_select;				// BSB 20150501 global variable for input selector
 
 #ifdef FEATURE_SPDIF_CMD

@@ -24,6 +24,33 @@ S16 spk_vol_usb_R = VOL_DEFAULT;			// Forced to default value
 S32 spk_vol_mult_L = 0;						// Full mute for now, re-formated in uac?_device_audio_task_init
 S32 spk_vol_mult_R = 0;
 
+#ifdef FEATURE_VOLUME_CTRL
+static S16 spk_vol_formatted_L = VOL_INVALID;
+static S16 spk_vol_formatted_R = VOL_INVALID;
+
+void device_audio_volume_update_mult_left(void)
+{
+	if (spk_vol_usb_L != spk_vol_formatted_L) {
+		spk_vol_mult_L = usb_volume_format(spk_vol_usb_L);
+		spk_vol_formatted_L = spk_vol_usb_L;
+	}
+}
+
+void device_audio_volume_update_mult_right(void)
+{
+	if (spk_vol_usb_R != spk_vol_formatted_R) {
+		spk_vol_mult_R = usb_volume_format(spk_vol_usb_R);
+		spk_vol_formatted_R = spk_vol_usb_R;
+	}
+}
+
+void device_audio_volume_refresh_mult(void)
+{
+	device_audio_volume_update_mult_left();
+	device_audio_volume_update_mult_right();
+}
+#endif
+
 volatile uint8_t input_select;				// BSB 20150501 global variable for input selector
 
 #ifdef FEATURE_SPDIF_CMD
