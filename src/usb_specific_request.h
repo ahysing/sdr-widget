@@ -157,6 +157,7 @@ typedef union {
 } S_freq;
 
 extern S_freq spk_current_freq;
+extern volatile Bool freq_changed;
 
 //! @defgroup specific_request USB device specific requests
 //! @{
