@@ -96,7 +96,7 @@ void uac1_AK5394A_task(void *pvParameters) {
 
 //			print_dbg_char('8');	// Does this ever happen? YES it does!
 			spk_mute = TRUE;
-			if (spk_current_freq.frequency == FREQ_48) {
+			if (current_freq.frequency == FREQ_48) {
 				FB_rate = 48 << 14;
     			FB_rate_initial = FB_rate;							// BSB 20131031 Record FB_rate as it was set by control system
     			FB_rate_nominal = FB_rate + FB_NOMINAL_OFFSET;		// BSB 20131115 Record FB_rate as it was set by control system;
