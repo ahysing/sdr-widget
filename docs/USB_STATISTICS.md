@@ -5,18 +5,18 @@ Firmware exposes a 1 Hz statistics stream over a vendor HID interface (`usage_pa
 ## Transport
 
 - **Report ID:** `1`
-- **HID transfer size:** 64 bytes (44-byte wire payload + zero padding to 63 bytes after report ID)
+- **HID transfer size:** 64 bytes (45-byte wire payload + zero padding to 63 bytes after report ID)
 - **Rate:** one report per second (`statistics_task`, FreeRTOS priority `tskIDLE_PRIORITY + 2`)
 - **HID send wait:** up to 50 ms per report for EP6 IN ready; counters are preserved and retried on the next tick if send fails
 - **Endianness:** little-endian for multi-byte fields
 - **Checksum:** byte index 3 is XOR of all other wire bytes
 
-## Wire layout (version 5, 44 bytes)
+## Wire layout (version 6, 45 bytes)
 
 | Offset | Field | Type | Semantics |
 |--------|-------|------|-----------|
 | 0 | `hid_anchor` | U8 | `0x53` — locates stats payload inside the 64-byte HID report |
-| 1 | `version` | U8 | `5` |
+| 1 | `version` | U8 | `6` |
 | 2 | `report_seq` | U8 | Monotonic sequence (advanced only after successful HID IN) |
 | 3 | `checksum` | U8 | XOR of all wire bytes except this byte |
 | 4–7 | `overruns` | U32 LE | FIFO gap ≥ 2× buffer size (per period) |
@@ -43,8 +43,9 @@ Firmware exposes a 1 Hz statistics stream over a vendor HID interface (`usage_pa
 | 41 | `gain_inferred_dbfs_right` | S8 | Peak-tracked inferred right gain |
 | 42 | `loudness_enabled` | U8 | `1` when **active** DSP mode is loudness contour |
 | 43 | `sample_bits` | U8 | `16` = ALT2 (16-bit), `24` = ALT1 (24-bit), `0` = stream inactive |
+| 44 | `num_samples` | U8 | Stereo frames in the last received USB OUT packet (`0` when inactive) |
 
-Python struct format: `"<BBBBIIHHHIHbbbbIBBBBBBBBbbBB"`
+Python struct format: `"<BBBBIIHHHIHbbbbIBBBBBBBBbbBBB"`
 
 `bass_boost_enabled` and `loudness_enabled` reflect **active mode** (mutually
 exclusive), not the raw UAC preference flags — both preferences can be `GET_CUR=1`.
@@ -69,6 +70,7 @@ Slow telemetry fields live in `stats_telemetry` and are merged into the wire pac
 | Telemetry | `db_spl_left/right`, `equalizer_step_left/right` | Loudness equalizer selection | No |
 | Telemetry | `gain_inferred_dbfs_left/right` | Loudness envelope follower | No |
 | Telemetry | `sample_bits` | UAC `SET_INTERFACE` on speaker AS (ALT1→24, ALT2→16) | No |
+| Telemetry | `num_samples` | Last USB OUT audio packet (`uac2_device_audio_task`) | No |
 | Last event | `last_tag`, `last_arg0..2` | `audio_stats_record_event()` | Yes → `NONE` / 0 |
 
 USBB FIFO access for HID IN and audio endpoints is serialized with `usb_fifo_hw_lock` (global interrupt disable) so stats and audio tasks cannot interleave `Usb_reset_endpoint_fifo_access`.
