@@ -6,7 +6,6 @@
 C_SRCS += \
 ../src/loudness_internal.c \
 ../src/loudness_first_order.c \
-../src/loudness_highres.c \
 ../src/usb_stats_hid_report_descriptor.c \
 ../src/stats_telemetry.c \
 ../src/usb_fifo_hw_lock.c \
@@ -38,7 +37,6 @@ C_SRCS += \
 OBJS += \
 ./src/loudness_internal.o \
 ./src/loudness_first_order.o \
-./src/loudness_highres.o \
 ./src/usb_stats_hid_report_descriptor.o \
 ./src/stats_telemetry.o \
 ./src/usb_fifo_hw_lock.o \
@@ -71,7 +69,6 @@ OBJS += \
 C_DEPS += \
 ./src/loudness_internal.d \
 ./src/loudness_first_order.d \
-./src/loudness_highres.d \
 ./src/usb_stats_hid_report_descriptor.d \
 ./src/stats_telemetry.d \
 ./src/usb_fifo_hw_lock.d \
@@ -104,6 +101,6 @@ C_DEPS += \
 # Each subdirectory must supply rules for building sources it contributes
 src/%.o: ../src/%.c
 	@echo Compile $(CFLAGS) $<
-	@avr32-gcc $(CFLAGS) $(AVR32_APP_INCLUDES) -O2 -fdata-sections -Wall -c -fmessage-length=0 -ffunction-sections -masm-addr-pseudos -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -o"$@" "$<"
+	@avr32-gcc $(CFLAGS) $(AVR32_APP_INCLUDES) -std=gnu99 -fgnu89-inline -O2 -fdata-sections -Wall -c -fmessage-length=0 -ffunction-sections -masm-addr-pseudos -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -o"$@" "$<"
 
 
