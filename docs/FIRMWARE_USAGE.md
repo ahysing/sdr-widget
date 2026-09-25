@@ -167,7 +167,7 @@ sudo ./henryctl -u 201901030VBSB --bassboost 1
 
 Both successful paths call `loudness_bass_boost_set()` in
 [`src/loudness.c`](../src/loudness.c), which updates `bass_boost_enabled` in
-the HID statistics stream (protocol version 5). See
+the HID statistics stream (protocol version 6). See
 [USB_STATISTICS.md](USB_STATISTICS.md).
 
 When the firmware flag is off, the DAC keeps a flat transfer function regardless

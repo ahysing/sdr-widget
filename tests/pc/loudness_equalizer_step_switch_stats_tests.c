@@ -13,6 +13,10 @@
 
 DEFINE_FFF_GLOBALS;
 
+#define EQ_STEP_FOR_PHON_X10(db_spl_x10) \
+    (((db_spl_x10) - LOUDNESS_MIN_PHON_X10) / LOUDNESS_EQUALIZER_STEP_X10)
+#define EQ_STEP_FOR_PHON(phon) EQ_STEP_FOR_PHON_X10((phon) * 10)
+
 S_freq spk_current_freq = { .frequency = 44100 };
 volatile Bool freq_changed = FALSE;
 volatile U8 usb_alternate_setting_out = 1;
@@ -57,7 +61,7 @@ static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg0 == LOUDNESS_DB_SPL_MAX);
     assert(stats->last_arg1 == 79);
-    assert(stats->last_arg2 == 88);
+    assert(stats->last_arg2 == EQ_STEP_FOR_PHON(79));
 
     loudness_usb_volume_changed_stereo((S16)((75 - LOUDNESS_DB_SPL_MAX) * 256));
     assert(loudness_get_last_db_spl_left_x10() == 750);
@@ -66,7 +70,7 @@ static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg0 == 79);
     assert(stats->last_arg1 == 75);
-    assert(stats->last_arg2 == 80);
+    assert(stats->last_arg2 == EQ_STEP_FOR_PHON(75));
 
     loudness_usb_volume_changed_stereo((S16)((55 - LOUDNESS_DB_SPL_MAX) * 256));
     assert(loudness_get_last_db_spl_left_x10() == 550);
@@ -75,7 +79,7 @@ static void test_equalizer_step_switch_tagged_events_volume_sweep(void) {
     assert(stats->last_tag == USB_STATS_TAG_EQUALIZER_STEP_SWITCH);
     assert(stats->last_arg0 == 75);
     assert(stats->last_arg1 == 55);
-    assert(stats->last_arg2 == 40);
+    assert(stats->last_arg2 == EQ_STEP_FOR_PHON(55));
 
     loudness_usb_volume_changed_stereo(0);
     assert(loudness_get_last_db_spl_left_x10() == LOUDNESS_DB_SPL_MAX * 10);
@@ -156,14 +160,14 @@ static void test_usb_volume_change_updates_telemetry_immediately(void) {
     assert(telemetry.source_has_volume_control == 1);
     assert(telemetry.gain_dbfs_left == 84 - LOUDNESS_DB_SPL_MAX);
     assert(telemetry.db_spl_left == 84);
-    assert(telemetry.equalizer_step_left == 98);
+    assert(telemetry.equalizer_step_left == EQ_STEP_FOR_PHON(84));
 
     /* Every 0.5 dB has a dedicated loudness+volume row. */
     loudness_usb_volume_changed_left((S16)((83 - LOUDNESS_DB_SPL_MAX) * 256));
     telemetry = stats_telemetry_read_best_effort();
     assert(telemetry.gain_dbfs_left == 83 - LOUDNESS_DB_SPL_MAX);
     assert(telemetry.db_spl_left == 83);
-    assert(telemetry.equalizer_step_left == 96);
+    assert(telemetry.equalizer_step_left == EQ_STEP_FOR_PHON(83));
 
     /* The canonical target is no longer polled from the shared USB variable. */
     spk_vol_usb_L = (S16)((75 - LOUDNESS_DB_SPL_MAX) * 256);
@@ -172,20 +176,20 @@ static void test_usb_volume_change_updates_telemetry_immediately(void) {
     telemetry = stats_telemetry_read_best_effort();
     assert(telemetry.gain_dbfs_left == 75 - LOUDNESS_DB_SPL_MAX);
     assert(telemetry.db_spl_left == 75);
-    assert(telemetry.equalizer_step_left == 80);
+    assert(telemetry.equalizer_step_left == EQ_STEP_FOR_PHON(75));
 
     /* Values observed in the device log must update both SPL and filter step. */
     loudness_usb_volume_changed_left((S16)((77 - LOUDNESS_DB_SPL_MAX) * 256));
     telemetry = stats_telemetry_read_best_effort();
     assert(telemetry.gain_dbfs_left == 77 - LOUDNESS_DB_SPL_MAX);
     assert(telemetry.db_spl_left == 77);
-    assert(telemetry.equalizer_step_left == 84);
+    assert(telemetry.equalizer_step_left == EQ_STEP_FOR_PHON(77));
 
     loudness_usb_volume_changed_left((S16)((81 - LOUDNESS_DB_SPL_MAX) * 256));
     telemetry = stats_telemetry_read_best_effort();
     assert(telemetry.gain_dbfs_left == 81 - LOUDNESS_DB_SPL_MAX);
     assert(telemetry.db_spl_left == 81);
-    assert(telemetry.equalizer_step_left == 92);
+    assert(telemetry.equalizer_step_left == EQ_STEP_FOR_PHON(81));
 
     loudness_usb_volume_changed_left(VOL_MIN);
     telemetry = stats_telemetry_read_best_effort();

@@ -605,6 +605,7 @@ void uac2_user_set_interface(U8 wIndex, U8 wValue) {
 			stats_telemetry_set_sample_bits(24);
 		} else {
 			stats_telemetry_set_sample_bits(0);
+			stats_telemetry_set_num_samples(0);
 		}
 #endif
 	}

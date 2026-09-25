@@ -22,8 +22,6 @@ volatile U8 spk_bit_resolution = 24;
 #define SINE_TEST_FREQUENCY_HZ        10000
 #define SINE_TEST_GAIN_TOLERANCE_DB   0.05
 #define SINE_TEST_PI                  3.14159265358979323846
-#define LOUDNESS_TRANSITION_TEST_SAMPLES 1000
-#define LOUDNESS_TRANSITION_SWITCH_SAMPLE 500
 
 typedef struct {
     int phon;
@@ -83,7 +81,7 @@ static double measure_highshelf_gain_db(
             (double)i / (double)sample_rate_hz;
         int32_t input_24 = (int32_t)lrint(
             (double)SINE_TEST_AMPLITUDE * sin(phase));
-        int32_t output_24 = loudness_highshelf_inline(input_24, &state, quotients);
+        int32_t output_24 = loudness_highshelf(input_24, &state, quotients);
 
         if (i >= SINE_TEST_SETTLE_SAMPLES) {
             input_sum_squares += (double)input_24 * (double)input_24;
@@ -162,87 +160,6 @@ void test_lower_tremble_is_monotonic(void)
     }
 }
 
-static void assert_highshelf_transition_equivalence(uint32_t sample_rate_hz,
-    int step_from, int step_to)
-{
-    int i;
-    biquad_first_order_state_t trans_state = { 0 };
-    biquad_first_order_state_t state_at_switch = { 0 };
-    biquad_first_order_state_t ref_state = { 0 };
-
-    int32_t transition_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
-    int32_t reference_outputs[LOUDNESS_TRANSITION_TEST_SAMPLES];
-
-    const biquad_first_order_quotients_t *q_from =
-        get_highshelf_quotients(sample_rate_hz, step_from);
-    const biquad_first_order_quotients_t *q_to =
-        get_highshelf_quotients(sample_rate_hz, step_to);
-
-    for (i = 0; i < LOUDNESS_TRANSITION_SWITCH_SAMPLE; i++) {
-        double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
-            (double)i / (double)sample_rate_hz;
-        int32_t input_24 = (int32_t)lrint(
-            (double)SINE_TEST_AMPLITUDE * sin(phase));
-        loudness_highshelf_inline(input_24, &trans_state, q_from);
-    }
-
-    state_at_switch = trans_state;
-
-    for (i = LOUDNESS_TRANSITION_SWITCH_SAMPLE;
-        i < LOUDNESS_TRANSITION_TEST_SAMPLES; i++) {
-        double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
-            (double)i / (double)sample_rate_hz;
-        int32_t input_24 = (int32_t)lrint(
-            (double)SINE_TEST_AMPLITUDE * sin(phase));
-        transition_outputs[i] =
-            loudness_highshelf_inline(input_24, &trans_state, q_to);
-    }
-
-    ref_state = state_at_switch;
-    for (i = LOUDNESS_TRANSITION_SWITCH_SAMPLE;
-        i < LOUDNESS_TRANSITION_TEST_SAMPLES; i++) {
-        double phase = 2.0 * SINE_TEST_PI * SINE_TEST_FREQUENCY_HZ *
-            (double)i / (double)sample_rate_hz;
-        int32_t input_24 = (int32_t)lrint(
-            (double)SINE_TEST_AMPLITUDE * sin(phase));
-        reference_outputs[i] =
-            loudness_highshelf_inline(input_24, &ref_state, q_to);
-    }
-
-    for (i = LOUDNESS_TRANSITION_SWITCH_SAMPLE;
-        i < LOUDNESS_TRANSITION_TEST_SAMPLES; i++) {
-        assert(transition_outputs[i] == reference_outputs[i]);
-    }
-
-    assert(trans_state.w1 == ref_state.w1);
-}
-
-void test_highshelf_all_curve_transitions_glitchfree(void)
-{
-    size_t num_cases = sizeof(lower_tremble_test_case) /
-        sizeof(lower_tremble_test_case[0]);
-    size_t c;
-
-    printf("Running test_highshelf_all_curve_transitions_glitchfree...\n");
-    fflush(stdout);
-
-    for (c = 0; c < num_cases - 1; c++) {
-        int step_current = lower_tremble_test_case[c].equalizer_step;
-        int step_next = lower_tremble_test_case[c + 1].equalizer_step;
-
-        printf("  Testing transition from step %d to %d...\n",
-            step_current, step_next);
-        fflush(stdout);
-
-        assert_highshelf_transition_equivalence(44100, step_current, step_next);
-        assert_highshelf_transition_equivalence(48000, step_current, step_next);
-    }
-
-    printf("  All curve transitions verified bit-exact!\n");
-    fflush(stdout);
-    printf("test_highshelf_all_curve_transitions_glitchfree passed\n\n");
-}
-
 int main(void)
 {
     test_lower_tremble_55phon_magnitude();
@@ -262,7 +179,6 @@ int main(void)
     test_lower_tremble_90phon_magnitude();
 
     test_lower_tremble_is_monotonic();
-    test_highshelf_all_curve_transitions_glitchfree();
 
     printf("All first-order high-shelf tests passed!\n");
     return 0;

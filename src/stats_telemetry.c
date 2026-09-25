@@ -14,6 +14,7 @@ static volatile U8 stats_telemetry_source_has_volume_control;
 static volatile U8 stats_telemetry_bass_boost_enabled;
 static volatile U8 stats_telemetry_loudness_enabled;
 static volatile U8 stats_telemetry_sample_bits;
+static volatile U8 stats_telemetry_num_samples;
 static volatile S8 stats_telemetry_gain_inferred_dbfs_left;
 static volatile S8 stats_telemetry_gain_inferred_dbfs_right;
 
@@ -31,6 +32,7 @@ void stats_telemetry_init(void)
     stats_telemetry_bass_boost_enabled = 0;
     stats_telemetry_loudness_enabled = 0;
     stats_telemetry_sample_bits = 0;
+    stats_telemetry_num_samples = 0;
     stats_telemetry_gain_inferred_dbfs_left = 0;
     stats_telemetry_gain_inferred_dbfs_right = 0;
 }
@@ -90,6 +92,13 @@ void stats_telemetry_set_sample_bits(U8 sample_bits)
     stats_telemetry_sample_bits = sample_bits;
     stats_telemetry_generation++;
 }
+
+void stats_telemetry_set_num_samples(U8 num_samples)
+{
+    stats_telemetry_generation++;
+    stats_telemetry_num_samples = num_samples;
+    stats_telemetry_generation++;
+}
 void stats_telemetry_set_gain_inferred_dbfs_stereo(
     S8 gain_inferred_dbfs_left, S8 gain_inferred_dbfs_right)
 {
@@ -118,6 +127,7 @@ stats_telemetry_snapshot_t stats_telemetry_read_best_effort(void)
         snap.bass_boost_enabled = stats_telemetry_bass_boost_enabled;
         snap.loudness_enabled = stats_telemetry_loudness_enabled;
         snap.sample_bits = stats_telemetry_sample_bits;
+        snap.num_samples = stats_telemetry_num_samples;
         snap.gain_inferred_dbfs_left = stats_telemetry_gain_inferred_dbfs_left;
         snap.gain_inferred_dbfs_right = stats_telemetry_gain_inferred_dbfs_right;
         g2 = stats_telemetry_generation;
@@ -141,6 +151,7 @@ void stats_telemetry_test_reset(void)
     stats_telemetry_bass_boost_enabled = 1;
     stats_telemetry_loudness_enabled = 0;
     stats_telemetry_sample_bits = 0;
+    stats_telemetry_num_samples = 0;
     stats_telemetry_gain_inferred_dbfs_left = 0;
     stats_telemetry_gain_inferred_dbfs_right = 0;
 }
