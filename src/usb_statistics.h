@@ -5,6 +5,9 @@
 #define SDR_WIDGET_USB_STATISTICS_H
 
 #include "compiler.h"
+#ifndef PACK
+#define PACK(__Declaration__) __Declaration__ __attribute__((__packed__))
+#endif
 #if defined(UNIT_TEST) || defined(BUILD_TESTING)
 #include "usb_statistics_descriptors_test.h"
 #else
@@ -63,6 +66,7 @@ PACK(struct usb_stats_packet {
     S8 gain_inferred_dbfs_right;
     U8 loudness_enabled;
     U8 sample_bits;
+    U8 num_samples;
 });
 typedef struct usb_stats_packet usb_stats_packet_t;
 
