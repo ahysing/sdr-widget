@@ -31,10 +31,12 @@ volatile uint8_t input_select;				// BSB 20150501 global variable for input sele
 #endif
 
 
+#ifdef HW_GEN_SPRX
 // RXMODFIX Global variables for tuning scanning algorithm. Optimized for warm wm8804. Upping all the settings to permit for slow WM8804
-volatile uint8_t wm8804_LINK_MAX_ATTEMPTS = 0x80;//  0x64 0x3d;	// 29 Results after 1st optimization - increase all three to lower risk of noise at cost of longer scan times 
-volatile uint8_t wm8804_LINK_DETECTS_OK = 0x10;		// 0x08 05 Results after 1st optimization 
+volatile uint8_t wm8804_LINK_MAX_ATTEMPTS = 0x80;//  0x64 0x3d;	// 29 Results after 1st optimization - increase all three to lower risk of noise at cost of longer scan times
+volatile uint8_t wm8804_LINK_DETECTS_OK = 0x10;		// 0x08 05 Results after 1st optimization
 volatile uint8_t wm8804_TRANS_ERR_FAILURE = 0x1d;	// 0x1d 14 Results after 1st optimization - 3d081d testing device "3" with slowest WM8804 to date
+#endif
 
 
 

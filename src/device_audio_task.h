@@ -101,11 +101,12 @@ extern volatile uint8_t input_select;				// BSB 20150501 global variable for inp
 	extern volatile uint8_t spdif_cmd;				// BSB 20241123 global variable for debugging SPDIF receiver
 #endif
 
+#ifdef HW_GEN_SPRX
 // RXMODFIX Global variables for tuning scanning algorithm
 extern volatile uint8_t wm8804_LINK_MAX_ATTEMPTS;
 extern volatile uint8_t wm8804_LINK_DETECTS_OK;
 extern volatile uint8_t wm8804_TRANS_ERR_FAILURE;
-
+#endif
 
 
 
