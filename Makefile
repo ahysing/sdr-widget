@@ -85,9 +85,50 @@ endif
 BUILD_INFO_DEFS = -DBUILD_DATE=$(BUILD_DATE) -DBUILD_TIME=$(BUILD_TIME) -DBUILD_TZ=$(BUILD_TZ) -DBUILD_COMMIT=$(BUILD_COMMIT) -DBUILD_DIRTY=$(BUILD_DIRTY)
 
 # These defaults are compiled into code, not necessarily forced
-# into flash. To force them into flash, reboot with 
+# into flash. To force them into flash, reboot with
 # feature_quirk_ptest set in flash, which will lead to flash being
-# overwritten with defaults
+# overwritten with defaults.
+#
+# Product (exactly one):
+# -DFEATURE_PRODUCT_AB1x		Henry Audio USB DAC 128 / QNKTC AB-1.x
+# -DFEATURE_PRODUCT_HA256		Henry Audio experimental (DA 256)
+# -DFEATURE_PRODUCT_BOEC1		Boenicke experimental
+# -DFEATURE_PRODUCT_WFADC		Whisperfloor data collection
+#
+# Hardware generation (exactly one):
+# -DHW_GEN_AB1X			Pure USB DAC (Henry Audio / QNKTC AB-1.x, Mk3)
+# -DHW_GEN_SPRX			SPRX SPDIF receiver platform
+# -DHW_GEN_WFADC			Whisperfloor ADC (legacy USB module)
+#
+# Common options:
+# -DFEATURE_CFG_INTERFACE		Configuration / statistics HID (vendor page)
+# -DFEATURE_VOLUME_CTRL		USB volume applied in firmware DAC path
+# -DFEATURE_ALT2_16BIT		**Required** for UAC2 ALT2 (16-bit): descriptors
+#				always expose ALT2; without this define the audio task
+#				discards every USB OUT packet when the host selects 16-bit.
+# -DFEATURE_HID			USB HID (consumer keys / debug; split TBD)
+# -DFEATURE_TICK_BLINK		FreeRTOS tick on PA22 (debug)
+# -DFEATURE_SPDIF_CMD		SPRX SPDIF state-machine experiments
+# -DFEATURE_ADC_EXPERIMENTAL	Experimental ADC paths
+#
+# Henry Audio USB DAC 128 Mk3 (AT32UC3A3128): use PARTNAME=-mpart=uc3a3128,
+# FEATURE_PRODUCT_AB1x, HW_GEN_AB1X, FEATURE_VOLUME_CTRL, FEATURE_ALT2_16BIT.
+# Mk3 release builds: MSYSTEM=UCRT64 ./scripts/build-ha128.sh (overrides HA256/SPRX).
+#
+# Alternate profiles (replace AUDIO_WIDGET_FEATURE_FLAGS or pass CFLAGS=...):
+#
+# Henry Audio USB DAC 128 / QNKTC (AB1x) after "\"
+#	-DFEATURE_PRODUCT_AB1x \
+#	-DFEATURE_VOLUME_CTRL \
+#	-DFEATURE_ALT2_16BIT \
+#	-DHW_GEN_AB1X
+#
+# Henry Audio USB DA 256 (SPRX) after "\"
+#	-DFEATURE_PRODUCT_HA256 \
+#	-DFEATURE_ALT2_16BIT \
+#	-DFEATURE_SPDIF_CMD \
+#	-DHW_GEN_SPRX
+#
 AUDIO_WIDGET_FEATURE_FLAGS = \
 	-DFEATURE_BOARD_DEFAULT=feature_board_usbi2s \
 	-DFEATURE_IMAGE_DEFAULT=feature_image_uac2_audio \
@@ -104,6 +145,7 @@ AUDIO_WIDGET_FEATURE_FLAGS = \
 	-DVDD_SENSE \
 	-DUSB_STATE_MACHINE_GPIO \
 	-DFEATURE_VOLUME_CTRL \
+	-DFEATURE_ALT2_16BIT \
 	-DHW_GEN_AB1X
 
 AUDIO_WIDGET_DEFAULTS=$(PARTNAME) \
@@ -284,8 +326,13 @@ endif
 CFLAGS_TEST_BUILD = -I tests/pc $(CFLAGS_COMMON)
 
 ifeq ($(OS),Windows_NT)
+ifndef IS_MSYS
   RM = cmd /c del /f /q
   FIX_PATH = $(subst /,\,$(1))
+else
+  RM = rm -f
+  FIX_PATH = $(1)
+endif
 else
   RM = rm -f
   FIX_PATH = $(1)
@@ -297,7 +344,11 @@ endif
 
 .PHONY: all test run-test clean clean-test help check-libusb \
 	audio-widget audio-widget-84mhz sdr-widget build-audio-widget build-sdr-widget test-avr32 \
-	widget-control henryctl
+	widget-control henryctl print-audio-widget-defaults
+
+# Used by scripts/build-ha128.sh — must not run the PC test suite.
+print-audio-widget-defaults:
+	@echo $(AUDIO_WIDGET_DEFAULTS)
 
 all:: Release/widget.elf widget-control$(EXE_EXT) henryctl$(EXE_EXT)
 
@@ -358,7 +409,11 @@ henryctl$(EXE_EXT):
 clean:: clean-test
 	rm -f widget-control widget-control.exe henryctl.exe
 ifeq ($(OS),Windows_NT)
+ifndef IS_MSYS
 	-cmd /c "del /f /q henryctl\henryctl henryctl\henryctl.exe henryctl\*.obj henryctl\*.o 2>NUL"
+else
+	rm -f henryctl/henryctl henryctl/henryctl.exe henryctl/*.obj henryctl/*.o
+endif
 else
 	rm -f henryctl/henryctl henryctl/henryctl.exe henryctl/*.obj henryctl/*.o
 endif
@@ -438,7 +493,7 @@ tests/avr32/loudness_fast_avr32.o: src/loudness_fast.c
 
 help:
 	@echo "Firmware targets:"
-	@echo "  make audio-widget              Build Release/widget.elf (AB1x defaults)"
+	@echo "  make audio-widget              Build Release/widget.elf (AB1x + FEATURE_ALT2_16BIT)"
 	@echo "  make audio-widget-84mhz        Build Release/widget.elf (AB1x + FEATURE_84MHz)"
 	@echo "  make all                       widget.elf + widget-control.exe + henryctl.exe"
 	@echo "  make clean                     Remove firmware and test build artifacts"
