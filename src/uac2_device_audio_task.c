@@ -81,6 +81,10 @@
 #ifndef LOUDNESS_DISABLE
 #include "loudness.h"
 #endif
+#ifndef USBSTATISTICS_DISABLE
+#include "usb_statistics.h"
+#include "audio_stats_logic.h"
+#endif
 
 #include "composite_widget.h"
 #include "taskAK5394A.h"
@@ -116,13 +120,32 @@ static Bool uac2_loudness_filter_enabled(void)
 		usb_spk_mute == 0, spk_current_freq.frequency);
 }
 
-static void uac2_apply_loudness_and_volume(S32 *sample_L, S32 *sample_R, Bool is_16bit_container)
+static void uac2_apply_volume_only(S32 *sample_L, S32 *sample_R)
 {
-	if (uac2_loudness_filter_enabled()) {
-		LOUDNESS_PROCESS_UAC2_STEREO_PACKET(
-			sample_L, sample_R, 1, is_16bit_container);
-	}
 	device_audio_volume_apply_fn(sample_L, sample_R);
+}
+
+/* One biquad pass per USB packet (not per sample). Per-sample calls in the OUT
+ * handler were starving the DAC task on Mk3 / 48 kHz UAC2 ALT2. */
+static void uac2_loudness_apply_packet_cache(U16 num_samples, Bool is_16bit_container)
+{
+	static S32 pkt_L[SPK_CACHE_MAX_SAMPLES];
+	static S32 pkt_R[SPK_CACHE_MAX_SAMPLES];
+	U16 i;
+
+	if (num_samples == 0U || !uac2_loudness_filter_enabled()) {
+		return;
+	}
+	for (i = 0; i < num_samples; i++) {
+		pkt_L[i] = cache_unified[2U * i];
+		pkt_R[i] = cache_unified[2U * i + 1U];
+	}
+	LOUDNESS_PROCESS_UAC2_STEREO_PACKET(
+		pkt_L, pkt_R, num_samples, is_16bit_container);
+	for (i = 0; i < num_samples; i++) {
+		cache_unified[2U * i] = pkt_L[i];
+		cache_unified[2U * i + 1U] = pkt_R[i];
+	}
 }
 #endif /* LOUDNESS_DISABLE */
 
@@ -660,8 +683,8 @@ void uac2_device_audio_task(void *pvParameters)
 									}
 								else {
 #ifndef LOUDNESS_DISABLE
-									uac2_apply_loudness_and_volume(
-										&prev_sample_L, &prev_sample_R, FALSE);
+									uac2_apply_volume_only(
+										&prev_sample_L, &prev_sample_R);
 #else
 									if (spk_vol_mult_L != VOL_MULT_UNITY) {	// Only touch gain-controlled samples
 										// 32-bit data words volume control
@@ -704,6 +727,12 @@ void uac2_device_audio_task(void *pvParameters)
 								prev_diff_value = diff_value;
 							} // end input_select == MOBO_SRC_UAC2 (in which case we touch samples instead of just look for silence)
 						} // end for temp_num_samples
+#ifndef LOUDNESS_DISABLE
+						if (input_select == MOBO_SRC_UAC2) {
+							uac2_loudness_apply_packet_cache(
+								temp_num_samples, FALSE);
+						}
+#endif
 					} // end if alt setting 1
 
 					#ifdef FEATURE_ALT2_16BIT // UAC2 ALT 2 for 16-bit audio
@@ -754,8 +783,8 @@ void uac2_device_audio_task(void *pvParameters)
 									}
 									else {
 #ifndef LOUDNESS_DISABLE
-										uac2_apply_loudness_and_volume(
-											&prev_sample_L, &prev_sample_R, TRUE);
+										uac2_apply_volume_only(
+											&prev_sample_L, &prev_sample_R);
 #else
 										if (spk_vol_mult_L != VOL_MULT_UNITY) {	// Only touch gain-controlled samples
 											// 32-bit data words volume control
@@ -798,6 +827,12 @@ void uac2_device_audio_task(void *pvParameters)
 									prev_diff_value = diff_value;
 								} // End input_select == MOBO_SRC_UAC2
 							} // end for temp_num_samples
+#ifndef LOUDNESS_DISABLE
+							if (input_select == MOBO_SRC_UAC2) {
+								uac2_loudness_apply_packet_cache(
+									temp_num_samples, TRUE);
+							}
+#endif
 						} // end if alt setting 2
 					#endif // UAC2 ALT 2 for 16-bit audio						
 
@@ -1094,6 +1129,9 @@ void uac2_device_audio_task(void *pvParameters)
 				if (gap < 0) {
 					gap += DAC_BUFFER_UNI;
 				}
+#ifndef USBSTATISTICS_DISABLE
+				audio_stats_update(get_usb_stats(), (U16)gap, DAC_BUFFER_UNI);
+#endif
 
 				if (gap < old_gap) {
 					if (gap < SPK_GAP_LSKIP) { 					// gap < outer lower bound => 2*FB_RATE_DELTA, SI_SKIP

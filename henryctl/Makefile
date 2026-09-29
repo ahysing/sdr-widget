@@ -6,9 +6,7 @@
 #   - Windows PowerShell / MSVC (cl with static libusb from vcpkg: x64-windows-static)
 #   - Linux (GCC with static/dynamic libusb)
 
-ifdef MSYSTEM
-  IS_MSYS = 1
-endif
+include ../makefile.msys2
 
 ifeq ($(OS),Windows_NT)
   EXE_EXT = .exe
@@ -45,9 +43,8 @@ ifneq ($(USE_MSVC),)
   RM = cmd /c del /f /q 2>nul || true
 else ifdef IS_MSYS
   # MSYS2 (GCC with static libusb linking)
-  MSYS_PREFIX := $(shell dirname $$(dirname $$(which $(CC) 2>/dev/null)))
-  LIBUSB_INCLUDE ?= $(MSYS_PREFIX)/include
-  LIBUSB_LIBDIR ?= $(MSYS_PREFIX)/lib
+  LIBUSB_INCLUDE ?= $(MSYS_TOOLCHAIN_ROOT)/include
+  LIBUSB_LIBDIR ?= $(MSYS_TOOLCHAIN_ROOT)/lib
   LIBUSB_HEADER = $(LIBUSB_INCLUDE)/libusb-1.0/libusb.h
   CFLAGS ?= -O2 -Wall
   INCLUDES = -I. -I.. -I../src -I$(LIBUSB_INCLUDE)
@@ -102,11 +99,7 @@ henryctl$(EXE_EXT): henryctl.c | check-libusb
 	$(COMPILE_CMD)
 
 clean:
-ifeq ($(OS),Windows_NT)
-	-cmd /c "del /f /q henryctl henryctl.exe *.obj *.o 2>NUL"
-else
 	rm -f henryctl henryctl.exe *.o *.obj
-endif
 
 help:
 	@echo "henryctl standalone build targets:"

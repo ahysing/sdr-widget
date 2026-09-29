@@ -1,4 +1,23 @@
-# Mk3 builds while bisecting (3d023f89 … 19a749d7)
+# Mk3 builds while bisecting (3d023f89 … main)
+
+## Final result (2026-09-29)
+
+**Root cause:** default `AUDIO_WIDGET_FEATURE_FLAGS` omitted **`-DFEATURE_ALT2_16BIT`**. Hosts often select UAC2 **ALT2 (16-bit)**; without the flag, firmware discards USB OUT (`num_samples: 0`) → silence while volume/EQ telemetry can still move.
+
+**Fix on `main`:** `-DFEATURE_ALT2_16BIT` in root `Makefile` (see `3e3ddeb4` and following commits). Linear history after M5 (`c66d226a`): `3e3ddeb4` → USB stats / simplify / bass-boost / MSYS2 refactor (`931c1d79`).
+
+**Mk3 front LED (AB1.x):** **green** = legacy **UAC1** (`16d0:075c`, smooth on old releases); **red** = **UAC2** (`16d0:075d`, current `feature_image_uac2_audio` default). Stutter on UAC2 was largely **per-sample loudness in the USB OUT path** — fixed by one filter pass per packet in `uac2_device_audio_task.c`.
+
+**Build at tip:**
+
+```bash
+export MSYSTEM=UCRT64
+./scripts/build-ha128.sh
+```
+
+**HID stats:** ~1 report/s (`configTSK_USB_DAUDIOSTATS_PERIOD_MS`). Run `python usbstatistics/usbstatistics.py --verbose --delta` while Spotify is playing; use `--debug` if packets are rejected. `if=3` / `usage_page=0xff00` is normal on UAC2 + `FEATURE_CFG_INTERFACE`.
+
+After hardware checks, publish with `git push --force-with-lease origin main` (history was rebased; local `main` replaces the old four commits on origin).
 
 ## CFLAGS / `make test` crash
 
@@ -41,4 +60,6 @@ LOUDNESS_DISABLE=1 ./scripts/build-ha128.sh   # Phase 1 discriminator
 | `74d50f2a` (M3) | OK |
 | `78644772` / `b149801a` (M2), loudness on or `LOUDNESS_DISABLE=1` | **no** |
 
-**First bad milestone: M2 (`78644772`)** — diff M3 vs M2 for playback (UAC2 loudness hook / volume-in-EQ), not M5 ramp until M2 is understood.
+**First bad milestone in the ladder: M2 (`78644772`)** — looked like UAC2/loudness; **Mk3 default build** was the real issue (missing ALT2). Re-test M2+ after `3e3ddeb4` on `main` if you want to confirm playback through the full commit chain.
+
+See also `docs/NO_SOUND_FIX_HYPOTHESIS.md` (untracked notes).

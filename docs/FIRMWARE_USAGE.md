@@ -204,7 +204,7 @@ bass boost SET_CUR failed: Invalid parameter.
 |---------|----------------|
 | No `class=0x00` interface in `-v` list | Firmware not flashed with `FEATURE_CFG_INTERFACE` |
 | Interface 0 listed, **claim failed** | Windows driver owns the interface; use Zadig WinUSB on `MI_00` |
-| Claim OK, vendor `0x72` fails | Firmware missing `DG8SAQ_SET_BASS_BOOST` handler — rebuild and flash |
+| Claim OK, vendor `0x72` fails | Flash current `main` (`usb_user_DG8SAQ` handles `0x72`/`0x73`); older images had a stub handler |
 | `SET_CUR` → `Invalid parameter` | Expected on Windows: `usbaudio.sys` holds interface 1 |
 
 #### Debugging with USBView

@@ -62,18 +62,22 @@ PARTNAME=-mpart=uc3a3128
 # the compile recipe (Release/src/subdir.mk), so an embedded "..." would get stripped by that
 # second shell pass rather than reaching the compiler - bare alphanumeric tokens have no such
 # problem and the C preprocessor's stringification operator builds the quoted literal instead.
+include makefile.msys2
+
 ifeq ($(OS),Windows_NT)
-  ifdef MSYSTEM
+ifdef IS_MSYS
 BUILD_DATE := $(shell date '+%Y%m%d')
 BUILD_TIME := $(shell date '+%H%M')
 BUILD_TZ := UTC
-  else
+BUILD_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_DIRTY := $(shell git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null && echo clean || echo dirty)
+else
 BUILD_DATE := $(shell powershell -NoProfile -Command "Get-Date -Format yyyyMMdd")
 BUILD_TIME := $(shell powershell -NoProfile -Command "Get-Date -Format HHmm")
 BUILD_TZ := UTC
-  endif
 BUILD_COMMIT := $(shell git rev-parse --short HEAD 2>NUL || echo unknown)
 BUILD_DIRTY := $(shell git diff --quiet 2>NUL && git diff --cached --quiet 2>NUL && echo clean || echo dirty)
+endif
 else
 BUILD_DATE := $(shell date '+%Y%m%d')
 BUILD_TIME := $(shell date '+%H%M')
@@ -248,10 +252,6 @@ WIDGET_MAKE_ENV = CFLAGS="$(AUDIO_WIDGET_CFLAGS)" \
 # ---------------------------------------------------------------------------
 # PC unit test / host tool settings
 # ---------------------------------------------------------------------------
-ifdef MSYSTEM
-  IS_MSYS = 1
-endif
-
 ifeq ($(OS),Windows_NT)
   EXE_EXT = .exe
   VCPKG_DIR ?= C:/Users/AHysing/code/vcpkg
@@ -277,7 +277,6 @@ ifneq ($(USE_MSVC),)
   LIBUSB_INCLUDE ?= $(VCPKG_INSTALLED)/include
   LIBUSB_LIBDIR ?= $(VCPKG_INSTALLED)/lib
 else ifdef IS_MSYS
-  MSYS_TOOLCHAIN_ROOT := $(shell dirname $$(dirname $$(which $(CC) 2>/dev/null)))
   LIBUSB_INCLUDE ?= $(MSYS_TOOLCHAIN_ROOT)/include
   LIBUSB_LIBDIR ?= $(MSYS_TOOLCHAIN_ROOT)/lib
 else
@@ -326,12 +325,12 @@ endif
 CFLAGS_TEST_BUILD = -I tests/pc $(CFLAGS_COMMON)
 
 ifeq ($(OS),Windows_NT)
-ifndef IS_MSYS
-  RM = cmd /c del /f /q
-  FIX_PATH = $(subst /,\,$(1))
-else
+ifdef IS_MSYS
   RM = rm -f
   FIX_PATH = $(1)
+else
+  RM = cmd /c del /f /q
+  FIX_PATH = $(subst /,\,$(1))
 endif
 else
   RM = rm -f
@@ -381,7 +380,7 @@ audio-widget-84mhz::
 widget-control: widget-control$(EXE_EXT)
 
 henryctl:
-	$(MAKE) -C henryctl henryctl$(EXE_EXT)
+	+$(MAKE) -C henryctl henryctl$(EXE_EXT)
 
 check-libusb:
 ifeq ($(wildcard $(LIBUSB_HEADER)),)
@@ -404,7 +403,7 @@ widget-control$(EXE_EXT): widget-control.c src/features.h | check-libusb
 	$(CC) $(WIDGET_CONTROL_CFLAGS) $(CFLAGS_COMMON) $(OUT_FLAG)$@ widget-control.c $(LINK_USB)
 
 henryctl$(EXE_EXT):
-	$(MAKE) -C henryctl henryctl$(EXE_EXT)
+	+$(MAKE) -C henryctl henryctl$(EXE_EXT)
 
 clean:: clean-test
 	rm -f widget-control widget-control.exe henryctl.exe
@@ -515,7 +514,7 @@ help:
 	@echo "Host tools (widget-control & henryctl):"
 	@echo "  make widget-control            Build widget-control$(EXE_EXT) (SDR-Widget features API)"
 	@echo "  make henryctl                  Build henryctl$(EXE_EXT) in henryctl/ (bass boost / loudness gate)"
-	@echo "  MSYS2/UCRT64: pacman -S mingw-w64-ucrt-x86_64-libusb make"
+	@echo "  MSYS2: use the UCRT64 terminal (not plain MSYS) — pacman -S mingw-w64-ucrt-x86_64-{gcc,libusb} make"
 	@echo "  PowerShell:   vcpkg install libusb:x64-windows-static, run .\vcvars64.ps1, then make henryctl (or .\henryctl\build.ps1)"
 	@echo "  Override:     make henryctl VCPKG_DIR=C:/path/to/vcpkg"
 	@echo ""

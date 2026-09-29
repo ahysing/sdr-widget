@@ -1,5 +1,17 @@
 #!/bin/sh
 
+# Stay in MSYS2 for nested make (firmware Release/ build). Do not rely on cmd.exe.
+if [ -z "${MSYSTEM:-}" ] && [ -d /ucrt64/bin ] && [ -x /ucrt64/bin/gcc ]; then
+	export MSYSTEM=UCRT64
+fi
+case "${MSYSTEM:-}" in
+	MSYS|"" )
+		if [ -d /ucrt64/bin ]; then
+			export PATH="/ucrt64/bin:/usr/bin:/bin:${PATH}"
+		fi
+		;;
+esac
+
 # This file is to be called from Makefile (at project root). Calling
 # it manually means compilation default features are not set. You 
 # must edit Makefile (at project root) to set compilation defaults.
