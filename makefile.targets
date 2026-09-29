@@ -1,12 +1,5 @@
-# mobo_srd_asm2 uses global asm labels; -masm-addr-pseudos makes GAS emit duplicates.
-src/Mobo_config.o: ../src/Mobo_config.c
-	@echo Compile [mobo] $(CFLAGS) $<
-	@avr32-gcc $(CFLAGS) $(AVR32_APP_INCLUDES) \
-		-std=gnu99 -fgnu89-inline -O2 -fdata-sections -Wall -c -fmessage-length=0 \
-		-ffunction-sections -mrelax $(CFLAGS_APP_OPTIMIZATIONS) \
-		-MMD -MP -MF"src/Mobo_config.d" -MT"src/Mobo_config.d" -o"src/Mobo_config.o" "$<"
-
 # Override auto-generated Release/makefile link rule so --gc-sections / LDFLAGS_APP_OPTIMIZATIONS apply.
+# Mobo_config.c is built via Release/src/subdir.mk (same -I/-D as other sources).
 widget.elf: $(OBJS) $(USER_OBJS)
 	@echo Link $@ $(LDFLAGS_APP_OPTIMIZATIONS)
 	@avr32-gcc -nostartfiles -Wl,-e,_trampoline $(ASFLAGS) \
