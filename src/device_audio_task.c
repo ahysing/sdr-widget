@@ -2,6 +2,7 @@
 #include "compiler.h"
 #include "device_audio_task.h"
 #include "usb_specific_request.h"
+#include "loudness.h" /* INT24_MAX/MIN for hard_clip_single (c66d226a+) */
 
 //!
 //! Public : (bit) mute
