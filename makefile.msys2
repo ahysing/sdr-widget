@@ -1,0 +1,29 @@
+# MSYS2 / POSIX-on-Windows detection for the root Makefile and henryctl/.
+# Plain cmd.exe / PowerShell builds should not set IS_MSYS (MSVC + run-pc-tests.cmd).
+
+ifeq ($(OS),Windows_NT)
+ifdef MSYSTEM
+  IS_MSYS := 1
+endif
+ifeq ($(shell uname -o 2>/dev/null),Msys)
+  IS_MSYS := 1
+endif
+ifneq ($(filter MINGW% MSYS%,$(shell uname -s 2>/dev/null)),)
+  IS_MSYS := 1
+endif
+endif
+
+ifdef IS_MSYS
+ifeq ($(MSYSTEM),MSYS)
+  $(warning Use the MSYS2 UCRT64 (or MINGW64) terminal for host tools; prepending /ucrt64/bin to PATH for this make.)
+endif
+  # Keep recipe execution in bash, not cmd.exe (GNU make on Cygwin defaults to /bin/sh;
+  # native Win32 make in PATH would use COMSPEC otherwise).
+  SHELL := /usr/bin/bash
+  export MSYSTEM
+  MSYS2_UCRT_BIN ?= /ucrt64/bin
+  MSYS2_USR_BIN ?= /usr/bin
+  # MSYS2 "MSYS" shell often lacks gcc; host tools live in UCRT64/MINGW64 prefixes.
+  export PATH := $(MSYS2_UCRT_BIN):$(MSYS2_USR_BIN):/bin:$(PATH)
+  MSYS_TOOLCHAIN_ROOT := $(shell bash -c 'if [ -n "$$MSYSTEM_PREFIX" ] && [ "$$MSYSTEM_PREFIX" != /usr ]; then echo "$$MSYSTEM_PREFIX"; elif [ -d /ucrt64/include/libusb-1.0 ]; then echo /ucrt64; elif [ -d /mingw64/include/libusb-1.0 ]; then echo /mingw64; else cc=$$(command -v gcc 2>/dev/null); [ -n "$$cc" ] && dirname $$(dirname "$$cc"); fi')
+endif
