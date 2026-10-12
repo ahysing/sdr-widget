@@ -1,6 +1,6 @@
 # Plan: Build Henry Audio USB DAC 128 Mk3 (HA128 / AT32UC3A3128)
 
-The **root `Makefile` remains configured for DA 256 / SPRX** (`FEATURE_PRODUCT_HA256`, `HW_GEN_SPRX`). Mk3 (USB DAC 128) builds use **`scripts/build-ha128.sh`** only — no edits to `Makefile`, `makefile.defs`, or `Release/makefile` for product selection.
+The **root `Makefile` remains configured for DA 256 / SPRX** (`FEATURE_PRODUCT_DA256`, `HW_GEN_SPRX`). Mk3 (USB DAC 128) builds use **`scripts/build-ha128.sh`** only — no edits to `Makefile`, `makefile.defs`, or `Release/makefile` for product selection.
 
 ## Prerequisites
 
@@ -31,7 +31,7 @@ bash sdr-widget/scripts/build-ha128.sh
 
 1. Sets `PATH` / `AVR32BIN` for UCRT64.
 2. Reads `AUDIO_WIDGET_DEFAULTS` from the root `Makefile` (keeps `BUILD_DATE`, `BUILD_COMMIT`, etc.).
-3. Appends Mk3 overrides: `-UFEATURE_PRODUCT_HA256 -UFEATURE_SPDIF_CMD -UHW_GEN_SPRX` and `-DFEATURE_PRODUCT_AB1x -DHW_GEN_AB1X`.
+3. Appends Mk3 overrides: `-UFEATURE_PRODUCT_DA256 -UFEATURE_SPDIF_CMD -UHW_GEN_SPRX` and AB1x flags (`FEATURE_PRODUCT_AB1x`, `HW_GEN_AB1X`, volume, ALT2, cfg interface).
 4. **`make -C Release clean`** — required so old SPRX object files are not linked (undefined `wm8804_*` / `pcm5142_*` otherwise).
 5. **`make audio-widget`** with `PARTNAME=-mpart=uc3a3128` and the overridden `AUDIO_WIDGET_DEFAULTS`.
 6. **Re-link** via `make -n all | sed 's/-mpart=uc3a3256/-mpart=uc3a3128/' | sh` because `Release/makefile` still hard-codes **256** on the link line.
